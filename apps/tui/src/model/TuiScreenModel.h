@@ -23,6 +23,8 @@ struct TuiComposerState {
   std::optional<std::string> history_query;
   bool can_submit = true;
   bool dirty = false;
+  bool cursor_visible = true;
+  std::string activity_indicator;
 };
 
 struct TuiScreenModel {

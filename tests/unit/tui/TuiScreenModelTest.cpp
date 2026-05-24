@@ -80,8 +80,9 @@ void screen_model_and_action_expose_expected_default_shape() {
 
   assert_true(composer.text.empty() && composer.mode == "ready" &&
                   !composer.history_query.has_value() && composer.can_submit &&
-                  !composer.dirty,
-              "TuiComposerState should start ready with submit enabled and no history query");
+            !composer.dirty && composer.cursor_visible &&
+            composer.activity_indicator.empty(),
+          "TuiComposerState should start ready with submit enabled and no activity indicator");
 
   assert_equal(static_cast<int>(TuiFocusState::Composer),
                static_cast<int>(model.focus),

@@ -171,14 +171,21 @@ namespace {
 
   const std::string draft = composer.text.empty() ? std::string{"[draft empty]"}
                                                   : composer.text;
-  auto wrapped = wrap_text(draft, width, height);
+  const std::string cursor = composer.cursor_visible ? std::string{"|"}
+                                                     : std::string{" "};
+  auto wrapped = wrap_text(draft + cursor, width, height);
   lines.insert(lines.end(), wrapped.begin(), wrapped.end());
   if (lines.size() < height) {
-    lines.push_back("mode=" + trim_copy(composer.mode) +
-                    " submit=" + (composer.can_submit ? std::string{"enabled"}
-                                                       : std::string{"disabled"}) +
-                    " dirty=" + (composer.dirty ? std::string{"yes"}
-                                                 : std::string{"no"}));
+    std::string status_line = "mode=" + trim_copy(composer.mode) +
+        " submit=" + (composer.can_submit ? std::string{"enabled"}
+                                           : std::string{"disabled"}) +
+        " dirty=" + (composer.dirty ? std::string{"yes"}
+                                     : std::string{"no"});
+    if (!trim_copy(composer.activity_indicator).empty()) {
+      status_line += " wait=";
+      status_line += trim_copy(composer.activity_indicator);
+    }
+    lines.push_back(std::move(status_line));
   }
   if (lines.size() > height) {
     lines.resize(height);

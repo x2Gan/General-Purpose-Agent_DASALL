@@ -413,6 +413,8 @@ void TuiApp::initialize_components(TuiAppOptions& options) {
       .history_query = std::nullopt,
       .can_submit = true,
       .dirty = has_initial_draft,
+        .cursor_visible = true,
+        .activity_indicator = {},
   });
   selector_ = view::TuiModelSelector{};
   screen_model_ = model::TuiScreenModel{};

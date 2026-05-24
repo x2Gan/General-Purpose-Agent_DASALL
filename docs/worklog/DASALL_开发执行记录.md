@@ -1,3 +1,32 @@
+# 记录 #795
+
+- 日期：2026-05-24
+- 阶段：tui/manual terminal pending feedback
+- 任务：为 `BLK-TUI-006` 手工终端补充输入光标闪烁与提交后等待 LLM 返回的 spinner 反馈
+- 状态：已完成（实现并验证；`BLK-TUI-006` 仍需真实终端人工填写/签署）
+
+### 改动
+
+1. 扩展 `TuiComposerState`，增加 display-only 的 `cursor_visible` 与 `activity_indicator` 字段，用于 renderer 展示输入光标和等待态，不改变 draft/history 语义。
+2. 更新 `FtxuiRendererAdapter` composer 区域：draft 末尾渲染可闪烁 ASCII cursor，状态行在 pending 时显示 `wait=<spinner> waiting...`。
+3. 更新 `dasall_tui_manual_terminal`：普通提交后先进入 `pending-interaction` / `llm.local` 等待态，event loop 在 idle tick 中刷新 cursor/spinner，并在本地模拟返回后追加 manual receipt。
+4. 扩展 `dasall_tui_manual_terminal --self-check` 与 `TuiMainLayoutSnapshotTest`，覆盖 pending spinner、cursor 渲染和 receipt 完成路径。
+
+### 验证
+
+1. `cmake --build build/vscode-linux-ninja --target dasall_tui_manual_terminal dasall_tui_main_layout_snapshot_unit_test dasall_tui_screen_model_unit_test -j 4`
+   - 结果：通过。
+2. `./build/vscode-linux-ninja/apps/tui/dasall_tui_manual_terminal --self-check && ./build/vscode-linux-ninja/tests/unit/tui/dasall_tui_main_layout_snapshot_unit_test && ./build/vscode-linux-ninja/tests/unit/tui/dasall_tui_screen_model_unit_test`
+   - 结果：通过。
+3. `git diff --check`
+   - 结果：通过。
+
+### 结果
+
+1. 手工终端输入区现在有可见闪烁光标，空 draft 与已有 draft 都不会修改真实输入内容。
+2. 用户提交后、本地 receipt 返回前会显示 `llm.local` pending 状态与 ASCII spinner，等待期间禁止重复提交。
+3. 本轮没有关闭 `BLK-TUI-006` 或 `BLK-TUI-008`；真实终端人工验收与签署仍需继续完成。
+
 # 记录 #794
 
 - 日期：2026-05-24

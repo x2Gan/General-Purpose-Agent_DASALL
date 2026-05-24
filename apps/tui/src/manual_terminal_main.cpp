@@ -38,6 +38,18 @@ struct TerminalSize {
   std::size_t rows = 24;
 };
 
+struct ManualAnimationState {
+  bool cursor_visible = true;
+  int cursor_tick = 0;
+  std::size_t spinner_index = 0;
+};
+
+struct PendingManualReceipt {
+  bool active = false;
+  std::string submitted_text;
+  int ticks_remaining = 0;
+};
+
 [[nodiscard]] bool same_size(const TerminalSize& left,
                              const TerminalSize& right) noexcept {
   return left.columns == right.columns && left.rows == right.rows;
@@ -62,6 +74,19 @@ struct TerminalSize {
 [[nodiscard]] bool starts_with(std::string_view text,
                                std::string_view prefix) noexcept {
   return text.size() >= prefix.size() && text.substr(0, prefix.size()) == prefix;
+}
+
+[[nodiscard]] std::string spinner_frame(const std::size_t index) {
+  switch (index % 4U) {
+    case 0U:
+      return "|";
+    case 1U:
+      return "/";
+    case 2U:
+      return "-";
+    default:
+      return "\\";
+  }
 }
 
 [[nodiscard]] std::string now_timestamp() {
@@ -383,11 +408,27 @@ void append_message(model::TuiScreenModel& screen_model,
 void sync_composer(model::TuiScreenModel& screen_model,
                    const view::TuiComposer& composer,
                    std::string debug_reason) {
+  const bool cursor_visible = screen_model.composer.cursor_visible;
+  const std::string activity_indicator = screen_model.composer.activity_indicator;
   screen_model.composer = composer.state();
+  screen_model.composer.cursor_visible = cursor_visible;
+  screen_model.composer.activity_indicator = activity_indicator;
   if (screen_model.modal.kind == model::TuiModalKind::None) {
     screen_model.focus = model::TuiFocusState::Composer;
   }
   screen_model.debug_reason = std::move(debug_reason);
+}
+
+void apply_manual_visuals(model::TuiScreenModel& screen_model,
+                          const ManualAnimationState& animation,
+                          const PendingManualReceipt& pending_receipt) {
+  screen_model.composer.cursor_visible = animation.cursor_visible;
+  if (pending_receipt.active) {
+    screen_model.composer.activity_indicator =
+        spinner_frame(animation.spinner_index) + " waiting for local model";
+  } else {
+    screen_model.composer.activity_indicator.clear();
+  }
 }
 
 void set_composer_text(view::TuiComposer& composer,
@@ -562,6 +603,7 @@ void handle_submit(view::TuiComposer& composer,
                    TerminalSession& terminal_session,
                    const terminal::FtxuiRendererAdapter& renderer,
                    const TerminalSize& size,
+                   PendingManualReceipt& pending_receipt,
                    bool& should_exit,
                    std::ostream& error_stream) {
   const std::string draft = composer.state().text;
@@ -630,6 +672,24 @@ void handle_submit(view::TuiComposer& composer,
                  "user",
                  update.action.text,
                  {"submitted", "manual-input"});
+  pending_receipt.active = true;
+  pending_receipt.submitted_text = update.action.text;
+  pending_receipt.ticks_remaining = 8;
+  screen_model.status.stage = "waiting_interaction";
+  screen_model.status.current_tool = "llm.local";
+  screen_model.status.pending_interaction = "waiting for local model response";
+  screen_model.status.health_summary = "awaiting local model response";
+  static_cast<void>(composer.set_busy(true));
+  sync_composer(screen_model, composer, "submit_pending_local_model");
+}
+
+void complete_pending_receipt(view::TuiComposer& composer,
+                              model::TuiScreenModel& screen_model,
+                              PendingManualReceipt& pending_receipt) {
+  if (!pending_receipt.active) {
+    return;
+  }
+
   append_message(screen_model,
                  "assistant",
                  "Manual receipt captured locally for BLK-TUI-006. No runtime, memory, "
@@ -640,6 +700,7 @@ void handle_submit(view::TuiComposer& composer,
   screen_model.status.pending_interaction.clear();
   screen_model.status.health_summary = "manual receipt captured";
   static_cast<void>(composer.set_busy(false));
+  pending_receipt = PendingManualReceipt{};
   sync_composer(screen_model, composer, "submit_completed");
 }
 
@@ -764,6 +825,7 @@ void process_input_buffer(std::string_view buffer,
                           TerminalSession& terminal_session,
                           const terminal::FtxuiRendererAdapter& renderer,
                           const TerminalSize& size,
+                          PendingManualReceipt& pending_receipt,
                           bool& should_exit,
                           std::ostream& error_stream) {
   std::string draft = composer.state().text;
@@ -797,6 +859,7 @@ void process_input_buffer(std::string_view buffer,
                       terminal_session,
                       renderer,
                       size,
+                      pending_receipt,
                       should_exit,
                       error_stream);
       }
@@ -857,16 +920,38 @@ void process_input_buffer(std::string_view buffer,
       startup_mode,
       composer);
   TerminalSession terminal_session;
+  PendingManualReceipt pending_receipt;
   bool should_exit = false;
   std::ostringstream error_stream;
   const TerminalSize size{120U, 36U};
 
-  process_input_buffer("first prompt\rsecond prompt\r\x1b[A\x1b[A",
+  process_input_buffer("first prompt\r",
                        composer,
                        screen_model,
                        terminal_session,
                        renderer,
                        size,
+                       pending_receipt,
+                       should_exit,
+                       error_stream);
+  complete_pending_receipt(composer, screen_model, pending_receipt);
+  process_input_buffer("second prompt\r",
+                       composer,
+                       screen_model,
+                       terminal_session,
+                       renderer,
+                       size,
+                       pending_receipt,
+                       should_exit,
+                       error_stream);
+  complete_pending_receipt(composer, screen_model, pending_receipt);
+  process_input_buffer("\x1b[A\x1b[A",
+                       composer,
+                       screen_model,
+                       terminal_session,
+                       renderer,
+                       size,
+                       pending_receipt,
                        should_exit,
                        error_stream);
   if (should_exit || composer.state().text != "first prompt" ||
@@ -880,6 +965,7 @@ void process_input_buffer(std::string_view buffer,
                        terminal_session,
                        renderer,
                        size,
+                       pending_receipt,
                        should_exit,
                        error_stream);
   if (should_exit || composer.state().text != "second prompt" ||
@@ -893,22 +979,78 @@ void process_input_buffer(std::string_view buffer,
                        terminal_session,
                        renderer,
                        size,
+                       pending_receipt,
                        should_exit,
                        error_stream);
   if (should_exit || !composer.state().text.empty() || composer.state().mode != "ready") {
     return false;
   }
 
-  process_input_buffer("third prompt\r\x1b[1;2A",
+  process_input_buffer("third prompt\r",
                        composer,
                        screen_model,
                        terminal_session,
                        renderer,
                        size,
+                       pending_receipt,
+                       should_exit,
+                       error_stream);
+  complete_pending_receipt(composer, screen_model, pending_receipt);
+  process_input_buffer("\x1b[1;2A",
+                       composer,
+                       screen_model,
+                       terminal_session,
+                       renderer,
+                       size,
+                       pending_receipt,
                        should_exit,
                        error_stream);
   return !should_exit && composer.state().text == "third prompt" &&
       composer.state().mode == "history-recall";
+}
+
+[[nodiscard]] bool manual_pending_indicator_self_check(
+    const terminal::TuiTerminalCapabilities& capabilities,
+    terminal::TuiStartupMode startup_mode,
+    const terminal::FtxuiRendererAdapter& renderer) {
+  view::TuiComposer composer;
+  model::TuiScreenModel screen_model = make_initial_model(
+      capabilities,
+      startup_mode,
+      composer);
+  TerminalSession terminal_session;
+  PendingManualReceipt pending_receipt;
+  ManualAnimationState animation;
+  bool should_exit = false;
+  std::ostringstream error_stream;
+  const TerminalSize size{120U, 36U};
+
+  process_input_buffer("prompt waiting for model\r",
+                       composer,
+                       screen_model,
+                       terminal_session,
+                       renderer,
+                       size,
+                       pending_receipt,
+                       should_exit,
+                       error_stream);
+  apply_manual_visuals(screen_model, animation, pending_receipt);
+  const std::string pending_screen = renderer.render_to_screen(screen_model, 120, 36);
+  if (should_exit || !pending_receipt.active ||
+      composer.state().mode != "pending-interaction" ||
+      screen_model.status.current_tool != "llm.local" ||
+      pending_screen.find("[draft empty]|") == std::string::npos ||
+      pending_screen.find("wait=| waiting for local model") == std::string::npos) {
+    return false;
+  }
+
+  complete_pending_receipt(composer, screen_model, pending_receipt);
+  apply_manual_visuals(screen_model, animation, pending_receipt);
+  return !pending_receipt.active && composer.state().mode == "ready" &&
+      screen_model.status.stage == "ready" &&
+      screen_model.status.current_tool.empty() &&
+      renderer.render_to_screen(screen_model, 120, 36)
+              .find("Manual receipt captured locally") != std::string::npos;
 }
 
 [[nodiscard]] int run_self_check() {
@@ -955,7 +1097,8 @@ void process_input_buffer(std::string_view buffer,
       has_expected_shape(narrow_screen, 80, 24) &&
       has_expected_shape(line_screen, 40, 12) &&
       terminal_full_screen.find("\r\n") != std::string::npos &&
-      manual_history_recall_self_check(capabilities, startup_mode, renderer);
+      manual_history_recall_self_check(capabilities, startup_mode, renderer) &&
+      manual_pending_indicator_self_check(capabilities, startup_mode, renderer);
   if (!ok) {
     std::cerr << "dasall_tui_manual_terminal self-check FAILED\n";
     return 1;
@@ -963,6 +1106,28 @@ void process_input_buffer(std::string_view buffer,
 
   std::cout << "dasall_tui_manual_terminal self-check PASS\n";
   return 0;
+}
+
+[[nodiscard]] bool advance_manual_animation(ManualAnimationState& animation,
+                                            PendingManualReceipt& pending_receipt) {
+  bool changed = false;
+
+  ++animation.cursor_tick;
+  if (animation.cursor_tick >= 5) {
+    animation.cursor_tick = 0;
+    animation.cursor_visible = !animation.cursor_visible;
+    changed = true;
+  }
+
+  if (pending_receipt.active) {
+    animation.spinner_index = (animation.spinner_index + 1U) % 4U;
+    if (pending_receipt.ticks_remaining > 0) {
+      --pending_receipt.ticks_remaining;
+    }
+    changed = true;
+  }
+
+  return changed;
 }
 
 [[nodiscard]] int run_interactive_terminal() {
@@ -984,9 +1149,12 @@ void process_input_buffer(std::string_view buffer,
   terminal::FtxuiRendererAdapter renderer;
   model::TuiScreenModel screen_model = make_initial_model(
       capabilities, startup_mode, composer);
+  ManualAnimationState animation;
+  PendingManualReceipt pending_receipt;
   bool should_exit = false;
   TerminalSize size = read_terminal_size();
   update_size_status(screen_model, size, renderer);
+  apply_manual_visuals(screen_model, animation, pending_receipt);
   redraw(renderer, screen_model, size);
 
   while (!should_exit) {
@@ -998,8 +1166,23 @@ void process_input_buffer(std::string_view buffer,
       size = observed_size;
       update_size_status(screen_model, size, renderer);
       screen_model.debug_reason = "terminal_resized";
+      apply_manual_visuals(screen_model, animation, pending_receipt);
       redraw(renderer, screen_model, size);
     }
+
+    const bool animation_changed = advance_manual_animation(animation, pending_receipt);
+    const bool pending_completed = pending_receipt.active &&
+        pending_receipt.ticks_remaining <= 0;
+    if (pending_completed) {
+      complete_pending_receipt(composer, screen_model, pending_receipt);
+      animation.cursor_visible = true;
+      animation.cursor_tick = 0;
+    }
+    if (animation_changed || pending_completed) {
+      apply_manual_visuals(screen_model, animation, pending_receipt);
+      redraw(renderer, screen_model, size);
+    }
+
     if (poll_result < 0 && errno == EINTR) {
       continue;
     }
@@ -1021,8 +1204,10 @@ void process_input_buffer(std::string_view buffer,
                          terminal_session,
                          renderer,
                          size,
+                         pending_receipt,
                          should_exit,
                          std::cerr);
+    apply_manual_visuals(screen_model, animation, pending_receipt);
     redraw(renderer, screen_model, size);
   }
 

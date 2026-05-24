@@ -127,7 +127,9 @@ void main_layout_snapshot_renders_full_screen_ready_shell() {
                .mode = "ready",
                .history_query = std::nullopt,
                .can_submit = true,
-               .dirty = false},
+               .dirty = false,
+               .cursor_visible = true,
+               .activity_indicator = {}},
       TuiFocusState::Composer);
 
   const FtxuiRendererAdapter renderer;
@@ -174,7 +176,9 @@ void main_layout_snapshot_renders_narrow_cjk_without_side_overlap() {
                        .mode = "editing",
                        .history_query = std::nullopt,
                        .can_submit = true,
-                       .dirty = true},
+                       .dirty = true,
+                       .cursor_visible = true,
+                       .activity_indicator = {}},
       TuiFocusState::Composer);
 
   const FtxuiRendererAdapter renderer;
@@ -223,7 +227,9 @@ void main_layout_snapshot_keeps_cjk_rows_aligned_with_status_panel() {
                        .mode = "ready",
                        .history_query = std::nullopt,
                        .can_submit = true,
-                       .dirty = false},
+                       .dirty = false,
+                       .cursor_visible = true,
+                       .activity_indicator = {}},
       TuiFocusState::Composer,
       {TuiBanner{.level = TuiBannerLevel::Warning,
                  .title = "Terminal degraded",
@@ -284,7 +290,9 @@ void main_layout_snapshot_renders_selector_modal_overlay() {
                .mode = "ready",
                .history_query = std::nullopt,
                .can_submit = true,
-               .dirty = false},
+               .dirty = false,
+               .cursor_visible = true,
+               .activity_indicator = {}},
       TuiFocusState::Modal,
       {},
       modal);
@@ -328,7 +336,9 @@ void main_layout_snapshot_modal_clears_underlying_history_rows() {
                        .mode = "ready",
                        .history_query = std::nullopt,
                        .can_submit = true,
-                       .dirty = false},
+                       .dirty = false,
+                       .cursor_visible = true,
+                       .activity_indicator = {}},
       TuiFocusState::Modal,
       {},
       modal);
@@ -379,7 +389,9 @@ void main_layout_snapshot_renders_busy_draft_banner() {
                        .mode = "pending-interaction",
                        .history_query = std::nullopt,
                        .can_submit = false,
-                       .dirty = true},
+                       .dirty = true,
+                       .cursor_visible = true,
+                       .activity_indicator = {}},
       TuiFocusState::Composer,
       banners);
 
@@ -394,6 +406,35 @@ void main_layout_snapshot_renders_busy_draft_banner() {
   assert_true(screen.find("mode=pending-interaction submit=disabled dirty=yes") !=
                   std::string::npos,
               "busy-draft snapshot should expose the locked composer state inside the composer panel");
+}
+
+void main_layout_snapshot_renders_cursor_and_waiting_spinner() {
+  const auto loaded = FakeScenarioCatalog::load("planning_tools");
+  assert_true(loaded.ok(), "planning_tools should load for the composer spinner snapshot");
+
+  const TuiScreenModel model = make_screen_model(
+      *loaded.scenario,
+      {TuiMessageView{.role = "user",
+                      .content = "Wait for the model result.",
+                      .timestamp = "2026-05-24T21:42:00",
+                      .badges = {"submitted"}}},
+      TuiComposerState{.text = "",
+                       .mode = "pending-interaction",
+                       .history_query = std::nullopt,
+                       .can_submit = false,
+                       .dirty = false,
+                       .cursor_visible = true,
+                       .activity_indicator = "/ waiting for model"},
+      TuiFocusState::Composer);
+
+  const FtxuiRendererAdapter renderer;
+  const std::string screen = renderer.render_to_screen(model, 120, 36);
+
+  assert_true(screen.find("[draft empty]|") != std::string::npos,
+              "composer should render a visible input cursor when cursor_visible is true");
+  assert_true(screen.find("mode=pending-interaction submit=disabled dirty=no wait=/ waiting for model") !=
+                  std::string::npos,
+              "composer should render the pending activity spinner after submit");
 }
 
 void renderer_files_avoid_owner_private_dependencies() {
@@ -431,6 +472,7 @@ int main() {
     main_layout_snapshot_renders_selector_modal_overlay();
     main_layout_snapshot_modal_clears_underlying_history_rows();
     main_layout_snapshot_renders_busy_draft_banner();
+    main_layout_snapshot_renders_cursor_and_waiting_spinner();
     renderer_files_avoid_owner_private_dependencies();
   } catch (const std::exception& exception) {
     std::cerr << "[TuiMainLayoutSnapshotTest] FAILED: " << exception.what() << '\n';
