@@ -462,7 +462,7 @@ void draw_box(Canvas& canvas,
              modal_y,
              frame.metrics.modal.width,
              frame.metrics.modal.height,
-             "next turn preference",
+             frame.modal_title,
              frame.modal_lines);
   }
 
@@ -521,7 +521,7 @@ void draw_box(Canvas& canvas,
                        text(frame.footer_lines.empty() ? std::string{} : frame.footer_lines.front())});
 
   if (frame.metrics.modal.visible && !frame.modal_lines.empty()) {
-    root = dbox({root, make_panel("next turn preference", frame.modal_lines) | center});
+    root = dbox({root, make_panel(frame.modal_title, frame.modal_lines) | center});
   }
 
   Screen screen = Screen::Create(Dimension::Fixed(static_cast<int>(frame.metrics.terminal_width)),
@@ -589,6 +589,9 @@ TuiRenderFrame FtxuiRendererAdapter::render_root(
   frame.footer_lines = build_footer_lines(screen_model);
 
   if (screen_model.modal.kind != model::TuiModalKind::None && frame.metrics.modal.visible) {
+    frame.modal_title = trim_copy(screen_model.modal.title).empty()
+                            ? format_modal_kind(screen_model.modal.kind)
+                            : trim_copy(screen_model.modal.title);
     frame.modal_lines = build_modal_lines(
         screen_model.modal,
         saturating_sub(frame.metrics.modal.width, 2U),

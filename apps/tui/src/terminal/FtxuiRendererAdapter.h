@@ -17,6 +17,7 @@ struct TuiRenderFrame {
   std::vector<std::string> status_lines;
   std::vector<std::string> composer_lines;
   std::vector<std::string> footer_lines;
+    std::string modal_title;
   std::vector<std::string> modal_lines;
 };
 

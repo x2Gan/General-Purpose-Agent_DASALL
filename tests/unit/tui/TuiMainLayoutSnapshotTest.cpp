@@ -350,8 +350,8 @@ void main_layout_snapshot_modal_clears_underlying_history_rows() {
   const std::size_t modal_x = (metrics.terminal_width - metrics.modal.width) / 2U;
   const std::size_t modal_y = (metrics.terminal_height - metrics.modal.height) / 2U;
 
-  assert_true(find_line_containing(lines, "[NEXT TURN PREFERENCE]") < lines.size(),
-              "help modal should render above the long transcript history");
+  assert_true(find_line_containing(lines, "[MANUAL TERMINAL HELP]") < lines.size(),
+              "help modal should render above the long transcript history with its own title");
 
   constexpr std::size_t kModalContentLineCount = 3U;
   for (std::size_t row = modal_y + 1U + kModalContentLineCount;
@@ -361,6 +361,64 @@ void main_layout_snapshot_modal_clears_underlying_history_rows() {
                                                         metrics.modal.width - 2U);
     assert_true(modal_interior.find("UNDERLAY_SHOULD_NOT_SHOW") == std::string::npos,
                 "modal blank rows should clear underlying transcript history");
+  }
+}
+
+void main_layout_snapshot_session_modal_clears_underlying_status_rows() {
+  const auto loaded = FakeScenarioCatalog::load("golden_ready");
+  assert_true(loaded.ok(), "golden_ready should load for the session modal regression");
+
+  std::vector<TuiMessageView> transcript;
+  for (int index = 0; index < 24; ++index) {
+    transcript.push_back(TuiMessageView{.role = index % 2 == 0 ? "user" : "assistant",
+                                        .content = "UNDERLAY_SHOULD_NOT_SHOW_" +
+                                                   std::to_string(index),
+                                        .timestamp = "2026-05-24T22:08:00",
+                                        .badges = {"history"}});
+  }
+
+  TuiModalState modal;
+  modal.kind = TuiModalKind::Session;
+  modal.title = "Manual status";
+  modal.body = "stage=ready\nhealth=manual receipt captured\nterminal=full 140x56";
+  modal.actions = {"Close"};
+  modal.selected_action_index = 0;
+
+  const TuiScreenModel model = make_screen_model(
+      *loaded.scenario,
+      std::move(transcript),
+      TuiComposerState{.text = "",
+                       .mode = "ready",
+                       .history_query = std::nullopt,
+                       .can_submit = true,
+                       .dirty = false,
+                       .cursor_visible = true,
+                       .activity_indicator = {}},
+      TuiFocusState::Modal,
+      {},
+      modal);
+
+  const FtxuiRendererAdapter renderer;
+  const std::string screen = renderer.render_to_screen(model, 140, 56);
+  const auto lines = split_lines(screen);
+  const auto metrics = renderer.apply_layout_metrics(140, 56);
+  const std::size_t modal_x = (metrics.terminal_width - metrics.modal.width) / 2U;
+  const std::size_t modal_y = (metrics.terminal_height - metrics.modal.height) / 2U;
+
+  assert_true(find_line_containing(lines, "[MANUAL STATUS]") < lines.size(),
+              "session modal should render the /status title instead of the selector title");
+  assert_true(screen.find("stage=ready") != std::string::npos &&
+                  screen.find("terminal=full 140x56") != std::string::npos,
+              "session modal should render the manual status body");
+
+  constexpr std::size_t kModalContentLineCount = 5U;
+  for (std::size_t row = modal_y + 1U + kModalContentLineCount;
+       row + 1U < modal_y + metrics.modal.height;
+       ++row) {
+    const std::string modal_interior = lines[row].substr(modal_x + 1U,
+                                                        metrics.modal.width - 2U);
+    assert_true(modal_interior.find("UNDERLAY_SHOULD_NOT_SHOW") == std::string::npos,
+                "session modal blank rows should clear underlying transcript or status history");
   }
 }
 
@@ -498,6 +556,7 @@ int main() {
     main_layout_snapshot_keeps_cjk_rows_aligned_with_status_panel();
     main_layout_snapshot_renders_selector_modal_overlay();
     main_layout_snapshot_modal_clears_underlying_history_rows();
+    main_layout_snapshot_session_modal_clears_underlying_status_rows();
     main_layout_snapshot_renders_busy_draft_banner();
     main_layout_snapshot_renders_cursor_and_waiting_spinner();
     main_layout_snapshot_renders_cursor_inside_composer_text();

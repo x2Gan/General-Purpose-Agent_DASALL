@@ -1,3 +1,34 @@
+# 记录 #798
+
+- 日期：2026-05-24
+- 阶段：tui/manual terminal status modal overlay fix
+- 任务：修复 `BLK-TUI-006` 手工终端 `/status` 弹窗标题与底层内容清除回归
+- 状态：已完成（实现并验证；`BLK-TUI-006` 仍需真实终端人工填写/签署）
+
+### 改动
+
+1. 扩展 `TuiRenderFrame`，将 `TuiModalState::title` 带入 renderer frame，避免 Help/Session modal 继续复用硬编码的 `NEXT TURN PREFERENCE` 标题。
+2. 更新 ASCII fallback 与 optional FTXUI modal overlay，统一使用当前 modal 的真实 title；`/status` 现在渲染为 `MANUAL STATUS`。
+3. 增加 `TuiMainLayoutSnapshotTest` 的 Session modal 回归，覆盖 `/status` modal 标题、body 与空白区域不透出底层 transcript/status 内容。
+4. 扩展 `dasall_tui_manual_terminal --self-check`，通过真实输入路径执行 `/status`，并在长历史 underlay 上验证 Session modal overlay 清空区域。
+
+### 验证
+
+1. `Build_CMakeTools(buildTargets=[dasall_tui_main_layout_snapshot_unit_test,dasall_tui_manual_terminal])`
+   - 结果：通过。
+2. `RunCtest_CMakeTools(tests=[TuiMainLayoutSnapshotTest])`
+   - 结果：工具仍返回仓库已知泛化 `生成失败`，未给出具体失败用例。
+3. `./build/vscode-linux-ninja/tests/unit/tui/dasall_tui_main_layout_snapshot_unit_test && ./build/vscode-linux-ninja/apps/tui/dasall_tui_manual_terminal --self-check`
+   - 结果：通过。
+4. `git diff --check` 与编辑器诊断
+   - 结果：通过。
+
+### 结果
+
+1. `/help`、`/status`、selector modal 现在共享同一条 overlay 清空路径，但标题使用各自 modal title。
+2. `/status` 弹窗不再显示 selector 标题，且空白区域不会透出底层历史或 status panel 内容。
+3. 本轮没有关闭 `BLK-TUI-006` 或 `BLK-TUI-008`；真实终端人工验收与签署仍需继续完成。
+
 # 记录 #797
 
 - 日期：2026-05-24

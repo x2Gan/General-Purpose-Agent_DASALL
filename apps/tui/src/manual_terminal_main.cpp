@@ -1007,6 +1007,21 @@ void process_input_buffer(std::string_view buffer,
   return environment;
 }
 
+[[nodiscard]] std::vector<std::string> split_screen_lines(std::string_view text) {
+  std::vector<std::string> lines;
+  std::size_t start = 0;
+  while (start <= text.size()) {
+    const std::size_t end = text.find('\n', start);
+    if (end == std::string_view::npos) {
+      lines.emplace_back(text.substr(start));
+      break;
+    }
+    lines.emplace_back(text.substr(start, end - start));
+    start = end + 1U;
+  }
+  return lines;
+}
+
 [[nodiscard]] bool manual_history_recall_self_check(
     const terminal::TuiTerminalCapabilities& capabilities,
     terminal::TuiStartupMode startup_mode,
@@ -1151,6 +1166,72 @@ void process_input_buffer(std::string_view buffer,
               .find("Manual receipt captured locally") != std::string::npos;
 }
 
+[[nodiscard]] bool manual_status_modal_self_check(
+    const terminal::TuiTerminalCapabilities& capabilities,
+    terminal::TuiStartupMode startup_mode,
+    const terminal::FtxuiRendererAdapter& renderer) {
+  view::TuiComposer composer;
+  model::TuiScreenModel screen_model = make_initial_model(
+      capabilities,
+      startup_mode,
+      composer);
+  TerminalSession terminal_session;
+  PendingManualReceipt pending_receipt;
+  bool should_exit = false;
+  std::ostringstream error_stream;
+  const TerminalSize size{140U, 56U};
+  update_size_status(screen_model, size, renderer);
+
+  for (int index = 0; index < 24; ++index) {
+    append_message(screen_model,
+                   index % 2 == 0 ? "user" : "assistant",
+                   "UNDERLAY_SHOULD_NOT_SHOW_" + std::to_string(index),
+                   {"history"});
+  }
+
+  process_input_buffer("/status\r",
+                       composer,
+                       screen_model,
+                       terminal_session,
+                       renderer,
+                       size,
+                       pending_receipt,
+                       should_exit,
+                       error_stream);
+  if (should_exit || screen_model.modal.kind != model::TuiModalKind::Session ||
+      screen_model.focus != model::TuiFocusState::Modal) {
+    return false;
+  }
+
+  const std::string screen = renderer.render_to_screen(screen_model,
+                                                       size.columns,
+                                                       size.rows);
+  if (screen.find("[MANUAL STATUS]") == std::string::npos ||
+      screen.find("[NEXT TURN PREFERENCE]") != std::string::npos ||
+      screen.find("terminal=full 140x56") == std::string::npos) {
+    return false;
+  }
+
+  const auto lines = split_screen_lines(screen);
+  const auto metrics = renderer.apply_layout_metrics(size.columns, size.rows);
+  const std::size_t modal_x = (metrics.terminal_width - metrics.modal.width) / 2U;
+  const std::size_t modal_y = (metrics.terminal_height - metrics.modal.height) / 2U;
+  constexpr std::size_t kModalContentLineCount = 5U;
+  for (std::size_t row = modal_y + 1U + kModalContentLineCount;
+       row + 1U < modal_y + metrics.modal.height && row < lines.size();
+       ++row) {
+    if (modal_x + metrics.modal.width > lines[row].size()) {
+      return false;
+    }
+    const std::string modal_interior = lines[row].substr(modal_x + 1U,
+                                                        metrics.modal.width - 2U);
+    if (modal_interior.find("UNDERLAY_SHOULD_NOT_SHOW") != std::string::npos) {
+      return false;
+    }
+  }
+  return true;
+}
+
 [[nodiscard]] bool manual_simple_editing_self_check(
     const terminal::TuiTerminalCapabilities& capabilities,
     terminal::TuiStartupMode startup_mode,
@@ -1240,6 +1321,7 @@ void process_input_buffer(std::string_view buffer,
       redraw_control_prefix().find("\x1b[2J") == std::string_view::npos &&
       manual_history_recall_self_check(capabilities, startup_mode, renderer) &&
       manual_pending_indicator_self_check(capabilities, startup_mode, renderer) &&
+      manual_status_modal_self_check(capabilities, startup_mode, renderer) &&
       manual_simple_editing_self_check(capabilities, startup_mode, renderer);
   if (!ok) {
     std::cerr << "dasall_tui_manual_terminal self-check FAILED\n";
