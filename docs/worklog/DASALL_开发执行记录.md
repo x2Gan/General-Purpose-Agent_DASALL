@@ -1,3 +1,34 @@
+# 记录 #794
+
+- 日期：2026-05-24
+- 阶段：tui/manual terminal modal overlay fix
+- 任务：修复 `BLK-TUI-006` 手工终端 `/help` 弹窗被底层历史内容透出/覆盖的问题
+- 状态：已完成（实现修复并验证；`BLK-TUI-006` 仍需真实终端人工填写/签署）
+
+### 改动
+
+1. 修复 `apps/tui/src/terminal/FtxuiRendererAdapter.cpp` 的 ASCII fallback box 绘制：在绘制任意 box 边框和内容前先清空整个 box 矩形，确保 modal overlay 覆盖 transcript/status/composer 时不会透出底层 cell。
+2. 增加 `TuiMainLayoutSnapshotTest` 回归：构造长历史 transcript 与短 help modal，检查 modal 空白区域不包含底层 `UNDERLAY_SHOULD_NOT_SHOW` 标记。
+
+### 验证
+
+1. `Build_CMakeTools(buildTargets=[dasall_tui_main_layout_snapshot_unit_test,dasall_tui_manual_terminal])`
+   - 结果：通过。
+2. `RunCtest_CMakeTools(tests=[TuiMainLayoutSnapshotTest])`
+   - 结果：工具仍返回仓库已知泛化 `生成失败`，未给出具体失败用例。
+3. `./build/vscode-linux-ninja/tests/unit/tui/dasall_tui_main_layout_snapshot_unit_test && ./build/vscode-linux-ninja/apps/tui/dasall_tui_manual_terminal --self-check`
+   - 结果：通过。
+4. `printf '你是谁\r我想要你的帮助\r我们都是中国人\r/help\r\033/exit\r' | timeout 5s script -q -c 'stty rows 56 cols 140; ./build/vscode-linux-ninja/apps/tui/dasall_tui_manual_terminal' /tmp/dasall-tui-help-modal-overlay.typescript`
+   - 结果：通过；140x56 伪终端中带历史内容的 `/help` modal 路径可启动、关闭并退出。
+5. `git diff --check`、编辑器诊断与 command migration 范围检查
+   - 结果：通过；未触碰 `apps/cli`、`debian/` 或 packaging scripts。
+
+### 结果
+
+1. `/help` modal overlay 现在会先清空覆盖区域，再绘制边框和内容，底层 `System/User/Assistant` 历史行不会从空白区域透出。
+2. 同类 modal overlay 问题已由 renderer 层统一修复，不只针对 `/help` 文案。
+3. 本轮没有关闭 `BLK-TUI-006` 或 `BLK-TUI-008`；真实 CJK/IME/resize/composer 结果仍需人工验收文档填写与签署。
+
 # 记录 #793
 
 - 日期：2026-05-24

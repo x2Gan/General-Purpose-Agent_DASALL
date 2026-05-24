@@ -320,6 +320,12 @@ void draw_box(Canvas& canvas,
     return;
   }
 
+  for (std::size_t row = 0; row < box_height; ++row) {
+    for (std::size_t column = 0; column < box_width; ++column) {
+      canvas[y + row][x + column] = " ";
+    }
+  }
+
   for (std::size_t column = 0; column < box_width; ++column) {
     canvas[y][x + column] = "-";
     canvas[y + box_height - 1][x + column] = "-";

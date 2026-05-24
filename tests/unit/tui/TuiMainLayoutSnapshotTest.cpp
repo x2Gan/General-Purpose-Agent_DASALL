@@ -301,6 +301,59 @@ void main_layout_snapshot_renders_selector_modal_overlay() {
               "selector modal snapshot should keep the apply and cancel actions visible");
 }
 
+void main_layout_snapshot_modal_clears_underlying_history_rows() {
+  const auto loaded = FakeScenarioCatalog::load("golden_ready");
+  assert_true(loaded.ok(), "golden_ready should load for the modal underlay regression");
+
+  std::vector<TuiMessageView> transcript;
+  for (int index = 0; index < 24; ++index) {
+    transcript.push_back(TuiMessageView{.role = index % 2 == 0 ? "user" : "assistant",
+                                        .content = "UNDERLAY_SHOULD_NOT_SHOW_" +
+                                                   std::to_string(index),
+                                        .timestamp = "2026-05-24T21:36:00",
+                                        .badges = {"history"}});
+  }
+
+  TuiModalState modal;
+  modal.kind = TuiModalKind::Help;
+  modal.title = "Manual terminal help";
+  modal.body = "Short help body.";
+  modal.actions = {"Close"};
+  modal.selected_action_index = 0;
+
+  const TuiScreenModel model = make_screen_model(
+      *loaded.scenario,
+      std::move(transcript),
+      TuiComposerState{.text = "",
+                       .mode = "ready",
+                       .history_query = std::nullopt,
+                       .can_submit = true,
+                       .dirty = false},
+      TuiFocusState::Modal,
+      {},
+      modal);
+
+  const FtxuiRendererAdapter renderer;
+  const std::string screen = renderer.render_to_screen(model, 140, 56);
+  const auto lines = split_lines(screen);
+  const auto metrics = renderer.apply_layout_metrics(140, 56);
+  const std::size_t modal_x = (metrics.terminal_width - metrics.modal.width) / 2U;
+  const std::size_t modal_y = (metrics.terminal_height - metrics.modal.height) / 2U;
+
+  assert_true(find_line_containing(lines, "[NEXT TURN PREFERENCE]") < lines.size(),
+              "help modal should render above the long transcript history");
+
+  constexpr std::size_t kModalContentLineCount = 3U;
+  for (std::size_t row = modal_y + 1U + kModalContentLineCount;
+       row + 1U < modal_y + metrics.modal.height;
+       ++row) {
+    const std::string modal_interior = lines[row].substr(modal_x + 1U,
+                                                        metrics.modal.width - 2U);
+    assert_true(modal_interior.find("UNDERLAY_SHOULD_NOT_SHOW") == std::string::npos,
+                "modal blank rows should clear underlying transcript history");
+  }
+}
+
 void main_layout_snapshot_renders_busy_draft_banner() {
   const auto loaded = FakeScenarioCatalog::load("planning_tools");
   assert_true(loaded.ok(), "planning_tools should load for the busy-draft snapshot");
@@ -376,6 +429,7 @@ int main() {
     main_layout_snapshot_renders_narrow_cjk_without_side_overlap();
     main_layout_snapshot_keeps_cjk_rows_aligned_with_status_panel();
     main_layout_snapshot_renders_selector_modal_overlay();
+    main_layout_snapshot_modal_clears_underlying_history_rows();
     main_layout_snapshot_renders_busy_draft_banner();
     renderer_files_avoid_owner_private_dependencies();
   } catch (const std::exception& exception) {
