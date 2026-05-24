@@ -1,3 +1,32 @@
+# 记录 #786
+
+- 日期：2026-05-24
+- 阶段：tui/command release blocker recheck
+- 任务：按 project-implementation-cycle 复检 BLK-TUI-008 bare `dasall` 命令迁移前置门禁
+- 状态：已完成（复检交付物落盘；BLK-TUI-008 继续 Open，Gate-TUI-08 继续 Blocked）
+
+### 改动
+
+1. 新增 `docs/todos/tui/deliverables/BLK-TUI-008-command-release-gate-recheck.md`，按 blocker recovery 口径复检 Gate-TUI-08：B.0 第 2/3/4 项已 Pass，第 1 项仍 awaiting formal sign-off，第 5 项仍缺 `BLK-TUI-006` manual terminal evidence。
+2. 更新 `docs/todos/tui/DASALL_TUI客户端专项TODO-2026-05-13.md`，把 `BLK-TUI-008` 行、`TUI-TODO-031` 解阻条件、deliverable 完整性检查、可行性结论与未决问题处置表统一到新复检口径。
+3. 更新 `docs/todos/DASALL_子系统查漏补缺专项记录.md`，在 TUI client 索引行与 17 章 TUI 详章中回链 `BLK-TUI-008-command-release-gate-recheck.md`，明确命令迁移仍未放行。
+4. 本轮没有改动 `apps/cli/CMakeLists.txt`、`apps/tui/`、`debian/` 或 `scripts/packaging/`，继续禁止提前释放 `dasall-cli` 产物名或安装 TUI 为 `/usr/bin/dasall`。
+
+### 验证
+
+1. `rg -n "BLK-TUI-008|Gate-TUI-08|formal|sign-off|BLK-TUI-006|OUTPUT_NAME dasall|不改|继续 Blocked|继续 Open" docs/todos/tui/deliverables/BLK-TUI-008-command-release-gate-recheck.md`
+   - 结果：通过；复检交付物明确记录 BLK-TUI-008 继续 Open、Gate-TUI-08 继续 Blocked、formal sign-off 不可代签、`BLK-TUI-006` 未闭合与禁止提前改命令面。
+2. `rg -n '补设计 deliverables 完整|BLK-TUI-008' docs/todos/tui/DASALL_TUI客户端专项TODO-2026-05-13.md`
+   - 结果：通过；TUI 专项 TODO 已把 BLK-TUI-008 复检交付物纳入 deliverable 完整性检查，并保持 `TUI-TODO-031~034` Blocked。
+3. `rg -n 'BLK-TUI-008-command-release-gate-recheck|formal sign-off|terminal manual gate|command release ready|TUI-TODO-031~034' docs/todos/DASALL_子系统查漏补缺专项记录.md`
+   - 结果：通过；总账索引行与 17 章 TUI 详章已同步复检结论与剩余阻塞。
+
+### 结果
+
+1. `BLK-TUI-008` 的自动化可执行部分已完成：当前状态、剩余阻塞、禁止动作与后续最小解阻条件均已落盘。
+2. `TUI-TODO-031` 仍未恢复可执行；最小解阻动作仍是 formal sample sign-off 与 `BLK-TUI-006` 真实终端 CJK/IME/resize/composer manual evidence。
+3. 后续只有在 Gate-TUI-08 复检转 Pass 后，才能按 `TUI-TODO-031 -> 032 -> 033/034` 继续推进命令迁移。
+
 # 记录 #785
 
 - 日期：2026-05-24
