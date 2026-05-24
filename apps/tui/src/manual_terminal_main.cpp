@@ -37,6 +37,11 @@ struct TerminalSize {
   std::size_t rows = 24;
 };
 
+[[nodiscard]] bool same_size(const TerminalSize& left,
+                             const TerminalSize& right) noexcept {
+  return left.columns == right.columns && left.rows == right.rows;
+}
+
 [[nodiscard]] std::string trim_copy(std::string_view text) {
   std::size_t first = 0;
   while (first < text.size() &&
@@ -89,19 +94,35 @@ struct TerminalSize {
 }
 
 [[nodiscard]] TerminalSize read_terminal_size() {
-  winsize size{};
-  if (::ioctl(STDOUT_FILENO, TIOCGWINSZ, &size) == 0 &&
-      size.ws_col > 0U && size.ws_row > 0U) {
-    return TerminalSize{static_cast<std::size_t>(size.ws_col),
-                        static_cast<std::size_t>(size.ws_row)};
+  for (const int file_descriptor : {STDOUT_FILENO, STDERR_FILENO, STDIN_FILENO}) {
+    winsize size{};
+    if (::ioctl(file_descriptor, TIOCGWINSZ, &size) == 0 &&
+        size.ws_col > 0U && size.ws_row > 0U) {
+      return TerminalSize{static_cast<std::size_t>(size.ws_col),
+                          static_cast<std::size_t>(size.ws_row)};
+    }
   }
 
   return TerminalSize{};
 }
 
 void write_stdout(std::string_view text) {
-  const ssize_t ignored = ::write(STDOUT_FILENO, text.data(), text.size());
-  static_cast<void>(ignored);
+  const char* cursor = text.data();
+  std::size_t remaining = text.size();
+  while (remaining > 0U) {
+    const ssize_t written = ::write(STDOUT_FILENO, cursor, remaining);
+    if (written < 0) {
+      if (errno == EINTR) {
+        continue;
+      }
+      return;
+    }
+    if (written == 0) {
+      return;
+    }
+    cursor += written;
+    remaining -= static_cast<std::size_t>(written);
+  }
 }
 
 [[nodiscard]] std::string shell_quote_path(std::string_view path) {
@@ -396,7 +417,7 @@ void redraw(const terminal::FtxuiRendererAdapter& renderer,
             const TerminalSize& size) {
   const std::string rendered = renderer.render_to_screen(
       screen_model, size.columns, size.rows);
-  write_stdout("\x1b[H\x1b[2J");
+  write_stdout("\x1b[?25l\x1b[H\x1b[2J");
   write_stdout(rendered);
   write_stdout("\x1b[H");
 }
@@ -704,11 +725,35 @@ void process_input_buffer(std::string_view buffer,
       capabilities, startup_mode, composer);
   const std::string full_screen = renderer.render_to_screen(screen_model, 120, 36);
   const std::string narrow_screen = renderer.render_to_screen(screen_model, 80, 24);
+  const std::string line_screen = renderer.render_to_screen(screen_model, 40, 12);
+
+  const auto has_expected_shape = [](std::string_view screen,
+                                     const std::size_t expected_columns,
+                                     const std::size_t expected_rows) {
+    std::size_t rows = 1;
+    std::size_t current_columns = 0;
+    for (const char character : screen) {
+      if (character == '\n') {
+        if (current_columns != expected_columns) {
+          return false;
+        }
+        current_columns = 0;
+        ++rows;
+        continue;
+      }
+      ++current_columns;
+    }
+    return rows == expected_rows && current_columns == expected_columns;
+  };
 
   const bool ok = !full_screen.empty() && !narrow_screen.empty() &&
       full_screen.find("BLK-TUI-006") != std::string::npos &&
       full_screen.find("CJK sample") != std::string::npos &&
-      narrow_screen.find("composer") != std::string::npos;
+      narrow_screen.find("composer") != std::string::npos &&
+      line_screen.find("composer") != std::string::npos &&
+      has_expected_shape(full_screen, 120, 36) &&
+      has_expected_shape(narrow_screen, 80, 24) &&
+      has_expected_shape(line_screen, 40, 12);
   if (!ok) {
     std::cerr << "dasall_tui_manual_terminal self-check FAILED\n";
     return 1;
@@ -745,9 +790,10 @@ void process_input_buffer(std::string_view buffer,
   while (!should_exit) {
     pollfd descriptor{.fd = STDIN_FILENO, .events = POLLIN, .revents = 0};
     const int poll_result = ::poll(&descriptor, 1, 100);
-    if (resize_requested != 0) {
+    const TerminalSize observed_size = read_terminal_size();
+    if (resize_requested != 0 || !same_size(observed_size, size)) {
       resize_requested = 0;
-      size = read_terminal_size();
+      size = observed_size;
       update_size_status(screen_model, size, startup_mode);
       screen_model.debug_reason = "terminal_resized";
       redraw(renderer, screen_model, size);

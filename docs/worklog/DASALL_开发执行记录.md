@@ -1,3 +1,34 @@
+# 记录 #790
+
+- 日期：2026-05-24
+- 阶段：tui/manual terminal resize fix
+- 任务：修复 `BLK-TUI-006` 手工终端界面显示不全与 resize 不刷新问题
+- 状态：已完成（实现修复并验证；`BLK-TUI-006` 仍需真实终端人工填写/签署）
+
+### 改动
+
+1. 修复 `apps/tui/src/manual_terminal_main.cpp` 的 terminal output：将单次 `write()` 改为循环写全，避免大屏 frame 只写出一部分导致界面显示不全。
+2. 增强 terminal size 读取：按 stdout / stderr / stdin 顺序读取 `TIOCGWINSZ`，降低单一 fd 取不到尺寸时回退到默认 80x24 的概率。
+3. 修复 live resize：事件循环除 `SIGWINCH` 外，每轮主动比较当前终端大小，尺寸变化即更新 status summary 并重绘，避免 VS Code/伪终端不及时派发 resize signal 时画面不随窗口变化。
+4. 增强 `--self-check`：校验 120x36、80x24、40x12 三种渲染输出的行数和列数，防止尺寸不完整的 frame 被误判为通过。
+
+### 验证
+
+1. `Build_CMakeTools(buildTargets=[dasall_tui_manual_terminal])`
+   - 结果：通过。
+2. `./build/vscode-linux-ninja/apps/tui/dasall_tui_manual_terminal --self-check`
+   - 结果：通过；120x36 / 80x24 / 40x12 frame shape 均完整。
+3. `printf '/exit\r' | timeout 5s script -q -c './build/vscode-linux-ninja/apps/tui/dasall_tui_manual_terminal' /tmp/dasall-tui-manual-terminal-pty.typescript`
+   - 结果：通过；伪终端交互路径可启动并通过 `/exit` 正常退出。
+4. `git diff --check` 与编辑器诊断
+   - 结果：通过；`apps/tui/src/manual_terminal_main.cpp` 无诊断错误。
+
+### 结果
+
+1. 手工 TUI 终端刷新现在会尽量完整写出每一帧，降低画面缺失风险。
+2. resize 不再只依赖 `SIGWINCH`，终端大小变化会被主动检测并触发动态重绘。
+3. 本轮没有关闭 `BLK-TUI-006`；真实 CJK/IME/resize/composer 结果仍需人工验收文档填写与签署。
+
 # 记录 #789
 
 - 日期：2026-05-24
