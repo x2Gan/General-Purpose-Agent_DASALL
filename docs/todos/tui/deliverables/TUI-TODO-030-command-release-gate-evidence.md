@@ -1,14 +1,14 @@
 # TUI-TODO-030 bare `dasall` 迁移门禁证据
 
-状态：Done（Gate-TUI-08 仍保持 Blocked）
+状态：Done（Gate-TUI-08 Pass；`TUI-TODO-031` 恢复为下一原子任务）
 日期：2026-05-24
 来源 TODO：docs/todos/tui/DASALL_TUI客户端专项TODO-2026-05-13.md
 
 ## 1. 任务边界
 
 1. 本任务只收敛 bare `dasall` 命令释放前的门禁证据、旧入口 inventory 与迁移矩阵，不修改 `apps/cli`、`apps/tui`、`debian/` 或 `scripts/packaging/` 的生产实现。
-2. 本任务不提前执行 `TUI-TODO-031~034`，也不把 `BLK-TUI-006` 的 CJK/IME/resize 人工 gate 或 FTXUI Debian packaging review 伪装成已通过。
-3. 本任务完成标准是：把 B.0 前置门禁逐项判定为 `Pass` 或 `Blocked`，列出当前仍占用 bare `dasall` 的仓内文件与命令面，并为 `TUI-TODO-031~034` 给出逐文件迁移动作。
+2. 本任务不提前执行 `TUI-TODO-031~034`；`BLK-TUI-006` 的 CJK/IME/resize 人工 gate 已由独立 manual evidence 关闭，FTXUI Debian packaging review 已由 `TUI-TODO-036` 关闭。
+3. 本任务完成标准是：把 B.0 前置门禁逐项判定为 `Pass`，列出当前仍占用 bare `dasall` 的仓内文件与命令面，并为 `TUI-TODO-031~034` 给出逐文件迁移动作。
 
 ## 2. 本地事实与设计依据
 
@@ -16,7 +16,7 @@
 2. 同一文档附件 B.4.4 已把命令迁移兼容矩阵固定为九个影响面：CMake target、install 规则、manpage、README.Debian/postinst、autopkgtest、packaging scripts、docs/examples、shell completion 与 release notes。
 3. `docs/todos/tui/deliverables/TUI-TODO-001-启动身份与权限模型决策.md` 与 `docs/todos/tui/deliverables/TUI-TODO-024-启动降级与daemon-unavailable路径.md` 已冻结并验证：daemon-backed TUI v1 继续沿用 `/run/dasall/daemon.sock` + `0600 root/sudo-only` operator backend，ordinary-user full-function 仍是 future-only，`permission_denied` 必须保持独立 startup issue。
 4. `docs/todos/tui/deliverables/TUI-TODO-023-daemon-data-source-contract基线.md`、`docs/todos/tui/deliverables/TUI-TODO-025-status-tool-recovery投影刷新.md`、`docs/todos/tui/deliverables/TUI-TODO-027-route-catalog-projection.md` 与 `docs/todos/tui/deliverables/TUI-TODO-029-next-preference提交回显.md` 已分别闭合 daemon-backed `open_session/submit_turn/poll_events/route_catalog/close_session`、status projection refresh、route catalog projection 字段与 next preference submit echo 的 focused evidence。
-5. `docs/todos/tui/deliverables/TUI-TODO-020-fake-only-TuiApp小样基线.md`、`docs/todos/tui/deliverables/TUI-PROTO-017-样品评审证据.md`、`docs/todos/tui/deliverables/TUI-PROTO-017-formal-sample-signoff.md`、`docs/todos/tui/deliverables/TUI-TODO-005-ftxui接入评审.md` 与 `docs/todos/tui/deliverables/TUI-TODO-036-ftxui-installed-path-packaging-review.md` 现已明确：样品评审采纳 / 延后 / 废弃清单、formal product/engineering sign-off 和 FTXUI installed-path packaging strategy 已落盘，但 `BLK-TUI-006` 的 CJK/IME/resize manual gate 仍未闭合。
+5. `docs/todos/tui/deliverables/TUI-TODO-020-fake-only-TuiApp小样基线.md`、`docs/todos/tui/deliverables/TUI-PROTO-017-样品评审证据.md`、`docs/todos/tui/deliverables/TUI-PROTO-017-formal-sample-signoff.md`、`docs/todos/tui/deliverables/TUI-TODO-005-ftxui接入评审.md`、`docs/todos/tui/deliverables/TUI-TODO-036-ftxui-installed-path-packaging-review.md` 与 `docs/todos/tui/deliverables/BLK-TUI-006-manual-terminal-evidence.md` 现已明确：样品评审采纳 / 延后 / 废弃清单、formal product/engineering sign-off、FTXUI installed-path packaging strategy 和真实终端 Full pass 均已落盘。
 6. 当前仓内实际占用关系仍与附件 B.1 一致：`apps/cli/CMakeLists.txt` 把 `dasall-cli` target 产物名设为 `dasall`，`debian/dasall-cli.install` 仍把 `debian/tmp/usr/bin/dasall` 安装到 `usr/bin/`，而 `debian/dasall-daemon.postinst`、`debian/dasall-daemon.README.Debian`、`debian/dasall.1`、`debian/tests/pkg-smoke-local-control-plane` 与 `scripts/packaging/*.sh` 仍以 bare `dasall` 作为结构化控制面入口。
 7. `docs/todos/tui/deliverables/TUI-TODO-035-交付证据回写.md` 已完成阶段证据回写；`docs/todos/tui/deliverables/TUI-PROTO-017-样品评审证据.md` 已补齐采纳 / 延后 / 废弃清单，`docs/todos/tui/deliverables/TUI-PROTO-017-formal-sample-signoff.md` 已完成 formal product/engineering sign-off。
 
@@ -31,13 +31,13 @@
 
 | B.0 项 | 当前证据 | 结论 | 对 031~034 的影响 |
 |---|---|---|---|
-| 1. `dasall_tui_prototype` 样品评审已通过，采纳/延后/废弃清单已回写 | `TUI-PROTO-017` 已形成采纳 / 延后 / 废弃清单；`TUI-PROTO-017-formal-sample-signoff.md` 已由 x2Gan 以 single-maintainer dual-role sign-off 完成 Product / Engineering 签署；`TUI-TODO-035` 已回写阶段证据 | Pass | B.0 第 1 项不再阻塞 `TUI-TODO-031~034`；命令迁移仍受第 5 项 manual gate 约束 |
+| 1. `dasall_tui_prototype` 样品评审已通过，采纳/延后/废弃清单已回写 | `TUI-PROTO-017` 已形成采纳 / 延后 / 废弃清单；`TUI-PROTO-017-formal-sample-signoff.md` 已由 x2Gan 以 single-maintainer dual-role sign-off 完成 Product / Engineering 签署；`TUI-TODO-035` 已回写阶段证据 | Pass | B.0 第 1 项不再阻塞 `TUI-TODO-031~034` |
 | 2. `DaemonTuiDataSource`、session open/close/query、status projection、route projection 已具备最小可用闭环 | `TUI-TODO-023/024/025/026/027/028/029` deliverables 已闭合 open/submit/poll/route/close、startup failure、status refresh、session lifecycle、selector 消费与 submit echo | Pass | 030 可把 daemon-backed TUI ready 作为既成事实引用，不必再阻塞在 projection seam |
 | 3. root/sudo-only operator 模型与普通用户 TUI 启动语义已冻结 | `TUI-TODO-001` 与 `TUI-TODO-024` 已冻结并验证 `root/sudo-only`、`permission_denied` 与 user-level daemon future-only | Pass | 命令迁移可明确把 operator 命令迁往 `dasall-cli`，但不能把 bare `dasall` 表述成普通用户默认 full-function 主路径 |
 | 4. `dasall-cli` 结构化命令兼容矩阵已完成，仓内脚本和 Debian smoke 的迁移路径清晰 | 本文件第 5 节与第 6 节已把当前 inventory、目标命令归属与逐文件迁移动作收口为单一矩阵 | Pass（文档证据） | `TUI-TODO-031~033` 现在具备逐文件执行输入，但不等于改动已落地 |
-| 5. FTXUI 依赖来源、Debian 打包策略、snapshot/IME/CJK 质量门已通过 | `TUI-TODO-036` 已冻结 installed-path package-managed FTXUI 策略并拒绝 vendored release path；`BLK-TUI-006` 仍未提供 CJK/IME/resize manual evidence | Blocked | Gate-TUI-08 不能通过；031~034 继续保持 Blocked |
+| 5. FTXUI 依赖来源、Debian 打包策略、snapshot/IME/CJK 质量门已通过 | `TUI-TODO-036` 已冻结 installed-path package-managed FTXUI 策略并拒绝 vendored release path；`BLK-TUI-006` 已提供用户确认 Full pass 的 CJK/IME/resize/composer manual evidence | Pass | Gate-TUI-08 可通过；`TUI-TODO-031` 恢复为下一原子任务 |
 
-结论：B.0 第 1、2、3、4 项现已具备可追溯 Pass 证据；第 5 项的 FTXUI packaging strategy 已通过但 CJK/IME/resize manual gate 未通过。因此 Gate-TUI-08 当前仍保持 Blocked，`TUI-TODO-031~034` 不得进入实现。
+结论：B.0 第 1、2、3、4、5 项现已具备可追溯 Pass 证据。因此 Gate-TUI-08 当前转为 Pass，`TUI-TODO-031` 可进入实现；`TUI-TODO-032~034` 仍按 031/032/033 的后继依赖顺序执行。
 
 ## 5. bare `dasall` 旧入口 inventory
 
@@ -92,7 +92,7 @@
 
 | 后续任务 | 锁定代码/文档目标 | 锁定测试目标 | 锁定验收命令 |
 |---|---|---|---|
-| `TUI-PROTO-017` / `TUI-PROTO-017-formal-sample-signoff` / `TUI-TODO-036` / `BLK-TUI-006` | 回写样品评审采纳/延后/废弃清单、formal sign-off 与 FTXUI installed-path packaging review；继续补 CJK/IME/resize manual evidence | evidence consistency | `rg -n "采纳|延后|废弃|formal|sign-off|CJK|IME|resize|package-managed|vendored" docs/todos/tui/deliverables docs/worklog/DASALL_开发执行记录.md` |
+| `TUI-PROTO-017` / `TUI-PROTO-017-formal-sample-signoff` / `TUI-TODO-036` / `BLK-TUI-006` | 回写样品评审采纳/延后/废弃清单、formal sign-off、FTXUI installed-path packaging review 与 CJK/IME/resize manual Full pass | evidence consistency | `rg -n "采纳|延后|废弃|formal|sign-off|CJK|IME|resize|package-managed|vendored|Full pass" docs/todos/tui/deliverables docs/worklog/DASALL_开发执行记录.md` |
 | `TUI-TODO-031` | `apps/cli/CMakeLists.txt` 释放 CLI 产物名 | `CliControlPlaneCommandNameTest` | `cmake --build --preset vscode-linux-ninja --target dasall-cli` |
 | `TUI-TODO-032` | `apps/tui/CMakeLists.txt`、`apps/tui/src/main.cpp` 正式 TUI `dasall` target 与 install rule | `DasallTuiEntrypointSmokeTest` | `cmake --build --preset vscode-linux-ninja --target dasall-tui` |
 | `TUI-TODO-033` | `debian/`、`scripts/packaging/`、README/manpage/postinst/autopkgtest 切换到双命令语义 | package smoke / docs consistency | `rg -n "dasall (config|ping|readiness|run|status|cancel|diag|knowledge|version)" debian scripts` |
@@ -101,5 +101,5 @@
 ## 8. 结果
 
 1. `TUI-TODO-030` 已完成其自身职责：B.0 门禁证据、旧入口 inventory 与命令迁移兼容矩阵现在已集中落盘，不再散落在 TUI 详设、专项 TODO、Debian 文件和 packaging scripts 之间。
-2. Gate-TUI-08 当前仍保持 Blocked，阻塞项现已收敛为一条：`BLK-TUI-006` 尚未提供 CJK/IME/resize/composer 真实终端 manual evidence。
-3. FTXUI 的 Debian source/binary strategy 与 installed-path packaging review 已由 `TUI-TODO-036` 通过，formal sample sign-off 已由 `TUI-PROTO-017-formal-sample-signoff.md` 完成；因此本轮不会推进 `TUI-TODO-031~034`，下一步最小解阻动作只剩 `BLK-TUI-006` 人工终端质量门。
+2. Gate-TUI-08 当前转为 Pass，原阻塞项 `BLK-TUI-006` 已提供 CJK/IME/resize/composer 真实终端 Full pass。
+3. FTXUI 的 Debian source/binary strategy 与 installed-path packaging review 已由 `TUI-TODO-036` 通过，formal sample sign-off 已由 `TUI-PROTO-017-formal-sample-signoff.md` 完成；因此下一步最小动作是执行 `TUI-TODO-031`，本文件本身不推进 `TUI-TODO-031~034` 的代码、安装、文档或 smoke 迁移。

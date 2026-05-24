@@ -43,13 +43,13 @@
 2. 正式 release path 不允许长期使用 `third_party/ftxui`、local cache 或 FetchContent convenience copy；这些只允许保留为 developer/prototype fallback，且必须继续受 `DASALL_ENABLE_TUI_FTXUI=OFF` 默认值保护。
 3. 若目标发行版缺少足够版本的 FTXUI package，正式命令迁移不能自动回退到 vendored installed path；正确处理是保持 Gate-TUI-08/Gate-TUI-09 Blocked，或单独开 packaging exception / backport 任务并更新 `debian/copyright`、`debian/README.source` 与 package smoke。
 4. `apps/tui` 的 private dependency 边界不变：即便 installed path 改为 package-managed，FTXUI 也只能被正式 TUI target private link，不能泄漏到 contracts/access/runtime/llm/profiles/tools。
-5. 当前 review 只让 B.0 第 5 项中的“FTXUI 依赖来源与 Debian 打包策略”转为 Pass；B.0 第 5 项仍包含 snapshot/IME/CJK 质量门，后者继续由 `BLK-TUI-006` 承接。
+5. 当前 review 只让 B.0 第 5 项中的“FTXUI 依赖来源与 Debian 打包策略”转为 Pass；B.0 第 5 项中的 snapshot/IME/CJK 质量门已由后续 `BLK-TUI-006-manual-terminal-evidence.md` 以 Full pass 关闭。
 
 ## 6. 对后续任务的约束
 
 | 后续任务 | 新约束 | 验收入口 |
 |---|---|---|
-| `TUI-TODO-031` | formal sign-off 已完成；仅当 Gate-TUI-08 的 `BLK-TUI-006` manual gate 也满足时，才允许释放 CLI 产物名；本 review 本身不改 `apps/cli` | `cmake --build --preset vscode-linux-ninja --target dasall-cli` |
+| `TUI-TODO-031` | formal sign-off 与 Gate-TUI-08 的 `BLK-TUI-006` manual gate 均已满足；允许在 031 中释放 CLI 产物名；本 review 本身不改 `apps/cli` | `cmake --build --preset vscode-linux-ninja --target dasall-cli` |
 | `TUI-TODO-032` | 新增正式 TUI target 时不得复用 prototype installed path；必须显式保持 FTXUI private link，且 Debian/release 构建走 package-managed dependency | `cmake --build --preset vscode-linux-ninja --target dasall-tui` |
 | `TUI-TODO-033` | 更新 `debian/control`、`debian/copyright`、install/manpage/README.Debian/postinst/autopkgtest/package smoke 时必须写入 package-managed FTXUI 结论；不得引入 vendored FTXUI install rule | `rg -n "ftxui|libftxui|Build-Depends|embedded code copies|vendored" debian docs/todos/tui/deliverables` |
 | `TUI-TODO-034` | command routing tests 只能证明 `dasall`/`dasall-cli` 分流，不得绕过 packaging dependency review | `ctest --preset vscode-linux-ninja -R "DasallCommandRouting|CliControlPlane" --output-on-failure` |
@@ -59,9 +59,9 @@
 | Gate / Blocker | 当前状态 | 结论 |
 |---|---|---|
 | FTXUI installed-path packaging review | Pass | package-managed FTXUI 被采纳，vendored installed path 被拒绝；review 缺口已闭合。 |
-| Gate-TUI-08 B.0 第 5 项：FTXUI 依赖来源与 Debian 打包策略 | Pass for packaging strategy | FTXUI release-path 来源与 Debian 策略已有结论；仍需独立完成 snapshot/IME/CJK quality gate。 |
-| `BLK-TUI-006` | Open | 本任务不提供真实终端 IME / resize / composer human gate；该 blocker 继续作为 Gate-TUI-08 残余阻塞。 |
-| `BLK-TUI-008` | Open | formal sign-off 已完成；因 `BLK-TUI-006` 未闭合，命令迁移任务 031~034 继续保持 Blocked。 |
+| Gate-TUI-08 B.0 第 5 项：FTXUI 依赖来源与 Debian 打包策略 | Pass | FTXUI release-path 来源与 Debian 策略已有结论；snapshot/IME/CJK quality gate 已由 `BLK-TUI-006` Full pass 补齐。 |
+| `BLK-TUI-006` | Closed | 本任务不提供真实终端 IME / resize / composer human gate；该 blocker 已由后续 manual terminal evidence 关闭。 |
+| `BLK-TUI-008` | Closed | formal sign-off、FTXUI review 与 `BLK-TUI-006` 均已完成；命令迁移任务从 031 开始按顺序推进。 |
 
 ## 8. 验证证据
 
@@ -76,5 +76,5 @@
 ## 9. 结果
 
 1. FTXUI installed-path Debian source/binary strategy review 已闭合：正式 release path 采纳 package-managed FTXUI，拒绝 vendored installed path。
-2. 本任务没有解锁 `TUI-TODO-031`；formal sign-off 已完成，但 Gate-TUI-08 仍因 `BLK-TUI-006` 的真实终端人工质量门保持 Blocked。
-3. 后续一旦 `BLK-TUI-006` 也有正式人工证据，`TUI-TODO-031~034` 必须按本 review 结论同步处理 Debian dependency/copyright/install/smoke，而不能只改 CMake target 名。
+2. 本任务本身没有修改 `TUI-TODO-031`，但 formal sign-off 与 `BLK-TUI-006` 真实终端人工质量门均已完成后，Gate-TUI-08 已转 Pass。
+3. 后续执行 `TUI-TODO-031~034` 时，必须按本 review 结论同步处理 Debian dependency/copyright/install/smoke，而不能只改 CMake target 名。

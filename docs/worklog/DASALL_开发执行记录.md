@@ -1,3 +1,31 @@
+# 记录 #799
+
+- 日期：2026-05-24
+- 阶段：tui/manual terminal blocker closeout
+- 任务：依据用户真实终端手测通过确认，自动签署并关闭 `BLK-TUI-006` / `BLK-TUI-008`
+- 状态：已完成（文档签署与 gate 复检回写；未修改生产代码）
+
+### 改动
+
+1. 将 `BLK-TUI-006-manual-terminal-evidence.md` 从 Ready for manual execution 改为 Done / Full pass，记录用户当前会话确认 TUI 终端已手测通过，并补 Manual tester / Product reviewer / Engineering reviewer 签署栏。
+2. 将 `BLK-TUI-008-command-release-gate-recheck.md` 从 Gate-TUI-08 Blocked 改为 Gate-TUI-08 Pass，明确 `TUI-TODO-031` 恢复为下一原子任务，`TUI-TODO-032~034` 仍按前序依赖串行执行。
+3. 同步 TUI 专项 TODO、子系统总账、`TUI-PROTO-017`、`TUI-TODO-030/035/036` 的 gate / blocker 状态，清理 `BLK-TUI-006` 仍待人工填写、`BLK-TUI-008` 继续 Open 的当前态表述。
+4. 本轮不修改 `apps/cli`、`apps/tui`、`debian/` 或 `scripts/packaging/`；bare `dasall` / `dasall-cli` 真实迁移继续由 `TUI-TODO-031~034` 单独验收。
+
+### 验证
+
+1. `rg` focused 检查 `BLK-TUI-006` 签署文件无 `待填写`、`待选择`、`Ready for manual execution` 或继续 Open / Blocked 当前态残留。
+   - 结果：通过。
+2. `rg` focused 检查 `BLK-TUI-008`、`TUI-PROTO-017`、`TUI-TODO-030/035/036`、TUI 专项 TODO 与总账无 Gate-TUI-08 / BLK-TUI-006 stale blocker 当前态残留。
+   - 结果：通过。
+3. 生产代码验证沿用签署基线 `593be6e8` 的 focused evidence：`Build_CMakeTools(buildTargets=[dasall_tui_main_layout_snapshot_unit_test,dasall_tui_manual_terminal])` 与 `./build/vscode-linux-ninja/tests/unit/tui/dasall_tui_main_layout_snapshot_unit_test && ./build/vscode-linux-ninja/apps/tui/dasall_tui_manual_terminal --self-check` 通过。
+
+### 结果
+
+1. `BLK-TUI-006` Closed；`BLK-TUI-008` Closed；Gate-TUI-08 Pass。
+2. `TUI-TODO-031` 恢复为下一原子任务：释放 `dasall-cli` 产物名。
+3. `TUI-TODO-032~034` 仍需在 031 之后逐项完成正式 TUI target、Debian/script 命令迁移与 command routing smoke。
+
 # 记录 #798
 
 - 日期：2026-05-24

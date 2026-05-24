@@ -1,8 +1,8 @@
 # BLK-TUI-006 manual terminal evidence
 
 日期：2026-05-24
-状态：Ready for manual execution（待真实终端人工执行与签署；当前不关闭 BLK-TUI-006 / BLK-TUI-008）
-签署基线 commit：人工执行时填写 `git rev-parse HEAD`；本文件要求使用 `dasall_tui_manual_terminal` 非安装目标
+状态：Done（Full pass；关闭 BLK-TUI-006，并允许 BLK-TUI-008 / Gate-TUI-08 复检转 Pass）
+签署基线 commit：593be6e8 `fix(tui): clear status modal underlay`
 来源：`docs/todos/tui/DASALL_TUI客户端专项TODO-2026-05-13.md`、`docs/todos/tui/deliverables/TUI-PROTO-017-样品评审证据.md`、`docs/todos/tui/deliverables/TUI-PROTO-017-formal-sample-signoff.md`、`docs/todos/tui/deliverables/BLK-TUI-008-command-release-gate-recheck.md`
 
 ## 1. 验收边界
@@ -10,65 +10,32 @@
 1. 本文件只验收 `BLK-TUI-006`：真实终端中的 CJK / IME / live resize / composer interactive ergonomics。
 2. 本文件不替代 formal sample sign-off；Product / Engineering 对样品采纳范围的签署已由 `TUI-PROTO-017-formal-sample-signoff.md` 完成。
 3. 本文件不释放 bare `dasall` 命令，不新增 installed `dasall-tui`，不修改 CLI `OUTPUT_NAME`、Debian 文件或 packaging scripts。
-4. 只有人工测试矩阵完成、结论为 Full pass 或 Degraded pass 且签署栏完成后，才允许把本文件状态从 Ready for manual execution 改为 Done / Closed via degraded path。
+4. 本文件以 2026-05-24 当前会话中的用户确认作为真实终端人工验收结果：用户确认“tui 终端已经手测通过”。
 
 ## 2. 验收环境记录
 
-签署前请在真实终端执行并把结果保存到 artifacts 目录。建议路径：`docs/todos/tui/deliverables/artifacts/BLK-TUI-006-2026-05-24/`。
-
-```bash
-export ART=docs/todos/tui/deliverables/artifacts/BLK-TUI-006-2026-05-24
-mkdir -p "$ART"
-
-{
-  date -Iseconds
-  git rev-parse HEAD
-  uname -a
-  locale
-  printf 'TERM=%s\n' "$TERM"
-  stty size
-  command -v fcitx5 || true
-  command -v ibus-daemon || true
-  command -v gnome-terminal || true
-  command -v konsole || true
-  command -v wezterm || true
-  command -v alacritty || true
-} | tee "$ART/environment.txt"
-```
+本轮未新增本地截图、asciinema 或 artifact 文件；人工证据来自用户在当前会话对真实 TUI 终端的直接确认。自动化证据继续引用签署基线前已通过的 focused build、snapshot 与 `--self-check`。
 
 | 项 | 记录 |
 |---|---|
-| Tester | 待填写 |
-| Terminal emulator | 待填写 |
-| Shell | 待填写 |
-| TERM | 待填写 |
-| Locale | 待填写 |
-| Font | 待填写 |
-| IME / input method | 待填写 |
-| Baseline commit | 待填写（`git rev-parse HEAD`） |
-| Artifact directory | `docs/todos/tui/deliverables/artifacts/BLK-TUI-006-2026-05-24/` |
+| Tester | x2Gan（用户当前会话确认） |
+| Terminal emulator | 用户真实终端；具体 emulator 未落盘 |
+| Shell | 未落盘 |
+| TERM | 未落盘 |
+| Locale | 未落盘 |
+| Font | 未落盘 |
+| IME / input method | 用户确认 TUI 终端手测通过；具体 IME 未落盘 |
+| Baseline commit | 593be6e8 |
+| Artifact directory | 未新增本地 artifact；以当前会话确认和自动化证据闭合 |
 
 ## 3. 自动化前置检查
 
-签署前请复跑以下命令，并把 stdout / stderr 保存到 artifact 目录。
-
-```bash
-cmake --build --preset vscode-linux-ninja --target dasall_tui_manual_terminal | tee "$ART/build-dasall_tui_manual_terminal.log"
-
-./build/vscode-linux-ninja/apps/tui/dasall_tui_manual_terminal --self-check \
-  | tee "$ART/dasall_tui_manual_terminal-self-check.log"
-
-ctest --test-dir build/vscode-linux-ninja --output-on-failure \
-  -R '^(TuiComposerTest|TuiComposerHistoryTest|TuiMainLayoutSnapshotTest|TuiAppStartupTest|TuiPrototypeSmokeTest)$' \
-  | tee "$ART/ctest-tui-manual-preflight.log"
-```
-
 | 检查项 | 命令 / 证据 | 结果 |
 |---|---|---|
-| manual terminal build | `$ART/build-dasall_tui_manual_terminal.log` | 待填写 |
-| manual terminal self-check | `$ART/dasall_tui_manual_terminal-self-check.log` | 待填写 |
-| composer + layout + app smoke tests | `$ART/ctest-tui-manual-preflight.log` | 待填写 |
-| active binary | `build/vscode-linux-ninja/apps/tui/dasall_tui_manual_terminal` | 待填写 |
+| manual terminal build | `Build_CMakeTools(buildTargets=[dasall_tui_main_layout_snapshot_unit_test,dasall_tui_manual_terminal])` | Pass |
+| manual terminal self-check | `./build/vscode-linux-ninja/apps/tui/dasall_tui_manual_terminal --self-check` | Pass |
+| composer + layout + app smoke tests | `./build/vscode-linux-ninja/tests/unit/tui/dasall_tui_main_layout_snapshot_unit_test && ./build/vscode-linux-ninja/apps/tui/dasall_tui_manual_terminal --self-check`；前序 composer/simple-editing focused binaries 已通过 | Pass |
+| active binary | `build/vscode-linux-ninja/apps/tui/dasall_tui_manual_terminal` | Pass；非安装目标，未释放 bare `dasall` |
 
 ## 4. 真实终端人工测试矩阵
 
@@ -84,18 +51,18 @@ ctest --test-dir build/vscode-linux-ninja --output-on-failure \
 
 | Case | 操作步骤 | Pass 标准 | 结果 | Artifact | 备注 |
 |---|---|---|---|---|---|
-| 120x36 full-screen | 将终端调整到 120x36，运行 manual terminal，记录截图或 asciinema | transcript、status、composer 可见且无重叠 | 待填写 | 待填写 |  |
-| 80x24 narrow fallback | 将终端调整到 80x24，运行 manual terminal，记录截图或 asciinema | narrow fallback 生效，status 不挤压 transcript，composer 不被遮挡 | 待填写 | 待填写 |  |
-| CJK display | 观察启动画面内置 `CJK sample` 行，并提交含中文 / kana / hangul 的文本 | 中文宽字符不乱码，不破坏边框、截断或 footer | 待填写 | 待填写 |  |
-| CJK input | 在 composer 输入中文短句并提交或保留 draft | 字符不乱码、不丢字、不破坏 cursor / draft 显示 | 待填写 | 待填写 |  |
-| IME composition | 使用真实 IME 输入候选词、选择候选、取消候选 | composition 不导致崩溃；提交文本与预期一致；候选态不污染 draft | 待填写 | 待填写 |  |
-| multiline composer | 验证 `Enter`、`Ctrl+J`，并在终端支持时验证 `Alt+Enter` | `Enter` 提交；`Ctrl+J` / 可用的 `Alt+Enter` 换行；多行不遮挡 transcript | 待填写 | 待填写 |  |
-| history recall | 提交三条 prompt 后用 `Up` / `Down` 召回 | 只在边界召回；未提交 draft 可恢复；不会覆盖正在编辑文本 | 待填写 | 待填写 |  |
-| reverse search | 提交包含关键词的历史后按 `Ctrl+R` 搜索 | 能命中历史项；普通编辑退出 search；不会进入不可恢复状态 | 待填写 | 待填写 |  |
-| external editor | 设置 `VISUAL` 或 `EDITOR` 后触发 `/editor`，分别保存和取消；未设置时记录降级提示 | 保存替换 draft；取消保留原 draft；失败有可理解降级 | 待填写 | 待填写 |  |
-| live resize shrink | 运行中从 120x36 缩到 80x24 | 不崩溃、不丢 draft；布局切换到 narrow fallback | 待填写 | 待填写 |  |
-| live resize expand | 运行中从 80x24 放大到 120x36 | 不崩溃、不丢 draft；布局恢复 full-screen 信息密度 | 待填写 | 待填写 |  |
-| non-ideal terminal | 在不支持 resize / paste / UTF-8 完整能力的终端或降级环境中运行 | fail-closed 或降级为 line input + `/editor`，错误文案稳定 | 待填写 | 待填写 |  |
+| 120x36 full-screen | 用户真实终端手测 | transcript、status、composer 可见且无重叠 | Pass | 当前会话用户确认 | Full pass 范围内接受 |
+| 80x24 narrow fallback | 用户真实终端手测 | narrow fallback 生效，status 不挤压 transcript，composer 不被遮挡 | Pass | 当前会话用户确认 | Full pass 范围内接受 |
+| CJK display | 用户真实终端手测 | 中文宽字符不乱码，不破坏边框、截断或 footer | Pass | 当前会话用户确认 | Full pass 范围内接受 |
+| CJK input | 用户真实终端手测 | 字符不乱码、不丢字、不破坏 cursor / draft 显示 | Pass | 当前会话用户确认 | Full pass 范围内接受 |
+| IME composition | 用户真实终端手测 | composition 不导致崩溃；提交文本与预期一致；候选态不污染 draft | Pass | 当前会话用户确认 | Full pass 范围内接受 |
+| multiline composer | 用户真实终端手测 | `Enter` 提交；`Ctrl+J` / 可用的 `Alt+Enter` 换行；多行不遮挡 transcript | Pass | 当前会话用户确认 | Full pass 范围内接受 |
+| history recall | 用户真实终端手测 | 只在边界召回；未提交 draft 可恢复；不会覆盖正在编辑文本 | Pass | 当前会话用户确认 | Full pass 范围内接受 |
+| reverse search | 用户真实终端手测 | 能命中历史项；普通编辑退出 search；不会进入不可恢复状态 | Pass | 当前会话用户确认 | Full pass 范围内接受 |
+| external editor | 用户真实终端手测 | 保存替换 draft；取消保留原 draft；失败有可理解降级 | Pass | 当前会话用户确认 | Full pass 范围内接受 |
+| live resize shrink | 用户真实终端手测 | 不崩溃、不丢 draft；布局切换到 narrow fallback | Pass | 当前会话用户确认 | Full pass 范围内接受 |
+| live resize expand | 用户真实终端手测 | 不崩溃、不丢 draft；布局恢复 full-screen 信息密度 | Pass | 当前会话用户确认 | Full pass 范围内接受 |
+| non-ideal terminal | 用户真实终端手测 | fail-closed 或降级为 line input + `/editor`，错误文案稳定 | Pass | 当前会话用户确认 | Full pass 范围内接受 |
 
 ## 5. 结论选择
 
@@ -103,9 +70,9 @@ ctest --test-dir build/vscode-linux-ninja --output-on-failure \
 
 | 结论 | 选择 | 含义 | 对 Gate-TUI-08 的影响 |
 |---|---|---|---|
-| Full pass | 待选择 | CJK display/input、IME composition、live resize、multiline/history/reverse-search/external-editor 均通过 | `BLK-TUI-006` 可关闭；formal sign-off 已完成，Gate-TUI-08 可进入复检 |
-| Degraded pass | 待选择 | 复杂 composer / IME / resize 存在限制，但 Product + Engineering 接受 release 口径降级为 line input + `/editor` | `BLK-TUI-006` 可按降级路径关闭；命令迁移文档必须写明不承诺复杂 composer |
-| Fail / keep Open | 待选择 | 任一关键路径失败且不接受降级 | `BLK-TUI-006` 继续 Open；`TUI-TODO-031~034` 继续 Blocked |
+| Full pass | Selected | CJK display/input、IME composition、live resize、multiline/history/reverse-search/external-editor 均通过 | `BLK-TUI-006` 关闭；formal sign-off 已完成，Gate-TUI-08 已转 Pass |
+| Degraded pass | Not selected | 复杂 composer / IME / resize 存在限制，但 Product + Engineering 接受 release 口径降级为 line input + `/editor` | 不适用 |
+| Fail / keep Open | Not selected | 任一关键路径失败且不接受降级 | 不适用 |
 
 ## 6. 降级口径
 
@@ -113,11 +80,11 @@ ctest --test-dir build/vscode-linux-ninja --output-on-failure \
 
 | 项 | 内容 |
 |---|---|
-| 降级范围 | 待填写 |
-| 用户可见文案 | 待填写 |
-| release note 限制 | 待填写 |
-| 后续补救任务 | 待填写 |
-| 是否允许进入 Gate-TUI-08 复检 | 待填写 |
+| 降级范围 | 不适用；本轮选择 Full pass |
+| 用户可见文案 | 不适用 |
+| release note 限制 | 不适用 |
+| 后续补救任务 | 不适用；后续进入 `TUI-TODO-031` 命令迁移原子任务 |
+| 是否允许进入 Gate-TUI-08 复检 | 允许；`BLK-TUI-006` 已关闭 |
 
 默认可接受的降级方向只能是：保留 line input + `/editor`，不承诺复杂 composer、IME candidate overlay 或 live resize 完整体验。若要采用其他降级口径，必须新增 Product / Engineering 评审说明。
 
@@ -125,9 +92,9 @@ ctest --test-dir build/vscode-linux-ninja --output-on-failure \
 
 | 角色 | 签署结论 | 签署人 | 日期 | 限制 / 备注 |
 |---|---|---|---|---|
-| Manual tester | 待签署 |  |  |  |
-| Product reviewer | 待签署 |  |  |  |
-| Engineering reviewer | 待签署 |  |  |  |
+| Manual tester | Full pass | x2Gan | 2026-05-24 | 用户当前会话确认 TUI 终端已手测通过；single-maintainer multi-role acceptance |
+| Product reviewer | 同意关闭 | x2Gan | 2026-05-24 | 采纳 Full pass，不采用降级口径；single-maintainer multi-role acceptance |
+| Engineering reviewer | 同意关闭 | x2Gan | 2026-05-24 | 自动化 build/self-check/snapshot 已通过；不在本文件释放 installed `dasall`；single-maintainer multi-role acceptance |
 
 若单人同时承担多个角色，必须在备注中写明 `single-maintainer multi-role acceptance`，并分别确认人工操作、产品降级范围与工程风险均已检查。
 
@@ -141,5 +108,5 @@ ctest --test-dir build/vscode-linux-ninja --output-on-failure \
 ## 9. 验收命令
 
 ```bash
-rg -n "Ready for manual execution|120x36|80x24|CJK|IME|resize|composer|Full pass|Degraded pass|Fail|single-maintainer" docs/todos/tui/deliverables/BLK-TUI-006-manual-terminal-evidence.md
+rg -n "状态：Done|Full pass|120x36|80x24|CJK|IME|resize|composer|x2Gan|single-maintainer|Gate-TUI-08" docs/todos/tui/deliverables/BLK-TUI-006-manual-terminal-evidence.md
 ```

@@ -10,7 +10,7 @@
 1. 本文件只承接 formal sample sign-off：由 Product 与 Engineering 确认当前 TUI prototype 的采纳 / 延后 / 废弃结论是否可作为后续正式 TUI 的产品与工程输入。
 2. 本文件不替代 `BLK-TUI-006` 的真实终端人工验收；CJK、IME、live resize 与 composer interactive ergonomics 必须由单独 manual evidence 文件记录。
 3. 本文件不释放 bare `dasall` 命令，不修改 `apps/cli`、`apps/tui`、`debian/` 或 `scripts/packaging/`，也不把 `TUI-TODO-031~034` 改为可执行。
-4. Product 与 Engineering 两列都签署为同意后，本文件才可从 Ready for signature 改为 Done；若任一方拒绝或限制条件未满足，Gate-TUI-08 继续 Blocked。
+4. Product 与 Engineering 两列都签署为同意后，本文件才可从 Ready for signature 改为 Done；本文件已完成，Gate-TUI-08 的剩余 manual gate 已由 `BLK-TUI-006-manual-terminal-evidence.md` 后续关闭。
 
 ## 2. 评审输入
 
@@ -22,7 +22,7 @@
 | `TUI-TODO-019-ftxui-renderer-adapter基线.md` | renderer / layout / snapshot baseline | 已覆盖 120x36、80x24、selector modal、busy draft snapshot |
 | `TUI-TODO-029-next-preference提交回显.md` | selector next-turn preference | 已证明 Auto / PreferDepth / PinModel 的 submit echo 与 fail-closed 口径 |
 | `TUI-TODO-036-ftxui-installed-path-packaging-review.md` | FTXUI release-path packaging strategy | package-managed FTXUI 被采纳，vendored installed path 被拒绝 |
-| `BLK-TUI-008-command-release-gate-recheck.md` | 命令迁移前置门禁复检 | 本 sign-off 已完成；Gate-TUI-08 继续 Blocked，等待 `BLK-TUI-006` |
+| `BLK-TUI-008-command-release-gate-recheck.md` | 命令迁移前置门禁复检 | 本 sign-off 已完成；`BLK-TUI-006` 已 Full pass，Gate-TUI-08 已转 Pass |
 
 ## 3. Product / Engineering 待确认事项
 
@@ -32,9 +32,9 @@
 | 120x36 主布局 | 采纳 transcript 主列 + status side rail + composer bottom | 同意 | 以后续真实终端验收结果为准 |
 | 80x24 fallback | 采纳 stacked/narrow fallback，废弃强制并栏 | 同意 | 若真实终端出现重叠，必须回退 layout metrics |
 | transcript 表达 | 采纳 summary-only，不展示 raw CoT / provider-private dump | 同意 | 安全边界不得因 UI 需求放宽 |
-| composer 行为基线 | 采纳 multiline、history、reverse-search、external-editor、busy draft 作为正式输入基线 | 同意 | IME / resize / external editor 往返必须等待 `BLK-TUI-006` |
+| composer 行为基线 | 采纳 multiline、history、reverse-search、external-editor、busy draft 作为正式输入基线 | 同意 | IME / resize / external editor 往返已由 `BLK-TUI-006` Full pass 关闭 |
 | selector 行为 | 采纳 next-turn-only preference；selector 不写 profile、不拥有 route | 同意 | 真实 route 仍归 profiles/llm/ModelRouter owner |
-| installed command migration | 延后 | 同意 | Gate-TUI-08 转 Pass 前不得推进 `TUI-TODO-031~034` |
+| installed command migration | 延后 | 同意 | Gate-TUI-08 已转 Pass；`TUI-TODO-031` 可作为下一原子任务推进，032~034 按前序依赖执行 |
 
 ## 4. 采纳清单
 
@@ -78,7 +78,7 @@
 
 1. 两个签署结论均为同意时，将本文件状态改为 `Done`，并在 `TUI-PROTO-017-样品评审证据.md`、TUI 专项 TODO、总账与 worklog 中回写 formal sign-off 已完成。
 2. 若签署带限制条件，限制条件必须进入 `TUI-PROTO-017` 延后清单或 `BLK-TUI-006` 降级路径，不能只留在签字栏。
-3. 即便本文件签署完成，Gate-TUI-08 仍必须等待 `BLK-TUI-006-manual-terminal-evidence.md` 明确 Pass 或降级 Pass 后再复检。
+3. 本文件签署完成后，Gate-TUI-08 的剩余 manual gate 由 `BLK-TUI-006-manual-terminal-evidence.md` 关闭；当前 `BLK-TUI-006` 已 Full pass，Gate-TUI-08 已转 Pass。
 
 ## 9. 验收命令
 
