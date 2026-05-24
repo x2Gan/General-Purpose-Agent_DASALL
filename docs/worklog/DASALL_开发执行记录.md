@@ -1,3 +1,36 @@
+# 记录 #800
+
+- 日期：2026-05-24
+- 阶段：tui/command release implementation
+- 任务：TUI-TODO-031 释放 `dasall-cli` 产物名
+- 状态：已完成（代码、测试、TODO 回写；未新增正式 TUI target，未修改 Debian 或 packaging scripts）
+
+### 改动
+
+1. 更新 `apps/cli/CMakeLists.txt`，移除 `dasall-cli` target 的 `OUTPUT_NAME dasall` 覆盖，使 build-tree 公开产物名回到 `dasall-cli`。
+2. 在 `dasall-cli` target post-build 清理旧 `apps/cli/dasall` 残留，避免历史构建输出被误判为仍在产出 bare CLI。
+3. 新增 `tests/unit/apps/cli/CliControlPlaneCommandNameTest.cpp` 并注册 `CliControlPlaneCommandNameTest`，覆盖 `$<TARGET_FILE:dasall-cli>` basename / 可执行正例和旧 bare artifact 不存在负例。
+4. 新增 `docs/todos/tui/deliverables/TUI-TODO-031-dasall-cli-output-name-release.md`，并同步回写 TUI 专项 TODO 与子系统查漏补缺总账：`TUI-TODO-031` Done，`TUI-TODO-032` Ready，`TUI-TODO-033~034` 仍等待后继依赖。
+
+### 验证
+
+1. `cmake --build --preset vscode-linux-ninja --target dasall-cli`
+   - 结果：通过；链接生成 `build/vscode-linux-ninja/apps/cli/dasall-cli`。
+2. `Build_CMakeTools(buildTargets=["dasall-cli","dasall-cli_control_plane_command_name_unit_test"])`
+   - 结果：通过。
+3. `ListTests_CMakeTools()`
+   - 结果：通过；输出包含 `CliControlPlaneCommandNameTest`。
+4. `RunCtest_CMakeTools(tests=["CliControlPlaneCommandNameTest"])`
+   - 结果：工具仍返回仓库已知泛化 `生成失败`，未给出具体失败用例。
+5. `./build/vscode-linux-ninja/tests/unit/apps/cli/dasall-cli_control_plane_command_name_unit_test && test -x build/vscode-linux-ninja/apps/cli/dasall-cli && test ! -e build/vscode-linux-ninja/apps/cli/dasall && echo cli-command-name-test-ok`
+   - 结果：通过。
+
+### 结果
+
+1. `TUI-TODO-031` 已完成，build-tree 结构化 CLI 产物名已从旧 bare `dasall` 释放为 `dasall-cli`。
+2. 本轮没有新增正式 installed `dasall` TUI target，也没有改动 `debian/`、`scripts/packaging/` 或 package smoke；这些继续由 `TUI-TODO-032~034` 串行推进。
+3. 下一原子任务：`TUI-TODO-032` 新增正式 TUI `dasall` target。
+
 # 记录 #799
 
 - 日期：2026-05-24

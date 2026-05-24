@@ -111,6 +111,29 @@ target_link_libraries(dasall-cli_command_parser_unit_test
 
 dasall_apply_common_options(dasall-cli_command_parser_unit_test)
 
+dasall_add_cli_unit_test(
+  dasall-cli_control_plane_command_name_unit_test
+  CliControlPlaneCommandNameTest
+  ${CMAKE_SOURCE_DIR}/tests/unit/apps/cli/CliControlPlaneCommandNameTest.cpp
+)
+
+target_compile_definitions(dasall-cli_control_plane_command_name_unit_test
+  PRIVATE
+    DASALL_CLI_BINARY_PATH="$<TARGET_FILE:dasall-cli>"
+    DASALL_CLI_LEGACY_BINARY_PATH="$<TARGET_FILE_DIR:dasall-cli>/dasall"
+)
+
+target_link_libraries(dasall-cli_control_plane_command_name_unit_test
+  PRIVATE
+    dasall_test_support
+)
+
+add_dependencies(dasall-cli_control_plane_command_name_unit_test
+  dasall-cli
+)
+
+dasall_apply_common_options(dasall-cli_control_plane_command_name_unit_test)
+
 dasall_add_cli_config_unit_test(
   dasall-config_command_parser_unit_test
   ConfigCommandParserTest

@@ -37,8 +37,8 @@ target_include_directories(dasall-cli
     ${CMAKE_CURRENT_SOURCE_DIR}/src
 )
 
-set_target_properties(dasall-cli PROPERTIES
-  OUTPUT_NAME dasall
+add_custom_command(TARGET dasall-cli POST_BUILD
+  COMMAND ${CMAKE_COMMAND} -E rm -f "$<TARGET_FILE_DIR:dasall-cli>/dasall"
 )
 
 install(TARGETS dasall-cli
