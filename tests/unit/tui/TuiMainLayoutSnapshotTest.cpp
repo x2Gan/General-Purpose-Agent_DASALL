@@ -424,17 +424,20 @@ void main_layout_snapshot_renders_cursor_and_waiting_spinner() {
                        .can_submit = false,
                        .dirty = false,
                        .cursor_visible = true,
-                       .activity_indicator = "/ waiting for model"},
+                       .activity_indicator = "processing.."},
       TuiFocusState::Composer);
 
   const FtxuiRendererAdapter renderer;
   const std::string screen = renderer.render_to_screen(model, 120, 36);
 
-  assert_true(screen.find("[draft empty]|") != std::string::npos,
-              "composer should render a visible input cursor when cursor_visible is true");
-  assert_true(screen.find("mode=pending-interaction submit=disabled dirty=no wait=/ waiting for model") !=
-                  std::string::npos,
-              "composer should render the pending activity spinner after submit");
+  assert_true(screen.find("processing..") != std::string::npos,
+              "composer should render the dots spinner in the input line after submit");
+  assert_true(screen.find("[draft empty]|") == std::string::npos,
+              "composer should hide the input cursor while the system is processing a submit");
+  assert_true(screen.find("mode=pending-interaction submit=disabled dirty=no") !=
+                  std::string::npos &&
+                  screen.find("wait=") == std::string::npos,
+              "composer should keep pending state metadata separate from the input-line spinner");
 }
 
 void renderer_files_avoid_owner_private_dependencies() {

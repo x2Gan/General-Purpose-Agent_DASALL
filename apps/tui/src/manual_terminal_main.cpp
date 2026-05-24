@@ -76,16 +76,14 @@ struct PendingManualReceipt {
   return text.size() >= prefix.size() && text.substr(0, prefix.size()) == prefix;
 }
 
-[[nodiscard]] std::string spinner_frame(const std::size_t index) {
-  switch (index % 4U) {
+[[nodiscard]] std::string dots_spinner_frame(const std::size_t index) {
+  switch (index % 3U) {
     case 0U:
-      return "|";
+      return "processing.";
     case 1U:
-      return "/";
-    case 2U:
-      return "-";
+      return "processing..";
     default:
-      return "\\";
+      return "processing...";
   }
 }
 
@@ -175,6 +173,10 @@ void write_stdout(std::string_view text) {
     }
   }
   return encoded;
+}
+
+[[nodiscard]] std::string_view redraw_control_prefix() noexcept {
+  return "\x1b[?25l\x1b[H";
 }
 
 [[nodiscard]] std::string shell_quote_path(std::string_view path) {
@@ -425,7 +427,7 @@ void apply_manual_visuals(model::TuiScreenModel& screen_model,
   screen_model.composer.cursor_visible = animation.cursor_visible;
   if (pending_receipt.active) {
     screen_model.composer.activity_indicator =
-        spinner_frame(animation.spinner_index) + " waiting for local model";
+        dots_spinner_frame(animation.spinner_index);
   } else {
     screen_model.composer.activity_indicator.clear();
   }
@@ -500,7 +502,7 @@ void redraw(const terminal::FtxuiRendererAdapter& renderer,
             const TerminalSize& size) {
   const std::string rendered = renderer.render_to_screen(
       screen_model, size.columns, size.rows);
-  write_stdout("\x1b[?25l\x1b[H\x1b[2J");
+  write_stdout(redraw_control_prefix());
   const std::string terminal_rendered = encode_terminal_newlines(rendered);
   write_stdout(terminal_rendered);
   write_stdout("\x1b[H");
@@ -1039,8 +1041,9 @@ void process_input_buffer(std::string_view buffer,
   if (should_exit || !pending_receipt.active ||
       composer.state().mode != "pending-interaction" ||
       screen_model.status.current_tool != "llm.local" ||
-      pending_screen.find("[draft empty]|") == std::string::npos ||
-      pending_screen.find("wait=| waiting for local model") == std::string::npos) {
+      pending_screen.find("processing.") == std::string::npos ||
+      pending_screen.find("wait=") != std::string::npos ||
+      pending_screen.find("[draft empty]|") != std::string::npos) {
     return false;
   }
 
@@ -1097,6 +1100,7 @@ void process_input_buffer(std::string_view buffer,
       has_expected_shape(narrow_screen, 80, 24) &&
       has_expected_shape(line_screen, 40, 12) &&
       terminal_full_screen.find("\r\n") != std::string::npos &&
+      redraw_control_prefix().find("\x1b[2J") == std::string_view::npos &&
       manual_history_recall_self_check(capabilities, startup_mode, renderer) &&
       manual_pending_indicator_self_check(capabilities, startup_mode, renderer);
   if (!ok) {
@@ -1120,7 +1124,7 @@ void process_input_buffer(std::string_view buffer,
   }
 
   if (pending_receipt.active) {
-    animation.spinner_index = (animation.spinner_index + 1U) % 4U;
+    animation.spinner_index = (animation.spinner_index + 1U) % 3U;
     if (pending_receipt.ticks_remaining > 0) {
       --pending_receipt.ticks_remaining;
     }

@@ -173,7 +173,9 @@ namespace {
                                                   : composer.text;
   const std::string cursor = composer.cursor_visible ? std::string{"|"}
                                                      : std::string{" "};
-  auto wrapped = wrap_text(draft + cursor, width, height);
+  const std::string activity = trim_copy(composer.activity_indicator);
+  const std::string input_line = activity.empty() ? draft + cursor : activity;
+  auto wrapped = wrap_text(input_line, width, height);
   lines.insert(lines.end(), wrapped.begin(), wrapped.end());
   if (lines.size() < height) {
     std::string status_line = "mode=" + trim_copy(composer.mode) +
@@ -181,10 +183,6 @@ namespace {
                                            : std::string{"disabled"}) +
         " dirty=" + (composer.dirty ? std::string{"yes"}
                                      : std::string{"no"});
-    if (!trim_copy(composer.activity_indicator).empty()) {
-      status_line += " wait=";
-      status_line += trim_copy(composer.activity_indicator);
-    }
     lines.push_back(std::move(status_line));
   }
   if (lines.size() > height) {

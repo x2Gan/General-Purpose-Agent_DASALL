@@ -1,3 +1,34 @@
+# 记录 #796
+
+- 日期：2026-05-24
+- 阶段：tui/manual terminal pending feedback polish
+- 任务：修复 `BLK-TUI-006` 手工终端动画重绘闪烁，并将处理中 spinner 调整为输入栏 dots 样式
+- 状态：已完成（实现并验证；`BLK-TUI-006` 仍需真实终端人工填写/签署）
+
+### 改动
+
+1. 修复 `dasall_tui_manual_terminal` 的动画重绘路径：进入 alternate screen 时保留一次清屏，后续 `redraw()` 只回到左上角并写满整帧，避免 cursor/spinner tick 反复 `ESC[2J` 导致画面闪烁。
+2. 将 pending spinner 从 composer 状态行移到输入栏显示，样式改为 `processing.` / `processing..` / `processing...` dots spinner。
+3. pending 期间输入栏隐藏闪烁光标；等待输入和用户正在输入时仍展示闪烁光标。
+4. 更新 `dasall_tui_manual_terminal --self-check` 与 `TuiMainLayoutSnapshotTest`，覆盖 dots spinner 位于输入栏、状态行不再显示 `wait=`，以及动画重绘前缀不含清屏序列。
+
+### 验证
+
+1. `Build_CMakeTools(buildTargets=[dasall_tui_manual_terminal,dasall_tui_main_layout_snapshot_unit_test,dasall_tui_screen_model_unit_test])`
+   - 结果：通过。
+2. `RunCtest_CMakeTools(tests=[TuiMainLayoutSnapshotTest,TuiScreenModelTest])`
+   - 结果：工具仍返回仓库已知泛化 `生成失败`，未给出具体失败用例。
+3. `./build/vscode-linux-ninja/apps/tui/dasall_tui_manual_terminal --self-check && ./build/vscode-linux-ninja/tests/unit/tui/dasall_tui_main_layout_snapshot_unit_test && ./build/vscode-linux-ninja/tests/unit/tui/dasall_tui_screen_model_unit_test`
+   - 结果：通过。
+4. `git diff --check`、编辑器诊断与重绘序列检查
+   - 结果：通过；`ESC[2J` 仅保留在进入 alternate screen 的初始化路径与 self-check 禁止项中。
+
+### 结果
+
+1. 手工终端动画 tick 不再反复清屏，降低输入光标与 pending spinner 更新时的可见闪烁。
+2. 等待输入/用户输入时仍是闪烁光标；提交后系统处理中改为输入栏 dots spinner。
+3. 本轮没有关闭 `BLK-TUI-006` 或 `BLK-TUI-008`；真实终端人工验收与签署仍需继续完成。
+
 # 记录 #795
 
 - 日期：2026-05-24
