@@ -1587,7 +1587,7 @@ sh scripts/packaging/validate_gate_int_10_installed_package_qemu.sh -- qemu <ima
 12. `TuiModelSelector` 现已从 fake-only selector helper 前移到 daemon-backed projection consumption 与 submit echo 基线：支持 Auto / PreferDepth / PinModel 三模式、depth tier 聚合、local draft/apply/cancel、disabled route/depth fail-closed，并已把 route catalog 的 `verification_state` / `health` / `depth_tier` 摘要接入 option label；`TUI-TODO-029` 进一步证明 selector draft 会进入 `submit_turn` payload，且 owner projection/receipt 会回显 effective route 或稳定 `route.*` fail-closed reason。
 13. `TuiTerminalCapabilityProbe` 已冻结为纯 terminal-local capability helper：支持真实环境读取与注入式 test environment、stable startup issue、`FullScreen/Narrow/Line/FailClosed` 四态 `TuiStartupMode`，并明确把 non-TTY、invalid TERM、tiny terminal 作为 fail-closed，把 UTF-8/paste/resize 缺失作为 line-mode 降级输入。
 14. `FtxuiRendererAdapter`、`TuiDesignTokens` 与 `TuiLayoutMetrics` 已冻结为 renderer-local baseline：header 不泄漏 FTXUI 类型，`FullScreen/Narrow/Line` 三种 layout metrics 已可稳定驱动 transcript/status/composer/modal 组合，`TuiDesignTokensTest` 与 `TuiMainLayoutSnapshotTest` 已覆盖 120x36 ready、80x24 narrow CJK、selector modal 与 busy draft。
-15. 上述结论只解除了 TUI 的设计 blocker、composer state-machine blocker、selector fake-interaction blocker、transcript-view baseline blocker、status-panel baseline blocker、terminal-probe baseline blocker、renderer-layout baseline blocker、fake-only app-loop blocker、IPC mapping/header blocker、IPC error-normalization blocker、daemon data source attach blocker、startup failure path blocker、status projection refresh blocker、session lifecycle 接线 blocker、route catalog projection blocker、selector daemon consumption blocker与 next preference submit-echo blocker，不代表 bare `dasall` 命令迁移已可放行；`TUI-TODO-030` 已收敛 Gate-TUI-08 证据，但 `TUI-TODO-035` 与 `TUI-TODO-031~034` 仍需按后续 gate 单独验收。
+15. 上述结论只解除了 TUI 的设计 blocker、composer state-machine blocker、selector fake-interaction blocker、transcript-view baseline blocker、status-panel baseline blocker、terminal-probe baseline blocker、renderer-layout baseline blocker、fake-only app-loop blocker、IPC mapping/header blocker、IPC error-normalization blocker、daemon data source attach blocker、startup failure path blocker、status projection refresh blocker、session lifecycle 接线 blocker、route catalog projection blocker、selector daemon consumption blocker与 next preference submit-echo blocker，不代表 bare `dasall` 命令迁移已可放行；`TUI-TODO-030/035` 已收敛 Gate-TUI-07/Gate-TUI-08 的阶段证据与回写，但 `TUI-TODO-031~034` 仍需按后续 gate 单独验收。
 
 ### 17.3 已闭合缺口
 
@@ -1627,9 +1627,9 @@ sh scripts/packaging/validate_gate_int_10_installed_package_qemu.sh -- qemu <ima
 
 当前仍未闭合的 TUI owner 缺口如下：
 
-1. `TUI-TODO-035` 尚未把本轮 029、030 与 Gate-TUI-07/Gate-TUI-08 的阶段证据滚动回写到专门的收口交付物；当前 worklog 与专项 TODO 已同步，但阶段收口件仍待补齐。
+1. `TUI-TODO-035` 已完成 020/029/030 与 Gate-TUI-07/Gate-TUI-08 的阶段证据回写，但 `TUI-PROTO-017` / `Gate-TUI-PROT-06` 样品评审证据包仍缺；当前仓内仍没有正式“采纳 / 延后 / 废弃清单 + 截图/录制 + 产品/工程共同评审结论”的长期资产。
 2. `TUI-TODO-020` 已闭合 prototype app loop，但仍受 CJK/IME/resize manual gate 与 installed path packaging review 约束；本轮结果不等于 full-screen interactive promotion 或 release path 已 ready。
-3. `TUI-TODO-030` 已完成 bare `dasall` 迁移门禁证据与旧入口 inventory 收口，但 `TUI-TODO-031~034` 仍保持 Blocked；当前 Gate-TUI-08 继续受 `BLK-TUI-006` 与 FTXUI Debian packaging review 约束，本轮结论不能被误写成 command release ready。
+3. `TUI-TODO-030/035` 已完成 bare `dasall` 迁移门禁证据、旧入口 inventory 与阶段 closeout，但 `TUI-TODO-031~034` 仍保持 Blocked；当前 Gate-TUI-08 继续受 `BLK-TUI-006` 与 FTXUI installed-path packaging review 约束，本轮结论不能被误写成 command release ready。
 
 ### 17.5 建议复验命令
 

@@ -1,3 +1,32 @@
+# 记录 #784
+
+- 日期：2026-05-24
+- 阶段：tui/blocker recovery closeout
+- 任务：TUI-TODO-035 回写 TUI 交付证据
+- 状态：已完成
+
+### 改动
+
+1. 新增 `docs/todos/tui/deliverables/TUI-TODO-035-交付证据回写.md`，冻结 035 的任务边界、长期输出面、020/029/030 的命令证据、采纳/延后/回退清单、Gate-TUI-05/07/08/10 状态，以及原始目标 `TUI-TODO-031` 的 blocker recovery 复检结论。
+2. 更新 `docs/todos/tui/DASALL_TUI客户端专项TODO-2026-05-13.md`，将 `TUI-TODO-035` 标记为 Done，并把 `TUI-TODO-031` 的解阻条件收紧为“Gate-TUI-08 转 Pass（含样品评审、manual gate 与 packaging review）”；同时把专项状态改写为“030 与 035 已完成，但 031~034 继续 Blocked”。
+3. 更新 `docs/todos/DASALL_子系统查漏补缺专项记录.md`，把 TUI 总账口径改写为“030/035 已完成阶段证据回写，但 `TUI-PROTO-017`、`BLK-TUI-006` 与 FTXUI installed-path packaging review 仍未闭合，因此 031~034 不解锁”。
+4. 本轮仍未改动 `apps/cli/CMakeLists.txt`、`apps/tui/`、`debian/` 或 `scripts/packaging/` 生产实现；`set_target_properties(dasall-cli PROPERTIES OUTPUT_NAME dasall)` 保持不变。
+
+### 验证
+
+1. `rg -n "TUI-TODO-035|Gate-TUI-05|Gate-TUI-07|Gate-TUI-08|Gate-TUI-10|采纳|延后|回退|TUI-TODO-031" docs/todos/tui/deliverables/TUI-TODO-035-交付证据回写.md`
+   - 结果：通过；035 deliverable 已包含 gate 状态、采纳/延后/回退清单、031 blocker recovery 复检，以及 `TUI-PROTO-017` / `BLK-TUI-006` / FTXUI installed-path packaging review 的残余风险。
+2. `rg -n "TUI-TODO-035 \| Done|Gate-evidence subset：TUI-TODO-030 与 035 已完成|Next executable task：blocker recovery|Gate-TUI-08 转 Pass|TUI-PROTO-017|FTXUI installed-path packaging review" docs/todos/tui/DASALL_TUI客户端专项TODO-2026-05-13.md docs/todos/DASALL_子系统查漏补缺专项记录.md`
+   - 结果：通过；专项 TODO 与总账都已回写 035 Done、031 的真实解阻条件、下一步 blocker recovery，以及 Gate-TUI-08 继续 Blocked 的口径。
+3. `rg -n "TUI-TODO-035|TUI-TODO-031|Gate-TUI-08|TUI-PROTO-017|BLK-TUI-006|FTXUI installed-path packaging review" docs/todos/tui/deliverables/TUI-TODO-035-交付证据回写.md docs/todos/tui/DASALL_TUI客户端专项TODO-2026-05-13.md docs/todos/DASALL_子系统查漏补缺专项记录.md docs/worklog/DASALL_开发执行记录.md`
+   - 结果：通过；deliverable、专项 TODO、总账与 worklog 的 blocker 口径已统一。
+
+### 结果
+
+1. `TUI-TODO-035` 已闭合：TUI 当前阶段的 gate evidence 现在不仅存在于 020/029/030 分散 deliverables，也已有统一的阶段收口件。
+2. `TUI-TODO-031` 在本轮 blocker recovery 后仍未恢复可执行；根因仍是 `TUI-PROTO-017`、`BLK-TUI-006` 与 FTXUI installed-path packaging review 未闭合，而不是 035 尚未落盘。
+3. 下一步最小解阻动作已经明确：先补样品评审证据与 manual gate，再完成 FTXUI release-path packaging review，然后才重新判断 031~034 是否可进入实现。
+
 # 记录 #783
 
 - 日期：2026-05-24
