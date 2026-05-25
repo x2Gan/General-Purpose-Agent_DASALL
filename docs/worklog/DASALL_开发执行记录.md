@@ -1,3 +1,36 @@
+# 记录 #803
+
+- 日期：2026-05-25
+- 阶段：tui/command release integration closeout
+- 任务：TUI-TODO-034 增加命令分流测试
+- 状态：已完成（代码、测试、TODO 回写已落盘；提交与推送待本轮 submission）
+
+### 改动
+
+1. 更新 `apps/tui/src/main.cpp`，为 formal bare `dasall` 入口增加最小参数守卫：保留裸启动 TUI，支持 `-h/--help`，旧 `help/version/config/ping/readiness/knowledge/run/status/cancel/diag` 结构化子命令统一 fail-closed 并指向 `dasall-cli`。
+2. 新增 `tests/integration/apps/tui/DasallCommandRoutingTest.cpp`，覆盖 bare `dasall` 非 TTY redirect、旧 `dasall status` migration error 与 `dasall-cli status --help` 正例。
+3. 更新 `tests/integration/apps/CMakeLists.txt`，注册 `dasall_apps_command_routing_integration_test` 与 `DasallCommandRoutingTest`，并依赖 `dasall-tui` / `dasall-cli`。
+4. 新增 `docs/todos/tui/deliverables/TUI-TODO-034-command-routing-smoke.md`，同步回写 TUI 专项 TODO 与子系统查漏补缺总账：`TUI-TODO-034` Done，TUI owner command-release 链闭合。
+
+### 验证
+
+1. `Build_CMakeTools(buildTargets=["dasall-tui"])`
+   - 结果：通过。
+2. `Build_CMakeTools(buildTargets=["dasall_apps_command_routing_integration_test"])`
+   - 结果：通过。
+3. `ListTests_CMakeTools()`
+   - 结果：通过；输出包含 `DasallCommandRoutingTest`。
+4. `RunCtest_CMakeTools(tests=["DasallCommandRoutingTest","CliControlPlaneCommandNameTest"])`
+   - 结果：工具仍返回仓库已知泛化 `生成失败`，未给出具体失败用例。
+5. `./build/vscode-linux-ninja/tests/integration/apps/dasall_apps_command_routing_integration_test && ./build/vscode-linux-ninja/tests/unit/apps/cli/dasall-cli_control_plane_command_name_unit_test && echo routing-tests-ok`
+   - 结果：通过；输出 `routing-tests-ok`。
+
+### 结果
+
+1. bare `dasall` 现明确归 TUI owner：无参数时走 TUI startup path，旧结构化子命令明确拒绝并给出 `dasall-cli` 迁移提示。
+2. `dasall-cli` 继续保留 structured control-plane surface；`status --help` 路径未被 TUI 迁移破坏。
+3. `TUI-TODO-034` 已完成；当前 TUI owner 命令释放链 031~034 全部闭合，后续只剩 higher-layer installed / release 环境复核，不再是本专项内的 owner blocker。
+
 # 记录 #802
 
 - 日期：2026-05-25
