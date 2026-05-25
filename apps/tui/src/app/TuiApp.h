@@ -24,6 +24,7 @@ struct TuiAppOptions {
   std::size_t terminal_width = 0;
   std::size_t terminal_height = 0;
   std::size_t bootstrap_tick_count = 0;
+  std::size_t post_action_tick_count = 0;
   std::vector<model::TuiAction> scripted_actions;
   std::optional<std::string> initial_draft;
   std::optional<data::TuiRoutePreferenceMode> selector_preview_mode;

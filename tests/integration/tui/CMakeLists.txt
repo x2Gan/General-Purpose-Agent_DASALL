@@ -53,6 +53,16 @@ add_executable(dasall_tui_daemon_backed_e2e_integration_test
   ${CMAKE_SOURCE_DIR}/apps/tui/src/ipc/TuiIpcController.cpp
 )
 
+add_executable(dasall_tui_scripted_smoke_integration_test
+  ${CMAKE_CURRENT_SOURCE_DIR}/DasallTuiScriptedSmokeTest.cpp
+  ${CMAKE_SOURCE_DIR}/apps/cli/src/CliIpcClient.cpp
+  ${CMAKE_SOURCE_DIR}/apps/daemon/src/DaemonBootstrap.cpp
+  ${CMAKE_SOURCE_DIR}/apps/daemon/src/DaemonLifecycleController.cpp
+  ${CMAKE_SOURCE_DIR}/apps/daemon/src/DaemonListenerHost.cpp
+  ${CMAKE_SOURCE_DIR}/apps/daemon/src/DaemonSocketPolicy.cpp
+  ${CMAKE_SOURCE_DIR}/apps/daemon/src/DaemonSupervisorAdapter.cpp
+)
+
 add_executable(dasall_tui_entrypoint_smoke_integration_test
   ${CMAKE_CURRENT_SOURCE_DIR}/DasallTuiEntrypointSmokeTest.cpp
 )
@@ -135,6 +145,22 @@ target_link_libraries(dasall_tui_daemon_backed_e2e_integration_test
     dasall_platform
 )
 
+target_include_directories(dasall_tui_scripted_smoke_integration_test
+  PRIVATE
+    ${CMAKE_SOURCE_DIR}/access/src
+    ${CMAKE_SOURCE_DIR}/apps/cli/src
+    ${CMAKE_SOURCE_DIR}/apps/daemon/src
+    ${CMAKE_SOURCE_DIR}/tests/integration/access
+)
+
+target_link_libraries(dasall_tui_scripted_smoke_integration_test
+  PRIVATE
+    dasall_test_support
+    dasall_access
+    dasall_infra
+    dasall_platform
+)
+
 target_link_libraries(dasall_tui_entrypoint_smoke_integration_test
   PRIVATE
     dasall_test_support
@@ -194,8 +220,15 @@ target_compile_definitions(dasall_tui_socket_override_integration_test
     DASALL_APPS_TUI_MAIN="${CMAKE_SOURCE_DIR}/apps/tui/src/main.cpp"
 )
 
+target_compile_definitions(dasall_tui_scripted_smoke_integration_test
+  PRIVATE
+    DASALL_TUI_BINARY_PATH="$<TARGET_FILE:dasall-tui>"
+    DASALL_REPOSITORY_ROOT="${CMAKE_SOURCE_DIR}"
+)
+
 add_dependencies(dasall_tui_entrypoint_smoke_integration_test dasall-tui)
 add_dependencies(dasall_tui_entrypoint_purity_integration_test dasall-tui dasall_tui_prototype)
+add_dependencies(dasall_tui_scripted_smoke_integration_test dasall-tui)
 
 dasall_apply_common_options(dasall_tui_integration_topology_smoke_integration_test)
 dasall_apply_common_options(dasall_tui_app_startup_integration_test)
@@ -208,6 +241,7 @@ dasall_apply_common_options(dasall_tui_submit_turn_integration_test)
 dasall_apply_common_options(dasall_tui_daemon_backed_e2e_integration_test)
 dasall_apply_common_options(dasall_tui_entrypoint_smoke_integration_test)
 dasall_apply_common_options(dasall_tui_entrypoint_purity_integration_test)
+dasall_apply_common_options(dasall_tui_scripted_smoke_integration_test)
 dasall_apply_common_options(dasall_tui_socket_override_integration_test)
 
 add_test(NAME TuiTestTopologyDiscoverability COMMAND dasall_tui_integration_topology_smoke_integration_test)
@@ -243,6 +277,9 @@ set_tests_properties(DasallTuiEntrypointSmokeTest PROPERTIES LABELS "integration
 add_test(NAME DasallTuiEntrypointPurityTest COMMAND dasall_tui_entrypoint_purity_integration_test)
 set_tests_properties(DasallTuiEntrypointPurityTest PROPERTIES LABELS "integration;tui")
 
+add_test(NAME DasallTuiScriptedSmokeTest COMMAND dasall_tui_scripted_smoke_integration_test)
+set_tests_properties(DasallTuiScriptedSmokeTest PROPERTIES LABELS "integration;tui")
+
 add_test(NAME DasallTuiSocketOverrideTest COMMAND dasall_tui_socket_override_integration_test)
 set_tests_properties(DasallTuiSocketOverrideTest PROPERTIES LABELS "integration;tui")
 
@@ -263,6 +300,7 @@ list(APPEND DASALL_APPS_TUI_INTEGRATION_TEST_EXECUTABLE_TARGETS
   dasall_tui_daemon_backed_e2e_integration_test
   dasall_tui_entrypoint_smoke_integration_test
   dasall_tui_entrypoint_purity_integration_test
+  dasall_tui_scripted_smoke_integration_test
   dasall_tui_socket_override_integration_test
 )
 

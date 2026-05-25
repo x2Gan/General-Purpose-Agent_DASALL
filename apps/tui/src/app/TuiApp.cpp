@@ -212,6 +212,15 @@ int TuiApp::run(TuiAppOptions options) {
     }
   }
 
+  if (!exit_requested_) {
+    for (std::size_t tick_index = 0; tick_index < options.post_action_tick_count;
+         ++tick_index) {
+      if (!tick()) {
+        break;
+      }
+    }
+  }
+
   if (!exit_requested_ && options.selector_preview_mode.has_value()) {
     show_selector_preview(*options.selector_preview_mode);
   }

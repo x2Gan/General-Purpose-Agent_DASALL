@@ -1,3 +1,37 @@
+# 记录 #811
+
+- 日期：2026-05-25
+- 阶段：tui/installed smoke follow-up
+- 任务：TUI-TODO-042 补交 installed scripted smoke entrypoint 并修复 proof 边界
+- 状态：已完成（代码、focused validation 与提交边界已收口）
+
+### 改动
+
+1. 补交 `DASALL_TUI_SCRIPTED_SMOKE=daemon_roundtrip` formal entrypoint 支撑代码，使 042 已提交的 package smoke / autopkgtest 不再依赖未提交工作树状态。
+2. 修复 scripted smoke proof JSON 的控制字符转义，确保低位控制字符输出为合法四位 `\u00XX` JSON escape。
+3. 将 scripted smoke env hook 限定在 formal `dasall` entrypoint，prototype binary 即使携带同名环境变量也继续走普通命令行路径。
+4. 新增 `DasallTuiScriptedSmokeTest` 与 topology discoverability 注册，形成 042 installed smoke 入口的 build-tree 回归保护。
+
+### 验证
+
+1. `Build_CMakeTools(buildTargets=["dasall-tui","dasall_tui_scripted_smoke_integration_test","dasall_tui_integration_topology_smoke_integration_test"])`
+   - 结果：通过。
+2. `Build_CMakeTools(buildTargets=["dasall_tui_prototype"])`
+   - 结果：通过；确认 formal-only smoke hook 不破坏 prototype compile path。
+3. `RunCtest_CMakeTools(tests=["DasallTuiScriptedSmokeTest","TuiTestTopologyDiscoverability"])`
+   - 结果：命中仓库已知泛化 `生成失败`。
+4. `./build/vscode-linux-ninja/tests/integration/tui/dasall_tui_scripted_smoke_integration_test`
+   - 结果：通过；输出 `scripted_smoke_rc=0`。
+5. `./build/vscode-linux-ninja/tests/integration/tui/dasall_tui_integration_topology_smoke_integration_test`
+   - 结果：通过；输出 `topology_rc=0`。
+6. `DASALL_TUI_SCRIPTED_SMOKE=daemon_roundtrip ./build/vscode-linux-ninja/apps/tui/dasall_tui_prototype --help | sed -n '1,3p'`
+   - 结果：输出普通 `Usage: dasall` 帮助，证明 prototype 不响应 formal scripted smoke hook。
+
+### 结果
+
+1. `TUI-TODO-042` 的 installed package smoke 证据现在可由已提交源码复现，不再隐含依赖脏工作树里的 `apps/tui/src/main.cpp` 入口实现。
+2. 042 follow-up 仍只证明 local installed/scripted daemon-backed smoke，不外推为 qemu、release-runner 或 soak ready。
+
 # 记录 #810
 
 - 日期：2026-05-25
