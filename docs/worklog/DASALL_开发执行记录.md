@@ -1,3 +1,34 @@
+# 记录 #802
+
+- 日期：2026-05-25
+- 阶段：tui/command release implementation
+- 任务：TUI-TODO-033 更新 Debian 命令迁移文件
+- 状态：已完成（Debian/package smoke/scripts 与 TODO 回写已落盘；提交与推送待本轮 submission）
+
+### 改动
+
+1. 更新 `debian/dasall-cli.install`、`debian/dasall-cli.manpages`、`debian/dasall.1` 与新增 `debian/dasall-cli.1`，把 installed package 的公开命令面固定为双入口：bare `dasall` 表示 TUI，`dasall-cli` 表示 structured control-plane。
+2. 更新 `debian/dasall-daemon.README.Debian`、`debian/dasall-daemon.postinst` 与 `debian/package-assets/dasall-daemon/etc/default/dasall-daemon`，把 operator/config 示例统一切到 `dasall-cli`，并明确 bare `dasall` 只用于 interactive TUI。
+3. 更新 `debian/tests/pkg-smoke-local-control-plane`、`scripts/packaging/pkg_smoke_install.sh`、`scripts/packaging/knowledge_local_installed_proof.sh`、`scripts/packaging/knowledge_failure_injection_installed_proof.sh`、`scripts/packaging/knowledge_refresh_retrieve_soak.sh`、`scripts/packaging/infra_release_soak_gate.sh` 与 `scripts/packaging/README.md`，迁移所有 installed structured control-plane 命令到 `dasall-cli`，并在 autopkgtest/package smoke 中新增 bare `dasall` non-TTY fail-closed redirect smoke。
+4. 更新 `docs/todos/tui/deliverables/TUI-TODO-033-debian-command-migration.md`、TUI 专项 TODO 与子系统查漏补缺总账：`TUI-TODO-033` Done，`TUI-TODO-034` Ready。
+
+### 验证
+
+1. `sh -n debian/tests/pkg-smoke-local-control-plane`
+   - 结果：通过。
+2. `sh -n scripts/packaging/pkg_smoke_install.sh`
+   - 结果：通过。
+3. `sh -n scripts/packaging/knowledge_local_installed_proof.sh && sh -n scripts/packaging/knowledge_failure_injection_installed_proof.sh && sh -n scripts/packaging/knowledge_refresh_retrieve_soak.sh && sh -n scripts/packaging/infra_release_soak_gate.sh`
+   - 结果：通过。
+4. `rg -n "dasall (config|ping|readiness|run|status|cancel|diag|knowledge)" debian scripts; test $? -eq 1`
+   - 结果：通过；`debian/` 与 `scripts/` 已无 bare `dasall` 结构化 control-plane 残留。
+
+### 结果
+
+1. `TUI-TODO-033` 已完成，Debian install/manpage/operator docs/autopkgtest/package smoke/package proof 脚本的命令面已与 031/032 的双命令发布语义对齐。
+2. bare `dasall` 的 installed 角色已收敛为 TUI 入口；non-interactive control-plane 任务现统一重定向到 `dasall-cli`。
+3. 下一原子任务：`TUI-TODO-034` 增加命令分流测试。
+
 # 记录 #801
 
 - 日期：2026-05-24

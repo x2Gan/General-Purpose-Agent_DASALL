@@ -432,8 +432,8 @@ wait_for_async_receipt_proof_daemon_ready() {
   attempt=0
   while [ "$attempt" -lt 30 ]; do
     if run_root test -S "$socket_path" &&
-       run_dasall_cli dasall --socket-path "$socket_path" ping --json >/dev/null 2>&1 &&
-       run_dasall_cli dasall --socket-path "$socket_path" readiness --json >/dev/null 2>&1; then
+       run_dasall_cli dasall-cli --socket-path "$socket_path" ping --json >/dev/null 2>&1 &&
+       run_dasall_cli dasall-cli --socket-path "$socket_path" readiness --json >/dev/null 2>&1; then
       return 0
     fi
 
@@ -492,7 +492,7 @@ PY
   wait_for_async_receipt_proof_daemon_ready "$ASYNC_RECEIPT_PROOF_SOCKET" "$ASYNC_RECEIPT_PROOF_LOG" || \
     fail 'async receipt proof daemon did not become ready'
 
-  PROOF_SUBMIT_JSON=$(run_dasall_cli dasall --socket-path "$ASYNC_RECEIPT_PROOF_SOCKET" run "$proof_request" --async --request-id "$proof_request_id" --json --timeout-ms 30000)
+  PROOF_SUBMIT_JSON=$(run_dasall_cli dasall-cli --socket-path "$ASYNC_RECEIPT_PROOF_SOCKET" run "$proof_request" --async --request-id "$proof_request_id" --json --timeout-ms 30000)
   assert_json_contains "$PROOF_SUBMIT_JSON" '"disposition":"accepted_async"' 'installed async receipt submit'
   PROOF_RECEIPT_REF=$(json_extract_string "$PROOF_SUBMIT_JSON" receipt_ref)
   assert_non_empty "$PROOF_RECEIPT_REF" 'installed async receipt submit receipt_ref'
@@ -505,33 +505,33 @@ PY
   assert_non_empty "$PROOF_OWNERSHIP_TOKEN" 'installed async receipt ownership_token'
   assert_non_empty "$PROOF_ACTOR_REF" 'installed async receipt actor_ref'
 
-  PROOF_STATUS_JSON=$(run_dasall_cli dasall --socket-path "$ASYNC_RECEIPT_PROOF_SOCKET" status "$PROOF_RECEIPT_REF" "$PROOF_OWNERSHIP_TOKEN" "$PROOF_ACTOR_REF" --json --timeout-ms 30000)
+  PROOF_STATUS_JSON=$(run_dasall_cli dasall-cli --socket-path "$ASYNC_RECEIPT_PROOF_SOCKET" status "$PROOF_RECEIPT_REF" "$PROOF_OWNERSHIP_TOKEN" "$PROOF_ACTOR_REF" --json --timeout-ms 30000)
   assert_json_contains "$PROOF_STATUS_JSON" '"disposition":"completed"' 'installed async receipt status'
   assert_json_contains "$PROOF_STATUS_JSON" '"response_text":"active"' 'installed async receipt active status'
 
-  PROOF_REPLAY_JSON=$(run_dasall_cli dasall --socket-path "$ASYNC_RECEIPT_PROOF_SOCKET" run "$proof_request" --async --request-id "$proof_request_id" --json --timeout-ms 30000)
+  PROOF_REPLAY_JSON=$(run_dasall_cli dasall-cli --socket-path "$ASYNC_RECEIPT_PROOF_SOCKET" run "$proof_request" --async --request-id "$proof_request_id" --json --timeout-ms 30000)
   assert_json_contains "$PROOF_REPLAY_JSON" '"disposition":"accepted_async"' 'installed async receipt replay submit'
   assert_json_contains "$PROOF_REPLAY_JSON" "\"receipt_ref\":\"${PROOF_RECEIPT_REF}\"" 'installed async receipt replay receipt_ref'
 
   set +e
-  PROOF_STATUS_MISMATCH_JSON=$(run_dasall_cli dasall --socket-path "$ASYNC_RECEIPT_PROOF_SOCKET" status "$PROOF_RECEIPT_REF" "$PROOF_OWNERSHIP_TOKEN" 'local://uid/0' --json --timeout-ms 30000 2>&1)
+  PROOF_STATUS_MISMATCH_JSON=$(run_dasall_cli dasall-cli --socket-path "$ASYNC_RECEIPT_PROOF_SOCKET" status "$PROOF_RECEIPT_REF" "$PROOF_OWNERSHIP_TOKEN" 'local://uid/0' --json --timeout-ms 30000 2>&1)
   PROOF_STATUS_MISMATCH_CODE=$?
   set -e
   [ "$PROOF_STATUS_MISMATCH_CODE" -eq 4 ] || fail "installed async receipt status owner mismatch should exit 4, got ${PROOF_STATUS_MISMATCH_CODE}: ${PROOF_STATUS_MISMATCH_JSON}"
   assert_json_contains "$PROOF_STATUS_MISMATCH_JSON" '"error_ref":"status_owner_mismatch"' 'installed async receipt status owner mismatch'
 
   set +e
-  PROOF_CANCEL_MISMATCH_JSON=$(run_root dasall --socket-path "$ASYNC_RECEIPT_PROOF_SOCKET" cancel "$PROOF_RECEIPT_REF" "$PROOF_OWNERSHIP_TOKEN" --json --timeout-ms 30000 2>&1)
+  PROOF_CANCEL_MISMATCH_JSON=$(run_root dasall-cli --socket-path "$ASYNC_RECEIPT_PROOF_SOCKET" cancel "$PROOF_RECEIPT_REF" "$PROOF_OWNERSHIP_TOKEN" --json --timeout-ms 30000 2>&1)
   PROOF_CANCEL_MISMATCH_CODE=$?
   set -e
   [ "$PROOF_CANCEL_MISMATCH_CODE" -eq 4 ] || fail "installed async receipt cancel owner mismatch should exit 4, got ${PROOF_CANCEL_MISMATCH_CODE}: ${PROOF_CANCEL_MISMATCH_JSON}"
   assert_json_contains "$PROOF_CANCEL_MISMATCH_JSON" '"error_ref":"cancel_owner_mismatch"' 'installed async receipt cancel owner mismatch'
 
-  PROOF_CANCEL_JSON=$(run_dasall_cli dasall --socket-path "$ASYNC_RECEIPT_PROOF_SOCKET" cancel "$PROOF_RECEIPT_REF" "$PROOF_OWNERSHIP_TOKEN" "$PROOF_ACTOR_REF" --json --timeout-ms 30000)
+  PROOF_CANCEL_JSON=$(run_dasall_cli dasall-cli --socket-path "$ASYNC_RECEIPT_PROOF_SOCKET" cancel "$PROOF_RECEIPT_REF" "$PROOF_OWNERSHIP_TOKEN" "$PROOF_ACTOR_REF" --json --timeout-ms 30000)
   assert_json_contains "$PROOF_CANCEL_JSON" '"disposition":"completed"' 'installed async receipt cancel'
   assert_json_contains "$PROOF_CANCEL_JSON" '"response_text":"cancelled"' 'installed async receipt cancel status'
 
-  PROOF_CANCELLED_STATUS_JSON=$(run_dasall_cli dasall --socket-path "$ASYNC_RECEIPT_PROOF_SOCKET" status "$PROOF_RECEIPT_REF" "$PROOF_OWNERSHIP_TOKEN" "$PROOF_ACTOR_REF" --json --timeout-ms 30000)
+  PROOF_CANCELLED_STATUS_JSON=$(run_dasall_cli dasall-cli --socket-path "$ASYNC_RECEIPT_PROOF_SOCKET" status "$PROOF_RECEIPT_REF" "$PROOF_OWNERSHIP_TOKEN" "$PROOF_ACTOR_REF" --json --timeout-ms 30000)
   assert_json_contains "$PROOF_CANCELLED_STATUS_JSON" '"disposition":"completed"' 'installed async receipt cancelled status'
   assert_json_contains "$PROOF_CANCELLED_STATUS_JSON" '"response_text":"cancelled"' 'installed async receipt cancelled projection'
 
@@ -638,7 +638,7 @@ PY
 wait_for_knowledge_refresh_ready() {
   attempts=0
   while [ "$attempts" -lt 30 ]; do
-    knowledge_health_json=$(run_root dasall knowledge health --json --timeout-ms 30000)
+    knowledge_health_json=$(run_root dasall-cli knowledge health --json --timeout-ms 30000)
     if knowledge_health_is_ready "$knowledge_health_json"; then
       printf '%s\n' "$knowledge_health_json"
       return 0
@@ -717,8 +717,8 @@ wait_for_daemon_ready() {
        [ -S /run/dasall/daemon.sock ] &&
        [ "$(stat -c "%U:%G" /run/dasall/daemon.sock 2>/dev/null)" = "dasall:dasall" ] &&
        [ "$(stat -c "%a" /run/dasall/daemon.sock 2>/dev/null)" = "600" ]' &&
-       run_dasall_cli dasall ping --json >/dev/null 2>&1 &&
-       run_dasall_cli dasall readiness --json >/dev/null 2>&1; then
+      run_dasall_cli dasall-cli ping --json >/dev/null 2>&1 &&
+      run_dasall_cli dasall-cli readiness --json >/dev/null 2>&1; then
       return 0
     fi
 
@@ -782,7 +782,7 @@ secrets:
       auth_profile_name: primary
 EOF
       chmod 600 '${PRESERVED_SECRET_ROOT}/desired.yaml'
-      dasall config apply --from-file '${PRESERVED_SECRET_ROOT}/desired.yaml' --no-input --json
+      dasall-cli config apply --from-file '${PRESERVED_SECRET_ROOT}/desired.yaml' --no-input --json
     ")
     SECRET_PROVISIONING_MODE=config_apply_import
     assert_json_contains "$SECRET_IMPORT_APPLY_JSON" '"written_secret_refs":["secret://llm/providers/deepseek-prod"]' 'package smoke secret import apply'
@@ -856,8 +856,19 @@ verify_explicit_start() {
   run_root test -S /run/dasall/daemon.sock
   run_root_sh 'test "$(stat -c "%U:%G" /run/dasall/daemon.sock)" = "dasall:dasall"'
   run_root_sh 'test "$(stat -c "%a" /run/dasall/daemon.sock)" = "600"'
-  run_dasall_cli dasall ping --json >/dev/null
-  run_dasall_cli dasall readiness --json >/dev/null
+  set +e
+  TUI_STDERR=$(dasall 2>&1)
+  TUI_EXIT_CODE=$?
+  set -e
+  [ "$TUI_EXIT_CODE" -eq 1 ] || fail "bare dasall should fail closed without a TTY, got ${TUI_EXIT_CODE}: ${TUI_STDERR}"
+  assert_text_contains "$TUI_STDERR" 'stdin is not attached to a TTY' 'tui non-tty smoke'
+  assert_text_contains "$TUI_STDERR" 'Use dasall-cli for non-interactive control-plane tasks.' 'tui non-tty redirect'
+  if [ -n "$PACKAGE_SMOKE_ARTIFACT_DIR" ]; then
+    write_artifact_file 'tui-noninteractive.txt' "$TUI_STDERR"
+  fi
+
+  run_dasall_cli dasall-cli ping --json >/dev/null
+  run_dasall_cli dasall-cli readiness --json >/dev/null
   require_command python3
   ensure_artifact_dir
   if [ -n "$PACKAGE_SMOKE_ARTIFACT_DIR" ]; then
@@ -871,7 +882,7 @@ verify_explicit_start() {
   MEMORY_FIRST_REQUEST='{"prompt":"Remember this exact marker for this session: mem-fix-006-local-proof. Reply with that marker once and do not use any tools."}'
   MEMORY_SECOND_REQUEST='{"prompt":"In this same session, what exact marker did I ask you to remember? Reply with the exact marker once and do not use any tools."}'
 
-  FIRST_RUN_JSON=$(run_dasall_cli dasall run "$MEMORY_FIRST_REQUEST" --session "$MEMORY_SESSION_HINT" --request-id pkg-smoke-memory-turn-001 --json --timeout-ms 120000)
+  FIRST_RUN_JSON=$(run_dasall_cli dasall-cli run "$MEMORY_FIRST_REQUEST" --session "$MEMORY_SESSION_HINT" --request-id pkg-smoke-memory-turn-001 --json --timeout-ms 120000)
   assert_json_contains "$FIRST_RUN_JSON" '"disposition":"completed"' 'first run smoke'
   assert_json_contains "$FIRST_RUN_JSON" '"task_completed":true' 'first run smoke'
   assert_json_contains "$FIRST_RUN_JSON" 'llm.origin=deepseek-prod/' 'first llm response payload'
@@ -900,7 +911,7 @@ verify_explicit_start() {
   MEMORY_FIRST_TURN_ID=$(query_sqlite_scalar_with_params "${MEMORY_DB_PATH}" 'SELECT turn_id FROM turns WHERE session_id = ?1 AND user_input = ?2 ORDER BY created_at ASC LIMIT 1;' "$MEMORY_SESSION_ID" "$MEMORY_FIRST_REQUEST")
   assert_non_empty "$MEMORY_FIRST_TURN_ID" 'first-run turn_id'
 
-  SECOND_RUN_JSON=$(run_dasall_cli dasall run "$MEMORY_SECOND_REQUEST" --session "$MEMORY_SESSION_ID" --request-id pkg-smoke-memory-turn-002 --json --timeout-ms 120000)
+  SECOND_RUN_JSON=$(run_dasall_cli dasall-cli run "$MEMORY_SECOND_REQUEST" --session "$MEMORY_SESSION_ID" --request-id pkg-smoke-memory-turn-002 --json --timeout-ms 120000)
   assert_json_contains "$SECOND_RUN_JSON" '"disposition":"completed"' 'second run smoke'
   assert_json_contains "$SECOND_RUN_JSON" '"task_completed":true' 'second run smoke'
   assert_json_contains "$SECOND_RUN_JSON" 'llm.origin=deepseek-prod/' 'second llm response payload'
@@ -1066,27 +1077,27 @@ PY
   verify_installed_async_receipt_flow
 
   set +e
-  STATUS_JSON=$(run_root dasall status receipt:missing token local://uid/0 --json 2>&1)
+  STATUS_JSON=$(run_root dasall-cli status receipt:missing token local://uid/0 --json 2>&1)
   STATUS_CODE=$?
   set -e
   [ "$STATUS_CODE" -eq 5 ] || fail "status missing receipt should exit 5, got ${STATUS_CODE}: ${STATUS_JSON}"
   assert_json_contains "$STATUS_JSON" '"error_ref":"status_missing"' 'status missing receipt'
 
   set +e
-  CANCEL_JSON=$(run_root dasall cancel receipt:missing token local://uid/0 --json 2>&1)
+  CANCEL_JSON=$(run_root dasall-cli cancel receipt:missing token local://uid/0 --json 2>&1)
   CANCEL_CODE=$?
   set -e
   [ "$CANCEL_CODE" -eq 5 ] || fail "cancel missing receipt should exit 5, got ${CANCEL_CODE}: ${CANCEL_JSON}"
   assert_json_contains "$CANCEL_JSON" '"error_ref":"cancel_missing"' 'cancel missing receipt'
 
   set +e
-  DIAG_JSON=$(run_root dasall diag health --json 2>&1)
+  DIAG_JSON=$(run_root dasall-cli diag health --json 2>&1)
   DIAG_CODE=$?
   set -e
   [ "$DIAG_CODE" -eq 4 ] || fail "diag disabled should exit 4, got ${DIAG_CODE}: ${DIAG_JSON}"
   assert_json_contains "$DIAG_JSON" '"error_ref":"diag_disabled"' 'diag disabled gate'
 
-  KNOWLEDGE_REFRESH_JSON=$(run_root dasall knowledge refresh --json --timeout-ms 30000)
+  KNOWLEDGE_REFRESH_JSON=$(run_root dasall-cli knowledge refresh --json --timeout-ms 30000)
   assert_json_contains "$KNOWLEDGE_REFRESH_JSON" '"disposition":"completed"' 'knowledge refresh smoke'
   assert_json_contains "$KNOWLEDGE_REFRESH_JSON" '\"operation\":\"refresh\"' 'knowledge refresh payload'
   assert_json_contains "$KNOWLEDGE_REFRESH_JSON" '\"status\":\"accepted\"' 'knowledge refresh status'
@@ -1096,7 +1107,7 @@ PY
   assert_knowledge_health_ready "$KNOWLEDGE_HEALTH_READY_JSON" 'knowledge health readiness smoke'
   write_artifact_file 'knowledge-health-ready.json' "$KNOWLEDGE_HEALTH_READY_JSON"
 
-  KNOWLEDGE_RETRIEVE_JSON=$(run_root dasall knowledge retrieve 'DeepSeek Chat' --json --timeout-ms 30000)
+  KNOWLEDGE_RETRIEVE_JSON=$(run_root dasall-cli knowledge retrieve 'DeepSeek Chat' --json --timeout-ms 30000)
   assert_json_contains "$KNOWLEDGE_RETRIEVE_JSON" '"disposition":"completed"' 'knowledge retrieve smoke'
   assert_json_contains "$KNOWLEDGE_RETRIEVE_JSON" '\"operation\":\"retrieve\"' 'knowledge retrieve payload'
   assert_json_contains "$KNOWLEDGE_RETRIEVE_JSON" '\"ok\":true' 'knowledge retrieve ok'
@@ -1104,7 +1115,7 @@ PY
   assert_json_matches "$KNOWLEDGE_RETRIEVE_JSON" 'DeepSeek Chat|deepseek-chat|llm/providers/deepseek/' 'knowledge retrieve installed provider evidence'
   write_artifact_file 'knowledge-retrieve-provider.json' "$KNOWLEDGE_RETRIEVE_JSON"
 
-  KNOWLEDGE_NORMATIVE_JSON=$(run_root dasall knowledge retrieve 'BusinessChainIntegrationMatrix' --json --timeout-ms 30000)
+  KNOWLEDGE_NORMATIVE_JSON=$(run_root dasall-cli knowledge retrieve 'BusinessChainIntegrationMatrix' --json --timeout-ms 30000)
   assert_json_contains "$KNOWLEDGE_NORMATIVE_JSON" '"disposition":"completed"' 'knowledge normative retrieve smoke'
   assert_json_contains "$KNOWLEDGE_NORMATIVE_JSON" '\"operation\":\"retrieve\"' 'knowledge normative retrieve payload'
   assert_json_contains "$KNOWLEDGE_NORMATIVE_JSON" '\"ok\":true' 'knowledge normative retrieve ok'
@@ -1112,7 +1123,7 @@ PY
   assert_json_matches "$KNOWLEDGE_NORMATIVE_JSON" 'BusinessChainIntegrationMatrix|docs/ssot/BusinessChainIntegrationMatrix.md' 'knowledge normative retrieve installed ssot evidence'
   write_artifact_file 'knowledge-retrieve-normative.json' "$KNOWLEDGE_NORMATIVE_JSON"
 
-  KNOWLEDGE_HEALTH_FINAL_JSON=$(run_root dasall knowledge health --json --timeout-ms 30000)
+  KNOWLEDGE_HEALTH_FINAL_JSON=$(run_root dasall-cli knowledge health --json --timeout-ms 30000)
   assert_knowledge_health_ready "$KNOWLEDGE_HEALTH_FINAL_JSON" 'knowledge health smoke'
   write_artifact_file 'knowledge-health-final.json' "$KNOWLEDGE_HEALTH_FINAL_JSON"
 
@@ -1188,7 +1199,7 @@ PY
   run_root test -f /usr/share/dasall/llm/prompts/responder/default/manifest.yaml
   run_root test -f /usr/share/dasall/llm/providers/catalog.yaml
   run_root test -f /usr/share/dasall/llm/providers/deepseek/manifest.yaml
-  run_root dasall version >/dev/null
+  run_root dasall-cli version >/dev/null
 }
 
 usage() {

@@ -137,7 +137,7 @@ capture_journal() {
 wait_for_daemon_ready() {
   attempts=0
   while [ "$attempts" -lt "$DAEMON_READY_ATTEMPTS" ]; do
-    if readiness_json=$(run_root dasall readiness --json --timeout-ms "$TIMEOUT_MS" 2>/dev/null); then
+    if readiness_json=$(run_root dasall-cli readiness --json --timeout-ms "$TIMEOUT_MS" 2>/dev/null); then
       if readiness_is_ready "$readiness_json"; then
         printf '%s\n' "$readiness_json"
         return 0
@@ -153,7 +153,7 @@ wait_for_daemon_ready() {
 wait_for_knowledge_refresh_ready() {
   attempts=0
   while [ "$attempts" -lt "$KNOWLEDGE_READY_ATTEMPTS" ]; do
-    if knowledge_health_json=$(run_root dasall knowledge health --json --timeout-ms "$TIMEOUT_MS" 2>/dev/null); then
+    if knowledge_health_json=$(run_root dasall-cli knowledge health --json --timeout-ms "$TIMEOUT_MS" 2>/dev/null); then
       if knowledge_health_is_ready "$knowledge_health_json"; then
         printf '%s\n' "$knowledge_health_json"
         return 0
@@ -181,7 +181,7 @@ run_iteration() {
   iteration=$1
   label=$(printf '%02d' "$iteration")
 
-  refresh_json=$(run_root dasall knowledge refresh --json --timeout-ms "$TIMEOUT_MS")
+  refresh_json=$(run_root dasall-cli knowledge refresh --json --timeout-ms "$TIMEOUT_MS")
   assert_json_contains "$refresh_json" '"disposition":"completed"' "iteration ${label} refresh disposition"
   assert_json_contains "$refresh_json" '\"operation\":\"refresh\"' "iteration ${label} refresh payload"
   assert_json_contains "$refresh_json" '\"status\":\"accepted\"' "iteration ${label} refresh status"
@@ -191,14 +191,14 @@ run_iteration() {
   assert_knowledge_health_ready "$health_ready_json" "iteration ${label} ready health"
   write_artifact_file "iteration-${label}-health-ready.json" "$health_ready_json"
 
-  provider_json=$(run_root dasall knowledge retrieve "$PROVIDER_QUERY" --json --timeout-ms "$TIMEOUT_MS")
+  provider_json=$(run_root dasall-cli knowledge retrieve "$PROVIDER_QUERY" --json --timeout-ms "$TIMEOUT_MS")
   assert_json_contains "$provider_json" '"disposition":"completed"' "iteration ${label} provider retrieve"
   assert_json_contains "$provider_json" '\"ok\":true' "iteration ${label} provider retrieve ok"
   assert_json_matches "$provider_json" '\\"slice_count\\":[1-9][0-9]*' "iteration ${label} provider slice count"
   assert_json_matches "$provider_json" 'DeepSeek Chat|deepseek-chat|llm/providers/deepseek/' "iteration ${label} provider evidence"
   write_artifact_file "iteration-${label}-retrieve-provider.json" "$provider_json"
 
-  health_final_json=$(run_root dasall knowledge health --json --timeout-ms "$TIMEOUT_MS")
+  health_final_json=$(run_root dasall-cli knowledge health --json --timeout-ms "$TIMEOUT_MS")
   assert_knowledge_health_ready "$health_final_json" "iteration ${label} final health"
   write_artifact_file "iteration-${label}-health-final.json" "$health_final_json"
 }
@@ -349,7 +349,7 @@ ensure_positive_integer "$ITERATIONS" 'iterations'
 ensure_positive_integer "$TIMEOUT_MS" 'timeout-ms'
 ensure_positive_integer "$DAEMON_READY_ATTEMPTS" 'daemon-ready-attempts'
 ensure_positive_integer "$KNOWLEDGE_READY_ATTEMPTS" 'knowledge-ready-attempts'
-require_command dasall
+require_command dasall-cli
 require_command systemctl
 ensure_artifact_dir
 

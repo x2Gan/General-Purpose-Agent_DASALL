@@ -163,7 +163,7 @@ EOF
 }
 
 apply_diag_enabled_config() {
-  APPLY_JSON=$(run_root dasall config apply --from-file "$DESIRED_FILE" --no-input --json)
+  APPLY_JSON=$(run_root dasall-cli config apply --from-file "$DESIRED_FILE" --no-input --json)
   assert_json_contains "$APPLY_JSON" '"outcome":"applied"' 'infra diag enable config apply'
   if [ "$SECRET_ALREADY_CONFIGURED" -eq 0 ]; then
     assert_json_contains "$APPLY_JSON" '"written_secret_refs":["secret://llm/providers/deepseek-prod"]' 'infra diag enable config apply secret import'
@@ -176,7 +176,7 @@ wait_for_daemon_ready() {
   while [ "$attempt" -lt 90 ]; do
     if run_root_sh 'systemctl is-enabled --quiet dasall-daemon.service >/dev/null 2>&1 &&
        systemctl is-active --quiet dasall-daemon.service >/dev/null 2>&1'; then
-      if readiness_json=$(run_root dasall readiness --json --timeout-ms "$TIMEOUT_MS" 2>/dev/null); then
+      if readiness_json=$(run_root dasall-cli readiness --json --timeout-ms "$TIMEOUT_MS" 2>/dev/null); then
         if readiness_is_ready "$readiness_json"; then
           printf '%s\n' "$readiness_json"
           return 0
@@ -195,11 +195,11 @@ wait_for_daemon_ready() {
 run_installed_iteration() {
   label=$1
 
-  readiness_json=$(run_root dasall readiness --json --timeout-ms "$TIMEOUT_MS")
+  readiness_json=$(run_root dasall-cli readiness --json --timeout-ms "$TIMEOUT_MS")
   assert_readiness_ready "$readiness_json" "iteration ${label} readiness"
   write_artifact_file "iteration-${label}-readiness.json" "$readiness_json"
 
-  diag_json=$(run_root dasall diag health --json)
+  diag_json=$(run_root dasall-cli diag health --json)
   assert_json_contains "$diag_json" '"disposition":"completed"' "iteration ${label} diag health"
   assert_json_contains "$diag_json" 'diagnostics redacted health snapshot' "iteration ${label} diag health summary"
   write_artifact_file "iteration-${label}-diag-health.json" "$diag_json"

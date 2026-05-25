@@ -26,10 +26,11 @@ DASALL was installed successfully.
 The daemon was not started automatically.
 
 Next steps:
-	1. P0 operator path is root/sudo-only: sudo dasall config
+	1. P0 operator path is root/sudo-only: sudo dasall-cli config
 	2. Canonical files: /etc/default/dasall-daemon (profile) and /etc/dasall/daemon.json (daemon.*)
 	3. Validate: . /etc/default/dasall-daemon && dasall-daemon --validate-only --profile-id="${DASALL_DAEMON_PROFILE_ID}" --config-file /etc/dasall/daemon.json
 	4. Start: systemctl enable --now dasall-daemon.service
+	5. Human-facing TUI entrypoint: dasall (interactive TTY required)
 EOF
 }
 

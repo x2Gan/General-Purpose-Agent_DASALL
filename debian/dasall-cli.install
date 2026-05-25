@@ -1,1 +1,2 @@
 debian/tmp/usr/bin/dasall usr/bin/
+debian/tmp/usr/bin/dasall-cli usr/bin/

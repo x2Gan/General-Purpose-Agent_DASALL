@@ -148,7 +148,7 @@ wait_for_daemon_ready() {
   while [ "$attempt" -lt "$DAEMON_READY_ATTEMPTS" ]; do
     if run_root_sh 'systemctl is-enabled --quiet dasall-daemon.service >/dev/null 2>&1 &&
        systemctl is-active --quiet dasall-daemon.service >/dev/null 2>&1'; then
-      if readiness_json=$(run_root dasall readiness --json --timeout-ms "$TIMEOUT_MS" 2>/dev/null); then
+      if readiness_json=$(run_root dasall-cli readiness --json --timeout-ms "$TIMEOUT_MS" 2>/dev/null); then
         if readiness_is_ready "$readiness_json"; then
           printf '%s\n' "$readiness_json"
           return 0
@@ -167,7 +167,7 @@ wait_for_daemon_ready() {
 wait_for_knowledge_refresh_ready() {
   attempts=0
   while [ "$attempts" -lt "$KNOWLEDGE_READY_ATTEMPTS" ]; do
-    if health_json=$(run_root dasall knowledge health --json --timeout-ms "$TIMEOUT_MS" 2>/dev/null); then
+    if health_json=$(run_root dasall-cli knowledge health --json --timeout-ms "$TIMEOUT_MS" 2>/dev/null); then
       if knowledge_health_is_ready "$health_json"; then
         printf '%s\n' "$health_json"
         return 0
@@ -319,7 +319,7 @@ run_root systemctl enable --now dasall-daemon.service
 READY_JSON=$(wait_for_daemon_ready)
 write_artifact_file 'ready.json' "$READY_JSON"
 
-KNOWLEDGE_REFRESH_JSON=$(run_root dasall knowledge refresh --json --timeout-ms "$TIMEOUT_MS")
+KNOWLEDGE_REFRESH_JSON=$(run_root dasall-cli knowledge refresh --json --timeout-ms "$TIMEOUT_MS")
 assert_json_contains "$KNOWLEDGE_REFRESH_JSON" '"disposition":"completed"' 'knowledge refresh smoke'
 assert_json_contains "$KNOWLEDGE_REFRESH_JSON" '\"operation\":\"refresh\"' 'knowledge refresh payload'
 assert_json_contains "$KNOWLEDGE_REFRESH_JSON" '\"status\":\"accepted\"' 'knowledge refresh status'
@@ -329,7 +329,7 @@ KNOWLEDGE_HEALTH_READY_JSON=$(wait_for_knowledge_refresh_ready)
 assert_knowledge_health_ready "$KNOWLEDGE_HEALTH_READY_JSON" 'knowledge health readiness smoke'
 write_artifact_file 'knowledge-health-ready.json' "$KNOWLEDGE_HEALTH_READY_JSON"
 
-KNOWLEDGE_RETRIEVE_JSON=$(run_root dasall knowledge retrieve "$PROVIDER_QUERY" --json --timeout-ms "$TIMEOUT_MS")
+KNOWLEDGE_RETRIEVE_JSON=$(run_root dasall-cli knowledge retrieve "$PROVIDER_QUERY" --json --timeout-ms "$TIMEOUT_MS")
 assert_json_contains "$KNOWLEDGE_RETRIEVE_JSON" '"disposition":"completed"' 'knowledge retrieve smoke'
 assert_json_contains "$KNOWLEDGE_RETRIEVE_JSON" '\"operation\":\"retrieve\"' 'knowledge retrieve payload'
 assert_json_contains "$KNOWLEDGE_RETRIEVE_JSON" '\"ok\":true' 'knowledge retrieve ok'
@@ -337,7 +337,7 @@ assert_json_matches "$KNOWLEDGE_RETRIEVE_JSON" '\\"slice_count\\":[1-9][0-9]*' '
 assert_json_matches "$KNOWLEDGE_RETRIEVE_JSON" 'DeepSeek Chat|deepseek-chat|llm/providers/deepseek/' 'knowledge retrieve installed provider evidence'
 write_artifact_file 'knowledge-retrieve-provider.json' "$KNOWLEDGE_RETRIEVE_JSON"
 
-KNOWLEDGE_HEALTH_FINAL_JSON=$(run_root dasall knowledge health --json --timeout-ms "$TIMEOUT_MS")
+KNOWLEDGE_HEALTH_FINAL_JSON=$(run_root dasall-cli knowledge health --json --timeout-ms "$TIMEOUT_MS")
 assert_knowledge_health_ready "$KNOWLEDGE_HEALTH_FINAL_JSON" 'knowledge health smoke'
 write_artifact_file 'knowledge-health-final.json' "$KNOWLEDGE_HEALTH_FINAL_JSON"
 

@@ -180,7 +180,7 @@ wait_for_daemon_ready() {
   while [ "$attempts" -lt "$DAEMON_READY_ATTEMPTS" ]; do
     if run_root_sh 'systemctl is-enabled --quiet dasall-daemon.service >/dev/null 2>&1 &&
        systemctl is-active --quiet dasall-daemon.service >/dev/null 2>&1'; then
-      if readiness_json=$(run_root dasall readiness --json --timeout-ms "$TIMEOUT_MS" 2>/dev/null); then
+      if readiness_json=$(run_root dasall-cli readiness --json --timeout-ms "$TIMEOUT_MS" 2>/dev/null); then
         if readiness_is_ready "$readiness_json"; then
           printf '%s\n' "$readiness_json"
           return 0
@@ -199,7 +199,7 @@ wait_for_daemon_ready() {
 wait_for_knowledge_ready() {
   attempts=0
   while [ "$attempts" -lt "$KNOWLEDGE_READY_ATTEMPTS" ]; do
-    if health_json=$(run_root dasall knowledge health --json --timeout-ms "$TIMEOUT_MS" 2>/dev/null); then
+    if health_json=$(run_root dasall-cli knowledge health --json --timeout-ms "$TIMEOUT_MS" 2>/dev/null); then
       if knowledge_health_is_ready "$health_json"; then
         printf '%s\n' "$health_json"
         return 0
@@ -219,7 +219,7 @@ wait_for_knowledge_snapshot_rotation() {
   previous_snapshot_id=$1
   attempts=0
   while [ "$attempts" -lt "$KNOWLEDGE_READY_ATTEMPTS" ]; do
-    if health_json=$(run_root dasall knowledge health --json --timeout-ms "$TIMEOUT_MS" 2>/dev/null); then
+    if health_json=$(run_root dasall-cli knowledge health --json --timeout-ms "$TIMEOUT_MS" 2>/dev/null); then
       if knowledge_health_is_ready "$health_json"; then
         current_snapshot_id=$(extract_escaped_value "$health_json" active_snapshot_id)
         if [ "$current_snapshot_id" != "$previous_snapshot_id" ]; then
@@ -318,7 +318,7 @@ assert_knowledge_health_ready "$STARTUP_HEALTH_JSON" 'knowledge health after sta
 write_artifact_file 'knowledge-health-after-startup.json' "$STARTUP_HEALTH_JSON"
 STARTUP_SNAPSHOT_ID=$(extract_escaped_value "$STARTUP_HEALTH_JSON" active_snapshot_id)
 
-INITIAL_REFRESH_JSON=$(run_root dasall knowledge refresh --json --timeout-ms "$TIMEOUT_MS")
+INITIAL_REFRESH_JSON=$(run_root dasall-cli knowledge refresh --json --timeout-ms "$TIMEOUT_MS")
 assert_json_contains "$INITIAL_REFRESH_JSON" '"disposition":"completed"' 'initial knowledge refresh disposition'
 assert_json_contains "$INITIAL_REFRESH_JSON" '\"operation\":\"refresh\"' 'initial knowledge refresh payload'
 assert_json_contains "$INITIAL_REFRESH_JSON" '\"status\":\"accepted\"' 'initial knowledge refresh status'
@@ -331,7 +331,7 @@ INITIAL_SNAPSHOT_ID=$(extract_escaped_value "$HEALTH_BEFORE_JSON" active_snapsho
 [ "$INITIAL_SNAPSHOT_ID" != "$STARTUP_SNAPSHOT_ID" ] || \
   fail 'initial explicit refresh did not rotate the active snapshot beyond startup prewarm'
 
-REFRESH_JSON=$(run_root dasall knowledge refresh --json --timeout-ms "$TIMEOUT_MS")
+REFRESH_JSON=$(run_root dasall-cli knowledge refresh --json --timeout-ms "$TIMEOUT_MS")
 assert_json_contains "$REFRESH_JSON" '"disposition":"completed"' 'knowledge refresh before corruption'
 assert_json_contains "$REFRESH_JSON" '\"operation\":\"refresh\"' 'knowledge refresh payload before corruption'
 assert_json_contains "$REFRESH_JSON" '\"status\":\"accepted\"' 'knowledge refresh accepted before corruption'
@@ -344,7 +344,7 @@ CORRUPTED_SNAPSHOT_ID=$(extract_escaped_value "$HEALTH_AFTER_REFRESH_JSON" activ
 [ "$CORRUPTED_SNAPSHOT_ID" != "$INITIAL_SNAPSHOT_ID" ] || \
   fail 'second refresh did not rotate the active snapshot; unable to build an LKG recovery proof'
 
-PROVIDER_BEFORE_JSON=$(run_root dasall knowledge retrieve "$PROVIDER_QUERY" --json --timeout-ms "$TIMEOUT_MS")
+PROVIDER_BEFORE_JSON=$(run_root dasall-cli knowledge retrieve "$PROVIDER_QUERY" --json --timeout-ms "$TIMEOUT_MS")
 assert_json_contains "$PROVIDER_BEFORE_JSON" '"disposition":"completed"' 'knowledge retrieve before corruption'
 assert_json_contains "$PROVIDER_BEFORE_JSON" '\"ok\":true' 'knowledge retrieve before corruption ok'
 assert_json_matches "$PROVIDER_BEFORE_JSON" '\\"slice_count\\":[1-9][0-9]*' 'knowledge retrieve before corruption slice count'
@@ -407,7 +407,7 @@ else
   fail "recovered active snapshot ${RECOVERED_SNAPSHOT_ID} neither matched expected last-known-good ${INITIAL_SNAPSHOT_ID} nor descended from it"
 fi
 
-PROVIDER_AFTER_JSON=$(run_root dasall knowledge retrieve "$PROVIDER_QUERY" --json --timeout-ms "$TIMEOUT_MS")
+PROVIDER_AFTER_JSON=$(run_root dasall-cli knowledge retrieve "$PROVIDER_QUERY" --json --timeout-ms "$TIMEOUT_MS")
 assert_json_contains "$PROVIDER_AFTER_JSON" '"disposition":"completed"' 'knowledge retrieve after corruption recovery'
 assert_json_contains "$PROVIDER_AFTER_JSON" '\"ok\":true' 'knowledge retrieve after corruption recovery ok'
 assert_json_matches "$PROVIDER_AFTER_JSON" '\\"slice_count\\":[1-9][0-9]*' 'knowledge retrieve after corruption recovery slice count'

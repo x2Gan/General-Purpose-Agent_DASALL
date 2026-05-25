@@ -1,46 +1,52 @@
-.TH DASALL 1 "2026-05-08" "DASALL" "User Commands"
+.TH DASALL 1 "2026-05-25" "DASALL" "User Commands"
 .SH NAME
-dasall \- installed DASALL command-line client
+dasall \- installed DASALL terminal user interface
 .SH SYNOPSIS
 .B dasall
-.I command
-[options]
 .SH DESCRIPTION
 .B dasall
-is the installed command name for the DASALL CLI shipped by the Debian and
-Ubuntu packages. The source-tree target name
+is the installed terminal user interface for DASALL shipped by the Debian and
+Ubuntu packages.
+
+The command expects an interactive terminal. If stdin or stdout is not attached
+to a TTY, it fails closed and directs the operator to
+.BR dasall-cli (1)
+for non-interactive control-plane tasks.
+
+The current daemon-backed v1 operator model remains root/sudo-only. Bare
+.B dasall
+is the human-facing TUI entrypoint; structured control-plane operations stay on
+.BR dasall-cli (1)
+until a future access model explicitly changes that boundary.
+.SH STARTUP NOTES
+.TP
+.B Interactive TTY required
+The TUI requires stdin and stdout to be attached to a TTY.
+.TP
+.B Non-interactive control-plane
+Use
 .B dasall-cli
-is not part of the package-facing operator surface.
-
-The v1 local control-plane operator path is root/sudo-only. Use
-.B sudo dasall
-for local daemon operations.
-.SH COMMANDS
+for package scripts, automation, and structured operator commands such as
+.BR config ,
+.BR ping ,
+.BR readiness ,
+.BR run ,
+.BR status ,
+.BR cancel ,
+.BR diag ,
+and
+.BR knowledge .
 .TP
-.B help
-Show command usage.
-.TP
-.B version
-Print CLI version and schema support information.
-.TP
-.B ping
-Query daemon reachability.
-.TP
-.B readiness
-Query daemon readiness summary.
-.TP
-.BI "run " JSON_PAYLOAD
-Submit a unary request payload.
-.TP
-.BI "status " RECEIPT_REF " " OWNERSHIP_TOKEN " [" ACTOR_REF "]"
-Query the status of an async receipt.
-.TP
-.BI "cancel " RECEIPT_REF " " OWNERSHIP_TOKEN " [" ACTOR_REF "]"
-Cancel an async receipt.
+.B Root/sudo-only daemon operator path
+The installed daemon socket and packaged operator workflow remain root/sudo-only
+in v1. See
+.I /usr/share/doc/dasall-daemon/README.Debian
+for deployment steps.
 .SH PACKAGE-MODE DEPLOYMENT
-For package-mode deployment, the canonical operator workflow name is:
+For package-mode deployment, the canonical operator workflow name is still the
+structured CLI:
 
-.B sudo dasall config
+.B sudo dasall-cli config
 
 The canonical files remain:
 .TP
@@ -58,7 +64,10 @@ Validate a deployment configuration with:
 .SH FILES
 .TP
 .I /usr/bin/dasall
-Installed CLI command.
+Installed TUI command.
+.TP
+.I /usr/bin/dasall-cli
+Installed structured control-plane command.
 .TP
 .I /usr/sbin/dasall-daemon
 Installed daemon binary.
@@ -66,4 +75,5 @@ Installed daemon binary.
 .I /usr/share/doc/dasall-daemon/README.Debian
 Package deployment notes.
 .SH SEE ALSO
+.BR dasall-cli (1),
 .BR dasall-daemon (8)

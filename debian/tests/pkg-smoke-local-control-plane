@@ -78,8 +78,8 @@ wait_for_daemon_ready() {
        [ -S /run/dasall/daemon.sock ] &&
        [ "$(stat -c '%U:%G' /run/dasall/daemon.sock 2>/dev/null)" = "dasall:dasall" ] &&
        [ "$(stat -c '%a' /run/dasall/daemon.sock 2>/dev/null)" = "600" ] &&
-       dasall ping --json >/dev/null 2>&1 &&
-       dasall readiness --json >/dev/null 2>&1; then
+       dasall-cli ping --json >/dev/null 2>&1 &&
+       dasall-cli readiness --json >/dev/null 2>&1; then
       return 0
     fi
     attempt=$((attempt + 1))
@@ -133,20 +133,20 @@ chmod 600 "${DESIRED_FILE}"
   --profile-id="${DASALL_DAEMON_PROFILE_ID}" \
   --config-file /etc/dasall/daemon.json
 
-dasall config show --json > "${SHOW_BEFORE_JSON}"
+dasall-cli config show --json > "${SHOW_BEFORE_JSON}"
 grep -Fq '"schema_version":"dasall.config.summary.v1"' "${SHOW_BEFORE_JSON}"
 
-dasall config validate --json > "${VALIDATE_JSON}"
+dasall-cli config validate --json > "${VALIDATE_JSON}"
 grep -Fq '"schema_version":"dasall.config.validate.v1"' "${VALIDATE_JSON}"
 
-dasall config plan --from-file "${DESIRED_FILE}" --json > "${PLAN_JSON}"
+dasall-cli config plan --from-file "${DESIRED_FILE}" --json > "${PLAN_JSON}"
 grep -Fq '"schema_version":"dasall.config.plan.v1"' "${PLAN_JSON}"
 if [ "${SECRET_ALREADY_CONFIGURED}" -eq 0 ]; then
   grep -Fq '"ref":"secret://llm/providers/deepseek-prod"' "${PLAN_JSON}"
 fi
 grep -Fq '"service_start_requested":true' "${PLAN_JSON}"
 
-dasall config apply --from-file "${DESIRED_FILE}" --no-input --json > "${APPLY_JSON}"
+dasall-cli config apply --from-file "${DESIRED_FILE}" --no-input --json > "${APPLY_JSON}"
 grep -Fq '"outcome":"applied"' "${APPLY_JSON}"
 if [ "${SECRET_ALREADY_CONFIGURED}" -eq 0 ]; then
   grep -Fq '"written_secret_refs":["secret://llm/providers/deepseek-prod"]' "${APPLY_JSON}"
@@ -161,7 +161,24 @@ chmod 640 "${LLM_SECRET_PATH}"
 
 wait_for_daemon_ready
 
-dasall config show --json > "${SHOW_AFTER_JSON}"
+set +e
+TUI_STDERR=$(dasall 2>&1)
+TUI_EXIT_CODE=$?
+set -e
+[ "${TUI_EXIT_CODE}" -eq 1 ] || {
+  printf 'bare dasall should fail closed without a TTY, got %s: %s\n' "${TUI_EXIT_CODE}" "${TUI_STDERR}" >&2
+  exit 1
+}
+printf '%s\n' "${TUI_STDERR}" | grep -Fq 'stdin is not attached to a TTY' || {
+  printf 'bare dasall should explain the non-TTY startup blocker, got: %s\n' "${TUI_STDERR}" >&2
+  exit 1
+}
+printf '%s\n' "${TUI_STDERR}" | grep -Fq 'Use dasall-cli for non-interactive control-plane tasks.' || {
+  printf 'bare dasall should redirect non-interactive usage to dasall-cli, got: %s\n' "${TUI_STDERR}" >&2
+  exit 1
+}
+
+dasall-cli config show --json > "${SHOW_AFTER_JSON}"
 grep -Fq '"schema_version":"dasall.config.summary.v1"' "${SHOW_AFTER_JSON}"
 
 systemctl is-active --quiet dasall-daemon.service
@@ -169,9 +186,9 @@ test -S /run/dasall/daemon.sock
 test "$(stat -c '%U:%G' /run/dasall/daemon.sock)" = "dasall:dasall"
 test "$(stat -c '%a' /run/dasall/daemon.sock)" = "600"
 
-dasall ping --json >/dev/null
-dasall readiness --json >/dev/null
-RUN_JSON=$(dasall run '{"prompt":"package smoke"}' --json --timeout-ms 120000)
+dasall-cli ping --json >/dev/null
+dasall-cli readiness --json >/dev/null
+RUN_JSON=$(dasall-cli run '{"prompt":"package smoke"}' --json --timeout-ms 120000)
 assert_json_contains "${RUN_JSON}" '"disposition":"completed"' 'run smoke'
 assert_json_contains "${RUN_JSON}" '"task_completed":true' 'run smoke'
 assert_json_contains "${RUN_JSON}" 'llm.origin=deepseek-prod/' 'llm response payload'
@@ -236,7 +253,7 @@ systemctl start dasall-daemon.service
 wait_for_daemon_ready
 
 set +e
-STATUS_JSON=$(dasall status receipt:missing token local://uid/0 --json 2>&1)
+STATUS_JSON=$(dasall-cli status receipt:missing token local://uid/0 --json 2>&1)
 STATUS_CODE=$?
 set -e
 [ "${STATUS_CODE}" -eq 5 ] || {
@@ -246,7 +263,7 @@ set -e
 assert_json_contains "${STATUS_JSON}" '"error_ref":"status_missing"' 'status missing receipt'
 
 set +e
-CANCEL_JSON=$(dasall cancel receipt:missing token local://uid/0 --json 2>&1)
+CANCEL_JSON=$(dasall-cli cancel receipt:missing token local://uid/0 --json 2>&1)
 CANCEL_CODE=$?
 set -e
 [ "${CANCEL_CODE}" -eq 5 ] || {
@@ -255,7 +272,7 @@ set -e
 }
 assert_json_contains "${CANCEL_JSON}" '"error_ref":"cancel_missing"' 'cancel missing receipt'
 
-DIAG_JSON=$(dasall diag health --json)
+DIAG_JSON=$(dasall-cli diag health --json)
 assert_json_contains "${DIAG_JSON}" '"disposition":"completed"' 'diag health'
 assert_json_contains "${DIAG_JSON}" 'diagnostics redacted health snapshot' 'diag health'
 
@@ -265,4 +282,4 @@ test -f /usr/share/dasall/llm/providers/deepseek/manifest.yaml
 test -f /usr/share/dasall/docs/architecture/DASALL_Engineering_Blueprint.md
 test -f /usr/share/dasall/docs/adr/ADR-006-context-orchestrator-vs-prompt-composer.md
 test -f /usr/share/dasall/docs/ssot/BusinessChainIntegrationMatrix.md
-dasall version >/dev/null
+dasall-cli version >/dev/null

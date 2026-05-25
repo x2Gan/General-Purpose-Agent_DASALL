@@ -8,7 +8,7 @@ First deployment steps
 ----------------------
 
 1. P0 operator path is root/sudo-only.
-   Run the installed operator workflow as: sudo dasall config
+   Run the installed operator workflow as: sudo dasall-cli config
 
 2. Canonical files remain:
    - /etc/default/dasall-daemon for profile selection
@@ -25,7 +25,7 @@ First deployment steps
 5. Verify the service:
 
    systemctl status dasall-daemon.service
-   sudo dasall ping --json
+   sudo dasall-cli ping --json
 
 Runtime paths
 -------------
@@ -35,11 +35,15 @@ Configuration:    /etc/default/dasall-daemon and /etc/dasall/daemon.json
 Runtime socket:   /run/dasall/daemon.sock
 State data:       /var/lib/dasall/
 
-Local CLI access
-----------------
+Command surface
+---------------
 
-The installed command name is dasall. The source-tree name dasall-cli is not
-part of the package-facing operator surface.
+The installed command names are split by role:
 
-The v1 operator path is root/sudo-only. Use sudo dasall for local daemon
-operations until a future non-root access model is explicitly introduced.
+- `dasall` starts the terminal user interface and expects an interactive TTY.
+- `dasall-cli` is the structured control-plane command for operator workflows,
+  automation, package scripts, and non-interactive daemon access.
+
+The v1 operator path remains root/sudo-only. Use `sudo dasall-cli` for local
+daemon operations until a future non-root access model is explicitly
+introduced.
