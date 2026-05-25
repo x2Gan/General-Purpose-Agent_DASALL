@@ -37,6 +37,10 @@ add_executable(dasall_tui_next_preference_integration_test
   ${CMAKE_SOURCE_DIR}/apps/tui/src/ipc/TuiIpcController.cpp
 )
 
+add_executable(dasall_tui_submit_turn_integration_test
+  ${CMAKE_CURRENT_SOURCE_DIR}/TuiAppSubmitTurnIntegrationTest.cpp
+)
+
 add_executable(dasall_tui_entrypoint_smoke_integration_test
   ${CMAKE_CURRENT_SOURCE_DIR}/DasallTuiEntrypointSmokeTest.cpp
 )
@@ -92,6 +96,12 @@ target_link_libraries(dasall_tui_next_preference_integration_test
     dasall_platform
 )
 
+target_link_libraries(dasall_tui_submit_turn_integration_test
+  PRIVATE
+    dasall_test_support
+    dasall_tui_prototype_core
+)
+
 target_link_libraries(dasall_tui_entrypoint_smoke_integration_test
   PRIVATE
     dasall_test_support
@@ -142,6 +152,7 @@ dasall_apply_common_options(dasall_tui_prototype_smoke_integration_test)
 dasall_apply_common_options(dasall_tui_status_panel_integration_test)
 dasall_apply_common_options(dasall_tui_session_lifecycle_integration_test)
 dasall_apply_common_options(dasall_tui_next_preference_integration_test)
+dasall_apply_common_options(dasall_tui_submit_turn_integration_test)
 dasall_apply_common_options(dasall_tui_entrypoint_smoke_integration_test)
 dasall_apply_common_options(dasall_tui_socket_override_integration_test)
 
@@ -166,6 +177,9 @@ set_tests_properties(TuiSessionLifecycleIntegrationTest PROPERTIES LABELS "integ
 add_test(NAME TuiNextPreferenceIntegrationTest COMMAND dasall_tui_next_preference_integration_test)
 set_tests_properties(TuiNextPreferenceIntegrationTest PROPERTIES LABELS "integration;tui")
 
+add_test(NAME TuiAppSubmitTurnIntegrationTest COMMAND dasall_tui_submit_turn_integration_test)
+set_tests_properties(TuiAppSubmitTurnIntegrationTest PROPERTIES LABELS "integration;tui")
+
 add_test(NAME DasallTuiEntrypointSmokeTest COMMAND dasall_tui_entrypoint_smoke_integration_test)
 set_tests_properties(DasallTuiEntrypointSmokeTest PROPERTIES LABELS "integration;tui")
 
@@ -185,6 +199,7 @@ list(APPEND DASALL_APPS_TUI_INTEGRATION_TEST_EXECUTABLE_TARGETS
   dasall_tui_status_panel_integration_test
   dasall_tui_session_lifecycle_integration_test
   dasall_tui_next_preference_integration_test
+  dasall_tui_submit_turn_integration_test
   dasall_tui_entrypoint_smoke_integration_test
   dasall_tui_socket_override_integration_test
 )

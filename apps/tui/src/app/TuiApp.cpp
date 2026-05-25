@@ -104,6 +104,16 @@ void apply_reduced_action(model::TuiScreenModel& screen_model,
   return action;
 }
 
+[[nodiscard]] model::TuiAction make_event_action(
+    data::TuiEventProjection event,
+    std::string debug_reason) {
+  TuiAction action;
+  action.type = TuiActionType::EventAppended;
+  action.debug_reason = std::move(debug_reason);
+  action.event = std::move(event);
+  return action;
+}
+
 [[nodiscard]] model::TuiAction make_foreground_session_reset_action(
     std::string debug_reason) {
   TuiAction action;
@@ -129,6 +139,18 @@ void apply_reduced_action(model::TuiScreenModel& screen_model,
     const data::TuiDataSourceIssue& issue) {
   return issue.reason_code == "socket_missing" ||
          issue.reason_code == "daemon_unavailable";
+}
+
+[[nodiscard]] data::TuiEventProjection make_submit_receipt_event(
+    const data::TuiTurnReceipt& receipt,
+    std::string_view session_id) {
+  data::TuiEventProjection event;
+  event.event_kind = "turn_receipt";
+  event.session_id = receipt.session_id.empty() ? std::string(session_id)
+                                                : receipt.session_id;
+  event.timestamp = receipt.submitted_at;
+  event.turn_receipt = receipt;
+  return event;
 }
 
 }  // namespace
@@ -226,6 +248,10 @@ void TuiApp::dispatch_action(const model::TuiAction& action) {
       handle_foreground_session_clear();
       break;
 
+    case TuiActionType::TurnSubmitRequested:
+      dispatch_composer_submit();
+      break;
+
     case TuiActionType::ExitRequested:
       exit_requested_ = true;
       shutdown_close_reason_ = "/exit";
@@ -321,6 +347,76 @@ void TuiApp::clear_composer_draft_preserving_history() {
       .text = std::string{},
   };
   static_cast<void>(composer_.handle_key(event));
+}
+
+void TuiApp::restore_composer_draft(std::string text,
+                                    const std::size_t cursor_offset) {
+  static_cast<void>(composer_.set_busy(false));
+  const view::TuiComposerKeyEvent event{
+      .key = view::TuiComposerKey::TextChanged,
+      .text = std::move(text),
+      .cursor_offset = cursor_offset,
+  };
+  static_cast<void>(composer_.handle_key(event));
+  sync_composer_state();
+}
+
+void TuiApp::dispatch_composer_submit() {
+  if (!session_open_ || session_id_.empty() || data_source_ == nullptr) {
+    apply_reduced_action(screen_model_,
+                         make_banner_action(model::TuiBannerLevel::Error,
+                                            "Turn submit unavailable",
+                                            "No active session is attached to the formal submit path.",
+                                            "submit_unavailable",
+                                            "turn_submit_unavailable",
+                                            true));
+    return;
+  }
+
+  const std::string previous_draft = composer_.state().text;
+  const std::size_t previous_cursor_offset = composer_.state().cursor_offset;
+  const view::TuiComposerUpdate update = composer_.handle_key(
+      view::TuiComposerKeyEvent{.key = view::TuiComposerKey::Enter, .text = {}});
+  sync_composer_state();
+
+  if (update.action.type != view::TuiComposerActionType::SubmitRequested) {
+    return;
+  }
+
+  const data::TuiSubmitTurnRequest request{
+      .session_id = session_id_,
+      .user_input = update.action.text,
+      .next_preference = screen_model_.route.next_preference,
+      .request_id = next_request_id("submit_turn"),
+      .trace_id = next_trace_id("submit_turn"),
+  };
+  data::TuiSubmitTurnResult result = data_source_->submit_turn(request);
+  if (!result.ok()) {
+    restore_composer_draft(previous_draft, previous_cursor_offset);
+    if (result.issue.has_value()) {
+      last_error_ = result.issue->message;
+      append_issue_banner(*result.issue,
+                          result.issue->reason_code == "validation_failed"
+                              ? "Turn submit rejected"
+                              : "Turn submit failed");
+    }
+    return;
+  }
+
+  last_error_.clear();
+  apply_reduced_action(screen_model_,
+                       make_event_action(
+                           make_submit_receipt_event(*result.receipt, session_id_),
+                           "submit_turn_receipt"));
+  apply_reduced_action(screen_model_,
+                       make_banner_action(
+                           model::TuiBannerLevel::Info,
+                           "Turn submitted",
+                           result.receipt->summary_text.empty()
+                               ? result.receipt->disposition
+                               : result.receipt->summary_text,
+                           result.receipt->reason_code.value_or(std::string{}),
+                           "turn_submit_requested"));
 }
 
 void TuiApp::handle_foreground_session_clear() {

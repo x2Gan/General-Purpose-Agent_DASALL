@@ -1,3 +1,32 @@
+# 记录 #806
+
+- 日期：2026-05-25
+- 阶段：tui/formal submit handoff implementation
+- 任务：TUI-TODO-040 接通 formal composer submit 到 `submit_turn()`
+- 状态：已完成（代码、测试、TODO 回写已落盘；提交与推送待本轮 submission）
+
+### 改动
+
+1. 更新 `apps/tui/src/model/TuiAction.h` 与 `apps/tui/src/model/TuiReducer.cpp`，新增 `TuiActionType::TurnSubmitRequested`，把 formal submit handoff 纳入 typed request action contract。
+2. 更新 `apps/tui/src/app/TuiApp.h/.cpp`，新增 `dispatch_composer_submit()` 与 `restore_composer_draft(...)`，由 app loop 组装真实 `TuiSubmitTurnRequest`，并把 success / failure / `validation_failed` 投影回 transcript、banner 与 composer state。
+3. 新增 `tests/integration/tui/TuiAppSubmitTurnIntegrationTest.cpp`，并更新 `tests/integration/tui/CMakeLists.txt` 与 `tests/integration/tui/TuiIntegrationTopologySmokeTest.cpp`，注册 `dasall_tui_submit_turn_integration_test` / `TuiAppSubmitTurnIntegrationTest`，覆盖 request 组装、receipt projection、validation rejected draft 恢复与 discoverability。
+4. 新增 `docs/todos/tui/deliverables/TUI-TODO-040-formal-composer-submit-handoff.md`，并同步回写 TUI 专项 TODO 与总账：`TUI-TODO-040` Done，`BLK-TUI-010` Closed，下一原子任务转为 `TUI-TODO-041`。
+
+### 验证
+
+1. `Build_CMakeTools(buildTargets=["dasall_tui_submit_turn_integration_test","dasall_tui_integration_topology_smoke_integration_test"])`
+   - 结果：通过。
+2. `RunCtest_CMakeTools(tests=["TuiAppSubmitTurnIntegrationTest","TuiTestTopologyDiscoverability"])`
+   - 结果：工具仍返回仓库已知泛化 `生成失败`，未给出具体失败用例。
+3. `./build/vscode-linux-ninja/tests/integration/tui/dasall_tui_submit_turn_integration_test && ./build/vscode-linux-ninja/tests/integration/tui/dasall_tui_integration_topology_smoke_integration_test && echo PASS`
+   - 结果：通过；输出 `PASS`。
+
+### 结果
+
+1. formal `TuiApp` 现可把 composer draft、foreground session id、request/trace id 与 next-turn preference 组装成真实 `submit_turn()` request，并把 success / failure / `validation_failed` 投影回 screen model。
+2. `BLK-TUI-010` 已关闭，但仓库仍未具备 true daemon-backed E2E 或 installed release-ready 结论；040 只建立 scripted/headless submit integration 基线。
+3. 下一原子任务：`TUI-TODO-041` 增加真实 daemon-backed TUI E2E harness。
+
 # 记录 #805
 
 - 日期：2026-05-25

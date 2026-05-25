@@ -283,6 +283,7 @@ TuiScreenModel reduce(TuiScreenModel current, TuiAction action) {
     case TuiActionType::StatusQueryRequested:
     case TuiActionType::SessionQueryRequested:
     case TuiActionType::ForegroundSessionClearRequested:
+    case TuiActionType::TurnSubmitRequested:
     case TuiActionType::ExitRequested:
       // Request actions are fulfilled by the app loop or data source.
       clear_debug_reason_if_unspecified(current, action);

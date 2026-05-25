@@ -65,6 +65,7 @@ enum class TuiActionType {
   SessionQueryRequested,
   ForegroundSessionResetApplied,
   ForegroundSessionClearRequested,
+  TurnSubmitRequested,
   ExitRequested,
 };
 
