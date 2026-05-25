@@ -5,6 +5,12 @@
 
 namespace dasall::tui::data {
 
+inline constexpr std::string_view kTuiDaemonSocketOverrideEnv =
+  "DASALL_TUI_DAEMON_SOCKET";
+
+[[nodiscard]] ipc::TuiIpcControllerOptions
+resolve_daemon_tui_controller_options_from_environment();
+
 class DaemonTuiDataSource final : public ITuiDataSource {
  public:
   DaemonTuiDataSource();

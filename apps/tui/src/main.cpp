@@ -57,8 +57,8 @@ void print_usage(std::ostream& output) {
   dasall::tui::app::TuiAppOptions options;
 #if DASALL_TUI_FORMAL_ENTRYPOINT
   options.scenario_id = "daemon";
-  options.data_source_override =
-      std::make_unique<dasall::tui::data::DaemonTuiDataSource>();
+  options.data_source_override = std::make_unique<dasall::tui::data::DaemonTuiDataSource>(
+      dasall::tui::data::resolve_daemon_tui_controller_options_from_environment());
 #else
   options.scenario_id = "planning_tools";
   options.bootstrap_tick_count = 2;

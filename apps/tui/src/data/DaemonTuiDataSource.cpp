@@ -1,8 +1,19 @@
 #include "data/DaemonTuiDataSource.h"
 
+#include <cstdlib>
 #include <utility>
 
 namespace dasall::tui::data {
+
+ipc::TuiIpcControllerOptions
+resolve_daemon_tui_controller_options_from_environment() {
+  ipc::TuiIpcControllerOptions options;
+  const char* const value = std::getenv(kTuiDaemonSocketOverrideEnv.data());
+  if (value != nullptr && value[0] != '\0') {
+    options.socket_path = value;
+  }
+  return options;
+}
 
 DaemonTuiDataSource::DaemonTuiDataSource() = default;
 

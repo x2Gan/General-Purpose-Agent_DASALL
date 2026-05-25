@@ -1,3 +1,34 @@
+# 记录 #805
+
+- 日期：2026-05-25
+- 阶段：tui/formal socket override implementation
+- 任务：TUI-TODO-039 增加 formal TUI socket override 与 headless test seam
+- 状态：已完成（代码、测试、TODO 回写已落盘；提交与推送待本轮 submission）
+
+### 改动
+
+1. 更新 `apps/tui/src/data/DaemonTuiDataSource.h/.cpp`，新增 `DASALL_TUI_DAEMON_SOCKET` 与 `resolve_daemon_tui_controller_options_from_environment()`，把 formal daemon-backed data source 的 socket override 收敛为 owner-local helper。
+2. 更新 `apps/tui/src/main.cpp`，让 formal `dasall` 通过上述 helper 构造 `DaemonTuiDataSource`；未设置或空值时继续回退到默认 `/run/dasall/daemon.sock`，不改变 production operator model，也不新增隐式 daemon 启动。
+3. 新增 `tests/integration/tui/DasallTuiSocketOverrideTest.cpp`，并更新 `tests/integration/tui/CMakeLists.txt` 与 `tests/integration/tui/TuiIntegrationTopologySmokeTest.cpp`，注册 `dasall_tui_socket_override_integration_test` / `DasallTuiSocketOverrideTest`，覆盖默认 socket path、环境覆盖、空值回退、formal main wiring 与 integration topology discoverability。
+4. 新增 `docs/todos/tui/deliverables/TUI-TODO-039-formal-tui-socket-override.md`，并同步回写 TUI 专项 TODO 与总账：`TUI-TODO-039` Done，`BLK-TUI-010` 继续保持 Open，下一原子任务转为 `TUI-TODO-040`。
+
+### 验证
+
+1. `Build_CMakeTools(buildTargets=["dasall-tui","dasall_tui_socket_override_integration_test","dasall_tui_integration_topology_smoke_integration_test"])`
+   - 结果：通过。
+2. `ListTests_CMakeTools()`
+   - 结果：通过；输出包含 `DasallTuiSocketOverrideTest`。
+3. `RunCtest_CMakeTools(tests=["DasallTuiSocketOverrideTest","TuiTestTopologyDiscoverability"])`
+   - 结果：工具仍返回仓库已知泛化 `生成失败`，未给出具体失败用例。
+4. `./build/vscode-linux-ninja/tests/integration/tui/dasall_tui_socket_override_integration_test && ./build/vscode-linux-ninja/tests/integration/tui/dasall_tui_integration_topology_smoke_integration_test && echo PASS`
+   - 结果：通过；输出 `PASS`。
+
+### 结果
+
+1. formal `dasall` 现可通过 `DASALL_TUI_DAEMON_SOCKET` 指向临时 socket，且未设置或空值时仍保持生产默认 socket path。
+2. `TUI-TODO-039` 已完成，但 `BLK-TUI-010` 仍保持 Open；039 只提供 headless socket seam，不代表 submit UX 或真实 daemon-backed E2E 已闭合。
+3. 下一原子任务：`TUI-TODO-040` 接通 formal composer submit 到 `submit_turn()`。
+
 # 记录 #804
 
 - 日期：2026-05-25
