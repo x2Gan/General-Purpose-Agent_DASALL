@@ -36,6 +36,12 @@ add_executable(dasall_tui_prototype EXCLUDE_FROM_ALL
   src/main.cpp
 )
 
+add_executable(dasall-tui
+  src/main.cpp
+  src/data/DaemonTuiDataSource.cpp
+  src/ipc/TuiIpcController.cpp
+)
+
 add_executable(dasall_tui_manual_terminal EXCLUDE_FROM_ALL
   src/manual_terminal_main.cpp
 )
@@ -46,8 +52,11 @@ target_include_directories(dasall_tui_prototype_core
 )
 
 target_compile_features(dasall_tui_prototype PRIVATE cxx_std_20)
+target_compile_features(dasall-tui PRIVATE cxx_std_20)
 target_compile_features(dasall_tui_manual_terminal PRIVATE cxx_std_20)
 target_compile_features(dasall_tui_prototype_core PRIVATE cxx_std_20)
+
+target_compile_definitions(dasall-tui PRIVATE DASALL_TUI_FORMAL_ENTRYPOINT=1)
 
 if(TARGET ftxui::component AND TARGET ftxui::dom AND TARGET ftxui::screen)
   target_compile_definitions(dasall_tui_prototype PRIVATE DASALL_TUI_PROTOTYPE_HAS_FTXUI=1)
@@ -63,11 +72,26 @@ target_link_libraries(dasall_tui_prototype
     dasall_tui_prototype_core
 )
 
+target_link_libraries(dasall-tui
+  PRIVATE
+    dasall_tui_prototype_core
+    dasall_platform
+)
+
 target_link_libraries(dasall_tui_manual_terminal
   PRIVATE
     dasall_tui_prototype_core
 )
 
+set_target_properties(dasall-tui PROPERTIES
+  OUTPUT_NAME dasall
+)
+
+install(TARGETS dasall-tui
+  RUNTIME DESTINATION ${DASALL_INSTALL_BINDIR}
+)
+
 dasall_apply_common_options(dasall_tui_prototype_core)
 dasall_apply_common_options(dasall_tui_prototype)
+dasall_apply_common_options(dasall-tui)
 dasall_apply_common_options(dasall_tui_manual_terminal)

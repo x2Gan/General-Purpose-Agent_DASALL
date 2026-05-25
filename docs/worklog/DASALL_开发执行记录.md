@@ -1,3 +1,36 @@
+# 记录 #801
+
+- 日期：2026-05-24
+- 阶段：tui/command release implementation
+- 任务：TUI-TODO-032 新增正式 TUI `dasall` target
+- 状态：已完成（代码、测试、TODO 回写；未修改 Debian、manpage、postinst、autopkgtest 或 packaging scripts）
+
+### 改动
+
+1. 更新 `apps/tui/CMakeLists.txt`，新增正式 executable target `dasall-tui`，编译 `DaemonTuiDataSource.cpp` 与 `TuiIpcController.cpp`，设置 `OUTPUT_NAME dasall`，并添加 `install(TARGETS dasall-tui RUNTIME DESTINATION ${DASALL_INSTALL_BINDIR})`。
+2. 更新 `apps/tui/src/main.cpp`，通过 `DASALL_TUI_FORMAL_ENTRYPOINT` 区分正式 daemon-backed 入口与 prototype fake-only 入口：正式 target 默认使用 `DaemonTuiDataSource`，prototype 继续保留 `planning_tools` fake 场景、bootstrap tick 与 selector preview。
+3. 新增 `tests/integration/tui/DasallTuiEntrypointSmokeTest.cpp` 并在 `tests/integration/tui/CMakeLists.txt` 注册 `DasallTuiEntrypointSmokeTest`；同步更新 `tests/integration/tui/TuiIntegrationTopologySmokeTest.cpp`，把新 test 纳入 discoverability 检查。
+4. 新增 `docs/todos/tui/deliverables/TUI-TODO-032-formal-dasall-tui-target.md`，并同步回写 TUI 专项 TODO 与子系统查漏补缺总账：`TUI-TODO-032` Done，`TUI-TODO-033` Ready，`TUI-TODO-034` 继续等待 Debian/script 迁移完成后再补命令分流测试。
+
+### 验证
+
+1. `Build_CMakeTools(buildTargets=["dasall-tui"])`
+   - 结果：通过；链接生成 `build/vscode-linux-ninja/apps/tui/dasall`。
+2. `Build_CMakeTools(buildTargets=["dasall-tui","dasall_tui_entrypoint_smoke_integration_test","dasall_tui_integration_topology_smoke_integration_test"])`
+   - 结果：通过。
+3. `ListTests_CMakeTools()`
+   - 结果：通过；输出包含 `DasallTuiEntrypointSmokeTest` 与 `TuiTestTopologyDiscoverability`。
+4. `RunCtest_CMakeTools(tests=["DasallTuiEntrypointSmokeTest","TuiTestTopologyDiscoverability"])`
+   - 结果：工具仍返回仓库已知泛化 `生成失败`，未给出具体失败用例。
+5. `./build/vscode-linux-ninja/tests/integration/tui/dasall_tui_entrypoint_smoke_integration_test && ./build/vscode-linux-ninja/tests/integration/tui/dasall_tui_integration_topology_smoke_integration_test && test -x build/vscode-linux-ninja/apps/tui/dasall && test ! -e build/vscode-linux-ninja/apps/tui/dasall-tui && echo dasall-tui-entrypoint-ok`
+   - 结果：通过。
+
+### 结果
+
+1. `TUI-TODO-032` 已完成，build-tree 现由正式 target `dasall-tui` 生成 bare `build/vscode-linux-ninja/apps/tui/dasall`。
+2. 正式 TUI target 已具备安装规则并默认走 daemon-backed data source；`dasall_tui_prototype` 继续保持 non-installed fake-only 小样，不与正式入口混淆。
+3. 下一原子任务：`TUI-TODO-033` 更新 Debian 命令迁移文件。
+
 # 记录 #800
 
 - 日期：2026-05-24
