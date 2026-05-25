@@ -1,3 +1,32 @@
+# 记录 #807
+
+- 日期：2026-05-25
+- 阶段：tui/daemon-backed e2e implementation
+- 任务：TUI-TODO-041 增加真实 daemon-backed TUI E2E harness
+- 状态：已完成（代码、测试、TODO 回写已落盘；提交与推送待本轮 submission）
+
+### 改动
+
+1. 新增 `tests/integration/tui/TuiDaemonBackedE2ETest.cpp`，定义 `TuiDaemonBackedE2EHarness` 与 `run_formal_tui_roundtrip()`，复用 `DaemonIntegrationHarness` 与 `DaemonTuiDataSource` 在真实临时 socket 上跑通 `open_session -> route_catalog -> submit_turn -> poll_events -> close_session`。
+2. 更新 `tests/integration/tui/CMakeLists.txt` 与 `tests/integration/tui/TuiIntegrationTopologySmokeTest.cpp`，注册 `dasall_tui_daemon_backed_e2e_integration_test` / `TuiDaemonBackedE2ETest`，并把新 test 纳入 integration topology discoverability。
+3. 在 041 harness options 中显式补齐 `tui_ipc.v1` protocol allowlist 与可用 `AsyncTaskRegistry`，保持真实 access gateway 对 accepted_async receipt / ownership token 的真实约束，而不是绕过它们。
+4. 新增 `docs/todos/tui/deliverables/TUI-TODO-041-daemon-backed-tui-e2e.md`，并同步回写 TUI 专项 TODO 与总账：`TUI-TODO-041` Done，下一原子任务转为 `TUI-TODO-042`。
+
+### 验证
+
+1. `Build_CMakeTools(buildTargets=["dasall_tui_daemon_backed_e2e_integration_test","dasall_tui_integration_topology_smoke_integration_test"])`
+   - 结果：通过。
+2. `RunCtest_CMakeTools(tests=["TuiDaemonBackedE2ETest","TuiTestTopologyDiscoverability"])`
+   - 结果：工具仍返回仓库已知泛化 `生成失败`，未给出具体失败用例。
+3. `./build/vscode-linux-ninja/tests/integration/tui/dasall_tui_daemon_backed_e2e_integration_test && ./build/vscode-linux-ninja/tests/integration/tui/dasall_tui_integration_topology_smoke_integration_test && echo PASS`
+   - 结果：通过；输出 `PASS`。
+
+### 结果
+
+1. formal TUI data source 现已具备真实 build-tree daemon-backed E2E 证据，能在临时 socket 上完成 `open_session -> route_catalog -> submit_turn -> poll_events -> close_session`，并验证 accepted_async receipt、status/event projection、route projection 与 close ack。
+2. 041 同时证明了真实链路必须显式放行 `tui_ipc.v1` 且 accepted_async 必须启用 ownership receipt registry；这些约束已保留在测试 harness 中，而不是被测试绕过。
+3. 下一原子任务：`TUI-TODO-042` 增加 installed package TUI daemon-backed smoke。
+
 # 记录 #806
 
 - 日期：2026-05-25

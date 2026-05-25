@@ -41,6 +41,18 @@ add_executable(dasall_tui_submit_turn_integration_test
   ${CMAKE_CURRENT_SOURCE_DIR}/TuiAppSubmitTurnIntegrationTest.cpp
 )
 
+add_executable(dasall_tui_daemon_backed_e2e_integration_test
+  ${CMAKE_CURRENT_SOURCE_DIR}/TuiDaemonBackedE2ETest.cpp
+  ${CMAKE_SOURCE_DIR}/apps/cli/src/CliIpcClient.cpp
+  ${CMAKE_SOURCE_DIR}/apps/daemon/src/DaemonBootstrap.cpp
+  ${CMAKE_SOURCE_DIR}/apps/daemon/src/DaemonLifecycleController.cpp
+  ${CMAKE_SOURCE_DIR}/apps/daemon/src/DaemonListenerHost.cpp
+  ${CMAKE_SOURCE_DIR}/apps/daemon/src/DaemonSocketPolicy.cpp
+  ${CMAKE_SOURCE_DIR}/apps/daemon/src/DaemonSupervisorAdapter.cpp
+  ${CMAKE_SOURCE_DIR}/apps/tui/src/data/DaemonTuiDataSource.cpp
+  ${CMAKE_SOURCE_DIR}/apps/tui/src/ipc/TuiIpcController.cpp
+)
+
 add_executable(dasall_tui_entrypoint_smoke_integration_test
   ${CMAKE_CURRENT_SOURCE_DIR}/DasallTuiEntrypointSmokeTest.cpp
 )
@@ -102,6 +114,23 @@ target_link_libraries(dasall_tui_submit_turn_integration_test
     dasall_tui_prototype_core
 )
 
+target_include_directories(dasall_tui_daemon_backed_e2e_integration_test
+  PRIVATE
+    ${CMAKE_SOURCE_DIR}/access/src
+    ${CMAKE_SOURCE_DIR}/apps/cli/src
+    ${CMAKE_SOURCE_DIR}/apps/daemon/src
+    ${CMAKE_SOURCE_DIR}/apps/tui/src
+    ${CMAKE_SOURCE_DIR}/tests/integration/access
+)
+
+target_link_libraries(dasall_tui_daemon_backed_e2e_integration_test
+  PRIVATE
+    dasall_test_support
+    dasall_access
+    dasall_infra
+    dasall_platform
+)
+
 target_link_libraries(dasall_tui_entrypoint_smoke_integration_test
   PRIVATE
     dasall_test_support
@@ -153,6 +182,7 @@ dasall_apply_common_options(dasall_tui_status_panel_integration_test)
 dasall_apply_common_options(dasall_tui_session_lifecycle_integration_test)
 dasall_apply_common_options(dasall_tui_next_preference_integration_test)
 dasall_apply_common_options(dasall_tui_submit_turn_integration_test)
+dasall_apply_common_options(dasall_tui_daemon_backed_e2e_integration_test)
 dasall_apply_common_options(dasall_tui_entrypoint_smoke_integration_test)
 dasall_apply_common_options(dasall_tui_socket_override_integration_test)
 
@@ -180,6 +210,9 @@ set_tests_properties(TuiNextPreferenceIntegrationTest PROPERTIES LABELS "integra
 add_test(NAME TuiAppSubmitTurnIntegrationTest COMMAND dasall_tui_submit_turn_integration_test)
 set_tests_properties(TuiAppSubmitTurnIntegrationTest PROPERTIES LABELS "integration;tui")
 
+add_test(NAME TuiDaemonBackedE2ETest COMMAND dasall_tui_daemon_backed_e2e_integration_test)
+set_tests_properties(TuiDaemonBackedE2ETest PROPERTIES LABELS "integration;tui")
+
 add_test(NAME DasallTuiEntrypointSmokeTest COMMAND dasall_tui_entrypoint_smoke_integration_test)
 set_tests_properties(DasallTuiEntrypointSmokeTest PROPERTIES LABELS "integration;tui")
 
@@ -200,6 +233,7 @@ list(APPEND DASALL_APPS_TUI_INTEGRATION_TEST_EXECUTABLE_TARGETS
   dasall_tui_session_lifecycle_integration_test
   dasall_tui_next_preference_integration_test
   dasall_tui_submit_turn_integration_test
+  dasall_tui_daemon_backed_e2e_integration_test
   dasall_tui_entrypoint_smoke_integration_test
   dasall_tui_socket_override_integration_test
 )
