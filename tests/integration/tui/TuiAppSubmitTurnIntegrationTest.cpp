@@ -242,6 +242,11 @@ void tui_app_submit_turn_assembles_request_and_projects_receipt() {
   assert_equal(std::string("submitting"),
                app.screen_model().composer.mode,
                "successful submit should keep the composer in submitting mode until later polling updates arrive");
+  assert_true(app.screen_model().composer.activity_indicator.find("processing") !=
+                  std::string::npos,
+              "successful submit should expose a processing spinner while the daemon turn is pending");
+  assert_true(app.last_rendered_screen().find("processing") != std::string::npos,
+              "successful submit should render the processing spinner before the next poll completes");
   assert_equal(std::string(),
                app.screen_model().composer.text,
                "successful submit should clear the composer draft after dispatch");

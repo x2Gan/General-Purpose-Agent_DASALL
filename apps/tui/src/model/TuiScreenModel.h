@@ -32,6 +32,8 @@ struct TuiComposerState {
 struct TuiScreenModel {
   data::TuiSessionView session;
   std::vector<TuiMessageView> transcript;
+  std::size_t transcript_scroll_offset = 0;
+  bool transcript_follow_tail = true;
   data::TuiStatusProjection status;
   data::TuiModelRouteProjection route;
   TuiComposerState composer;

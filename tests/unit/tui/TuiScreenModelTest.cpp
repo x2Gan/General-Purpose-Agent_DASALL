@@ -88,6 +88,7 @@ void screen_model_and_action_expose_expected_default_shape() {
                static_cast<int>(model.focus),
                "TuiScreenModel should default focus to the composer");
   assert_true(model.session.session_id.empty() && model.transcript.empty() &&
+            model.transcript_scroll_offset == 0U && model.transcript_follow_tail &&
                   model.status.stage.empty() && model.route.current_model_id.empty() &&
                   model.composer.mode == "ready" && model.banners.empty() &&
                   model.debug_reason.empty(),

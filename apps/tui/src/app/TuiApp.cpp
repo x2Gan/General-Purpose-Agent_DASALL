@@ -19,6 +19,7 @@
 #include "command/TuiSlashCommandParser.h"
 #include "model/TuiReducer.h"
 #include "view/TuiTextWidth.h"
+#include "view/TuiTranscriptView.h"
 
 namespace dasall::tui::app {
 namespace {
@@ -93,7 +94,7 @@ void write_interactive_stdout(std::string_view text) {
 }
 
 [[nodiscard]] std::string_view interactive_redraw_prefix() noexcept {
-  return "\x1b[?25l\x1b[H\x1b[J";
+  return "\x1b[?25l\x1b[H";
 }
 
 class InteractiveTerminalSession {
@@ -246,6 +247,30 @@ class InteractiveResizeSignalGuard {
   return true;
 }
 
+[[nodiscard]] bool is_csi_tilde_sequence(std::string_view sequence,
+                                         const char leading_digit) noexcept {
+  if (sequence.size() < 4U || sequence[0] != '\x1b' || sequence[1] != '[' ||
+      sequence[2] != leading_digit || sequence.back() != '~') {
+    return false;
+  }
+
+  for (std::size_t index = 3U; index + 1U < sequence.size(); ++index) {
+    const char byte = sequence[index];
+    if ((byte < '0' || byte > '9') && byte != ';') {
+      return false;
+    }
+  }
+  return true;
+}
+
+[[nodiscard]] bool is_page_up_sequence(std::string_view sequence) noexcept {
+  return is_csi_tilde_sequence(sequence, '5');
+}
+
+[[nodiscard]] bool is_page_down_sequence(std::string_view sequence) noexcept {
+  return is_csi_tilde_sequence(sequence, '6');
+}
+
 [[nodiscard]] bool is_escape_sequence_final_byte(const unsigned char byte) noexcept {
   return byte >= 0x40U && byte <= 0x7EU;
 }
@@ -373,6 +398,21 @@ void apply_reduced_action(model::TuiScreenModel& screen_model,
   }
 
   return std::string(text.substr(start, end - start));
+}
+
+[[nodiscard]] std::size_t saturating_sub_size(const std::size_t left,
+                                              const std::size_t right) noexcept {
+  return left > right ? left - right : 0U;
+}
+
+[[nodiscard]] std::size_t transcript_max_scroll_offset(
+    const std::size_t total_line_count,
+    const std::size_t viewport_height) noexcept {
+  if (viewport_height == 0 || total_line_count <= viewport_height) {
+    return 0;
+  }
+
+  return total_line_count - viewport_height;
 }
 
 [[nodiscard]] std::string session_modal_body(
@@ -603,6 +643,7 @@ int TuiApp::run_interactive_session() {
     write_interactive_stdout(encode_interactive_newlines(last_rendered_screen_));
     write_interactive_stdout("\x1b[H");
   };
+  interactive_redraw_hook_ = redraw;
 
   redraw();
 
@@ -700,6 +741,10 @@ int TuiApp::run_interactive_session() {
           static_cast<void>(composer_.handle_key(
               view::TuiComposerKeyEvent{.key = view::TuiComposerKey::Delete, .text = {}}));
           sync_composer_state();
+        } else if (is_page_up_sequence(sequence)) {
+          scroll_transcript_page(-1);
+        } else if (is_page_down_sequence(sequence)) {
+          scroll_transcript_page(1);
         } else if (sequence == "\x1b\r" || sequence == "\x1b\n") {
           static_cast<void>(composer_.handle_key(
               view::TuiComposerKeyEvent{.key = view::TuiComposerKey::AltEnter, .text = {}}));
@@ -771,6 +816,7 @@ int TuiApp::run_interactive_session() {
     redraw();
   }
 
+  interactive_redraw_hook_ = nullptr;
   return shutdown();
 #endif
 }
@@ -971,6 +1017,9 @@ void TuiApp::dispatch_composer_submit() {
   if (update.action.type != view::TuiComposerActionType::SubmitRequested) {
     return;
   }
+
+  set_processing_indicator();
+  request_interactive_redraw();
 
   const data::TuiSubmitTurnRequest request{
       .session_id = session_id_,
@@ -1261,8 +1310,78 @@ void TuiApp::sync_composer_state() {
 }
 
 void TuiApp::sync_composer_busy_from_status() {
-  static_cast<void>(composer_.set_busy(status_requires_busy_composer(screen_model_.status)));
+  const bool busy = status_requires_busy_composer(screen_model_.status);
+  static_cast<void>(composer_.set_busy(busy));
   sync_composer_state();
+  if (busy) {
+    set_processing_indicator();
+  } else {
+    screen_model_.composer.activity_indicator.clear();
+  }
+}
+
+void TuiApp::set_processing_indicator() {
+  if (animation_spinner_index_ == 0U) {
+    screen_model_.composer.activity_indicator = dots_spinner_frame(0U);
+    return;
+  }
+
+  screen_model_.composer.activity_indicator = dots_spinner_frame(animation_spinner_index_);
+}
+
+void TuiApp::request_interactive_redraw() {
+  if (interactive_redraw_hook_) {
+    interactive_redraw_hook_();
+    return;
+  }
+
+  render_current_screen(false);
+}
+
+void TuiApp::scroll_transcript_page(const int direction) {
+  const view::TuiLayoutMetrics metrics = renderer_.apply_layout_metrics(
+      effective_terminal_width(),
+      effective_terminal_height());
+  const std::size_t transcript_width = saturating_sub_size(metrics.transcript.width, 2U);
+  const std::size_t transcript_height = saturating_sub_size(metrics.transcript.height, 2U);
+  const std::size_t transcript_wrap_width =
+      transcript_width > renderer_.design_tokens().spacing.transcript_indent
+          ? transcript_width - renderer_.design_tokens().spacing.transcript_indent
+          : 1U;
+
+  view::TuiTranscriptView transcript_view(screen_model_.transcript);
+  if (screen_model_.transcript_follow_tail) {
+    transcript_view.scroll_to_bottom(transcript_height, transcript_wrap_width);
+  } else {
+    transcript_view.set_scroll_offset(screen_model_.transcript_scroll_offset);
+  }
+  const auto rendered_transcript = transcript_view.render_transcript(
+      transcript_height,
+      transcript_wrap_width);
+  const std::size_t max_offset = transcript_max_scroll_offset(
+      rendered_transcript.total_line_count,
+      transcript_height);
+  if (max_offset == 0U) {
+    screen_model_.transcript_scroll_offset = 0;
+    screen_model_.transcript_follow_tail = true;
+    return;
+  }
+
+  const std::size_t current_offset = rendered_transcript.scroll_offset;
+  const std::size_t page_step = transcript_height > 1U ? transcript_height - 1U : 1U;
+  if (direction < 0) {
+    screen_model_.transcript_scroll_offset = current_offset > page_step
+        ? current_offset - page_step
+        : 0U;
+    screen_model_.transcript_follow_tail = false;
+  } else {
+    screen_model_.transcript_scroll_offset = std::min(max_offset,
+                                                      current_offset + page_step);
+    screen_model_.transcript_follow_tail =
+        screen_model_.transcript_scroll_offset >= max_offset;
+  }
+  screen_model_.focus = model::TuiFocusState::Transcript;
+  screen_model_.debug_reason = direction < 0 ? "transcript_page_up" : "transcript_page_down";
 }
 
 bool TuiApp::advance_interactive_animation() {

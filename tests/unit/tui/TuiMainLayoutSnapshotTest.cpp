@@ -498,6 +498,76 @@ void main_layout_snapshot_renders_cursor_and_waiting_spinner() {
               "composer should keep pending state metadata separate from the input-line spinner");
 }
 
+void main_layout_snapshot_bottom_anchors_long_transcript() {
+  const auto loaded = FakeScenarioCatalog::load("golden_ready");
+  assert_true(loaded.ok(), "golden_ready should load for the long transcript snapshot");
+
+  std::vector<TuiMessageView> transcript;
+  for (int index = 0; index < 24; ++index) {
+    transcript.push_back(TuiMessageView{.role = index % 2 == 0 ? "user" : "assistant",
+                                        .content = "long transcript message " +
+                                                   std::to_string(index),
+                                        .timestamp = "2026-05-25T10:20:00Z",
+                                        .badges = {"history"}});
+  }
+
+  const TuiScreenModel model = make_screen_model(
+      *loaded.scenario,
+      std::move(transcript),
+      TuiComposerState{.text = "",
+                       .mode = "ready",
+                       .history_query = std::nullopt,
+                       .can_submit = true,
+                       .dirty = false,
+                       .cursor_visible = true,
+                       .activity_indicator = {}},
+      TuiFocusState::Composer);
+
+  const FtxuiRendererAdapter renderer;
+  const std::string screen = renderer.render_to_screen(model, 120, 36);
+
+  assert_true(screen.find("long transcript message 0") == std::string::npos,
+              "long transcript snapshots should no longer pin the viewport to the oldest row");
+  assert_true(screen.find("long transcript message 23") != std::string::npos,
+              "long transcript snapshots should keep the latest row visible by default");
+}
+
+void main_layout_snapshot_honors_manual_transcript_scroll_offset() {
+  const auto loaded = FakeScenarioCatalog::load("golden_ready");
+  assert_true(loaded.ok(), "golden_ready should load for the manual transcript scroll snapshot");
+
+  std::vector<TuiMessageView> transcript;
+  for (int index = 0; index < 24; ++index) {
+    transcript.push_back(TuiMessageView{.role = index % 2 == 0 ? "user" : "assistant",
+                                        .content = "manual scroll message " +
+                                                   std::to_string(index),
+                                        .timestamp = "2026-05-25T10:24:00Z",
+                                        .badges = {"history"}});
+  }
+
+  TuiScreenModel model = make_screen_model(
+      *loaded.scenario,
+      std::move(transcript),
+      TuiComposerState{.text = "",
+                       .mode = "ready",
+                       .history_query = std::nullopt,
+                       .can_submit = true,
+                       .dirty = false,
+                       .cursor_visible = true,
+                       .activity_indicator = {}},
+      TuiFocusState::Transcript);
+  model.transcript_follow_tail = false;
+  model.transcript_scroll_offset = 0;
+
+  const FtxuiRendererAdapter renderer;
+  const std::string screen = renderer.render_to_screen(model, 120, 36);
+
+  assert_true(screen.find("manual scroll message 0") != std::string::npos,
+              "manual transcript scroll should keep the selected older rows visible");
+  assert_true(screen.find("manual scroll message 23") == std::string::npos,
+              "manual transcript scroll should not force the viewport back to the latest row");
+}
+
 void main_layout_snapshot_renders_cursor_inside_composer_text() {
   const auto loaded = FakeScenarioCatalog::load("golden_ready");
   assert_true(loaded.ok(), "golden_ready should load for the cursor placement snapshot");
@@ -559,6 +629,8 @@ int main() {
     main_layout_snapshot_session_modal_clears_underlying_status_rows();
     main_layout_snapshot_renders_busy_draft_banner();
     main_layout_snapshot_renders_cursor_and_waiting_spinner();
+    main_layout_snapshot_bottom_anchors_long_transcript();
+    main_layout_snapshot_honors_manual_transcript_scroll_offset();
     main_layout_snapshot_renders_cursor_inside_composer_text();
     renderer_files_avoid_owner_private_dependencies();
   } catch (const std::exception& exception) {

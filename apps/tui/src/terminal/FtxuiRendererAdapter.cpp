@@ -172,16 +172,17 @@ namespace {
   const std::string cursor = composer.cursor_visible ? std::string{"|"}
                                                      : std::string{" "};
   const std::string activity = trim_copy(composer.activity_indicator);
-  std::string input_line = activity;
-  if (input_line.empty()) {
-    if (composer.text.empty()) {
-      input_line = "[draft empty]" + cursor;
-    } else {
-      const std::size_t cursor_offset = view::clamp_to_terminal_text_offset(
-          composer.text,
-          composer.cursor_offset);
-      input_line = composer.text.substr(0, cursor_offset) + cursor +
-          composer.text.substr(cursor_offset);
+  const std::size_t cursor_offset = view::clamp_to_terminal_text_offset(
+      composer.text,
+      composer.cursor_offset);
+  std::string prompt_line = "> " + composer.text.substr(0, cursor_offset) + cursor +
+      composer.text.substr(cursor_offset);
+  std::string input_line = prompt_line;
+  if (!activity.empty()) {
+    input_line = activity;
+    if (!composer.text.empty()) {
+      input_line += "  ";
+      input_line += prompt_line;
     }
   }
   auto wrapped = wrap_text(input_line, width, height);
@@ -559,11 +560,18 @@ TuiRenderFrame FtxuiRendererAdapter::render_root(
   const std::size_t transcript_height =
       saturating_sub(frame.metrics.transcript.height, 2U);
   view::TuiTranscriptView transcript_view(screen_model.transcript);
+    const std::size_t transcript_wrap_width =
+      transcript_width > tokens_.spacing.transcript_indent
+        ? transcript_width - tokens_.spacing.transcript_indent
+        : 1U;
+    if (screen_model.transcript_follow_tail) {
+      transcript_view.scroll_to_bottom(transcript_height, transcript_wrap_width);
+    } else {
+      transcript_view.set_scroll_offset(screen_model.transcript_scroll_offset);
+    }
   const auto transcript = transcript_view.render_transcript(
       transcript_height,
-      transcript_width > tokens_.spacing.transcript_indent
-          ? transcript_width - tokens_.spacing.transcript_indent
-          : 1U);
+      transcript_wrap_width);
   if (transcript.visible_lines.empty()) {
     frame.transcript_lines.push_back("[empty transcript]");
   } else {

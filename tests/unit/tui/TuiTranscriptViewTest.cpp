@@ -161,6 +161,30 @@ void transcript_view_scrolls_to_bottom_for_latest_lines() {
               "bottom-anchored rendering should preserve the latest transcript summaries");
 }
 
+void transcript_view_honors_manual_scroll_offset() {
+  std::vector<TuiMessageView> transcript;
+  for (int index = 0; index < 6; ++index) {
+    transcript.push_back(TuiMessageView{.role = index % 2 == 0 ? "user" : "assistant",
+                                        .content = "message " + std::to_string(index),
+                                        .timestamp = "2026-05-25T10:00:00Z",
+                                        .badges = {}});
+  }
+
+  TuiTranscriptView view(std::move(transcript));
+  view.set_scroll_offset(2);
+
+  const TuiTranscriptRenderResult render_result = view.render_transcript(4, 64);
+  const std::string rendered_text = join_visible_lines(render_result);
+
+  assert_equal(2,
+               static_cast<int>(render_result.scroll_offset),
+               "manual transcript scroll offset should be preserved before viewport clamping");
+  assert_true(rendered_text.find("message 0") == std::string::npos,
+              "manual transcript scroll should hide rows above the selected offset");
+  assert_true(rendered_text.find("message 1") != std::string::npos,
+              "manual transcript scroll should render rows starting at the selected offset");
+}
+
 void transcript_view_files_avoid_owner_private_includes_and_renderer_io() {
   const std::string header_text =
       read_text_file(std::filesystem::path{DASALL_TUI_TRANSCRIPT_VIEW_HEADER});
@@ -196,6 +220,7 @@ int main() {
     transcript_view_renders_controlled_summary_only();
     transcript_view_toggles_collapsible_rows_only();
     transcript_view_scrolls_to_bottom_for_latest_lines();
+    transcript_view_honors_manual_scroll_offset();
     transcript_view_files_avoid_owner_private_includes_and_renderer_io();
   } catch (const std::exception& exception) {
     std::cerr << "[TuiTranscriptViewTest] FAILED: " << exception.what() << '\n';

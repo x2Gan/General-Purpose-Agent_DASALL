@@ -295,6 +295,8 @@ TuiScreenModel reduce(TuiScreenModel current, TuiAction action) {
     case TuiActionType::ForegroundSessionResetApplied:
       current.session = data::TuiSessionView{};
       current.transcript.clear();
+      current.transcript_scroll_offset = 0;
+      current.transcript_follow_tail = true;
       current.status = data::TuiStatusProjection{};
       current.route = data::TuiModelRouteProjection{};
       current.composer = TuiComposerState{};

@@ -6,6 +6,7 @@
 #include <string>
 #include <string_view>
 #include <vector>
+#include <functional>
 
 #include "data/ITuiDataSource.h"
 #include "model/TuiScreenModel.h"
@@ -61,6 +62,9 @@ class TuiApp {
   void sync_composer_state();
   void sync_composer_busy_from_status();
   [[nodiscard]] bool advance_interactive_animation();
+  void set_processing_indicator();
+  void request_interactive_redraw();
+  void scroll_transcript_page(int direction);
   void set_composer_text(std::string text,
                          std::optional<std::size_t> cursor_offset,
                          std::string debug_reason);
@@ -109,6 +113,7 @@ class TuiApp {
   std::size_t animation_cursor_tick_ = 0;
   std::size_t animation_spinner_index_ = 0;
   std::ostream* output_stream_ = nullptr;
+  std::function<void()> interactive_redraw_hook_;
   std::string shutdown_close_reason_ = "prototype_round_complete";
   bool animation_cursor_visible_ = true;
   bool session_open_ = false;

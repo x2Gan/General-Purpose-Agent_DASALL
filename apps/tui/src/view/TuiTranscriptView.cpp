@@ -57,6 +57,17 @@ constexpr std::array<std::string_view, 12> kForbiddenMarkers = {
 }
 
 [[nodiscard]] std::string normalize_role(std::string_view role) {
+  const std::string lowered = lowercase_copy(role);
+  if (lowered == "user") {
+    return "You";
+  }
+  if (lowered == "assistant") {
+    return "DASALL";
+  }
+  if (lowered == "tool") {
+    return "Tool Summary";
+  }
+
   std::string normalized = role.empty() ? std::string{"system"} : std::string(role);
   normalized.front() = static_cast<char>(std::toupper(
       static_cast<unsigned char>(normalized.front())));
@@ -185,6 +196,10 @@ const std::vector<model::TuiMessageView>& TuiTranscriptView::transcript() const 
 
 std::size_t TuiTranscriptView::scroll_offset() const noexcept {
   return scroll_offset_;
+}
+
+void TuiTranscriptView::set_scroll_offset(const std::size_t scroll_offset) noexcept {
+  scroll_offset_ = scroll_offset;
 }
 
 TuiTranscriptRenderResult TuiTranscriptView::render_transcript(

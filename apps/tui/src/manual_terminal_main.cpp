@@ -25,6 +25,7 @@
 #include "terminal/TuiTerminalCapabilityProbe.h"
 #include "view/TuiComposer.h"
 #include "view/TuiTextWidth.h"
+#include "view/TuiTranscriptView.h"
 
 namespace dasall::tui::manual_terminal {
 namespace {
@@ -632,6 +633,94 @@ void show_help(model::TuiScreenModel& screen_model) {
   return true;
 }
 
+[[nodiscard]] bool is_csi_tilde_sequence(std::string_view sequence,
+                                         const char leading_digit) noexcept {
+  if (sequence.size() < 4U || sequence[0] != '\x1b' || sequence[1] != '[' ||
+      sequence[2] != leading_digit || sequence.back() != '~') {
+    return false;
+  }
+
+  for (std::size_t index = 3U; index + 1U < sequence.size(); ++index) {
+    const char byte = sequence[index];
+    if ((byte < '0' || byte > '9') && byte != ';') {
+      return false;
+    }
+  }
+  return true;
+}
+
+[[nodiscard]] bool is_page_up_sequence(std::string_view sequence) noexcept {
+  return is_csi_tilde_sequence(sequence, '5');
+}
+
+[[nodiscard]] bool is_page_down_sequence(std::string_view sequence) noexcept {
+  return is_csi_tilde_sequence(sequence, '6');
+}
+
+[[nodiscard]] std::size_t saturating_sub_size(const std::size_t left,
+                                              const std::size_t right) noexcept {
+  return left > right ? left - right : 0U;
+}
+
+[[nodiscard]] std::size_t transcript_max_scroll_offset(
+    const std::size_t total_line_count,
+    const std::size_t viewport_height) noexcept {
+  if (viewport_height == 0 || total_line_count <= viewport_height) {
+    return 0;
+  }
+
+  return total_line_count - viewport_height;
+}
+
+void scroll_transcript_page(model::TuiScreenModel& screen_model,
+                            const terminal::FtxuiRendererAdapter& renderer,
+                            const TerminalSize& size,
+                            const int direction) {
+  const view::TuiLayoutMetrics metrics = renderer.apply_layout_metrics(
+      size.columns,
+      size.rows);
+  const std::size_t transcript_width = saturating_sub_size(metrics.transcript.width, 2U);
+  const std::size_t transcript_height = saturating_sub_size(metrics.transcript.height, 2U);
+  const std::size_t transcript_wrap_width =
+      transcript_width > renderer.design_tokens().spacing.transcript_indent
+          ? transcript_width - renderer.design_tokens().spacing.transcript_indent
+          : 1U;
+
+  view::TuiTranscriptView transcript_view(screen_model.transcript);
+  if (screen_model.transcript_follow_tail) {
+    transcript_view.scroll_to_bottom(transcript_height, transcript_wrap_width);
+  } else {
+    transcript_view.set_scroll_offset(screen_model.transcript_scroll_offset);
+  }
+  const auto rendered_transcript = transcript_view.render_transcript(
+      transcript_height,
+      transcript_wrap_width);
+  const std::size_t max_offset = transcript_max_scroll_offset(
+      rendered_transcript.total_line_count,
+      transcript_height);
+  if (max_offset == 0U) {
+    screen_model.transcript_scroll_offset = 0;
+    screen_model.transcript_follow_tail = true;
+    return;
+  }
+
+  const std::size_t current_offset = rendered_transcript.scroll_offset;
+  const std::size_t page_step = transcript_height > 1U ? transcript_height - 1U : 1U;
+  if (direction < 0) {
+    screen_model.transcript_scroll_offset = current_offset > page_step
+        ? current_offset - page_step
+        : 0U;
+    screen_model.transcript_follow_tail = false;
+  } else {
+    screen_model.transcript_scroll_offset = std::min(max_offset,
+                                                     current_offset + page_step);
+    screen_model.transcript_follow_tail =
+        screen_model.transcript_scroll_offset >= max_offset;
+  }
+  screen_model.focus = model::TuiFocusState::Transcript;
+  screen_model.debug_reason = direction < 0 ? "transcript_page_up" : "transcript_page_down";
+}
+
 void handle_submit(view::TuiComposer& composer,
                    model::TuiScreenModel& screen_model,
                    TerminalSession& terminal_session,
@@ -740,7 +829,9 @@ void complete_pending_receipt(view::TuiComposer& composer,
 
 void handle_escape_sequence(std::string_view sequence,
                             view::TuiComposer& composer,
-                            model::TuiScreenModel& screen_model) {
+                            model::TuiScreenModel& screen_model,
+                            const terminal::FtxuiRendererAdapter& renderer,
+                            const TerminalSize& size) {
   if (is_cursor_up_sequence(sequence)) {
     static_cast<void>(composer.handle_key(view::TuiComposerKeyEvent{
         .key = view::TuiComposerKey::Up,
@@ -772,6 +863,14 @@ void handle_escape_sequence(std::string_view sequence,
     static_cast<void>(composer.handle_key(
         view::TuiComposerKeyEvent{.key = view::TuiComposerKey::Delete, .text = {}}));
     sync_composer(screen_model, composer, "delete_at_cursor");
+    return;
+  }
+  if (is_page_up_sequence(sequence)) {
+    scroll_transcript_page(screen_model, renderer, size, -1);
+    return;
+  }
+  if (is_page_down_sequence(sequence)) {
+    scroll_transcript_page(screen_model, renderer, size, 1);
     return;
   }
   if (sequence == "\x1b\r" || sequence == "\x1b\n") {
@@ -913,7 +1012,7 @@ void process_input_buffer(std::string_view buffer,
       } else {
         sequence = read_pending_escape_bytes();
       }
-      handle_escape_sequence(sequence, composer, screen_model);
+      handle_escape_sequence(sequence, composer, screen_model, renderer, size);
       draft = composer.state().text;
       cursor_offset = composer.state().cursor_offset;
       continue;

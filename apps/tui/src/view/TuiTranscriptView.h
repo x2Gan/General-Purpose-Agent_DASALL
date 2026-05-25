@@ -31,6 +31,8 @@ class TuiTranscriptView {
 
   [[nodiscard]] std::size_t scroll_offset() const noexcept;
 
+  void set_scroll_offset(std::size_t scroll_offset) noexcept;
+
   [[nodiscard]] TuiTranscriptRenderResult render_transcript(
       std::size_t viewport_height,
       std::size_t wrap_width = 80) const;
