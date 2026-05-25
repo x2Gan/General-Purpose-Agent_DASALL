@@ -7,6 +7,8 @@
 #include "app/TuiApp.h"
 #if DASALL_TUI_FORMAL_ENTRYPOINT
 #include "data/DaemonTuiDataSource.h"
+#else
+#include "data/FakeTuiDataSource.h"
 #endif
 
 namespace {
@@ -61,6 +63,8 @@ void print_usage(std::ostream& output) {
       dasall::tui::data::resolve_daemon_tui_controller_options_from_environment());
 #else
   options.scenario_id = "planning_tools";
+  options.data_source_override = std::make_unique<dasall::tui::data::FakeTuiDataSource>(
+      options.scenario_id);
   options.bootstrap_tick_count = 2;
   options.initial_draft =
       "Hold the current draft while tool.search is running.";

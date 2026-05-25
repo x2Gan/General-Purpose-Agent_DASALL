@@ -4,7 +4,6 @@
 #include <sstream>
 #include <utility>
 
-#include "data/FakeTuiDataSource.h"
 #include "model/TuiReducer.h"
 
 namespace dasall::tui::app {
@@ -162,6 +161,14 @@ TuiApp::TuiApp(terminal::TuiTerminalCapabilityProbe probe)
 
 int TuiApp::run(TuiAppOptions options) {
   initialize_components(options);
+
+  if (data_source_ == nullptr) {
+    if (output_stream_ != nullptr && !last_error_.empty()) {
+      *output_stream_ << last_error_ << '\n';
+    }
+    shutdown_clean_ = false;
+    return 1;
+  }
 
   terminal_capabilities_ = options.probe_environment.has_value()
                                ? probe_.probe(*options.probe_environment)
@@ -517,15 +524,16 @@ void TuiApp::initialize_components(TuiAppOptions& options) {
   screen_model_.composer = composer_.state();
   screen_model_.focus = model::TuiFocusState::Composer;
   screen_model_.debug_reason = "tui_app_initialized";
-  data_source_ = options.data_source_override != nullptr
-                     ? std::move(options.data_source_override)
-                     : std::make_unique<data::FakeTuiDataSource>(scenario_id_);
   terminal_capabilities_ = {};
   startup_mode_ = terminal::TuiStartupMode::FailClosed;
   last_event_cursor_.reset();
   rendered_frames_.clear();
   last_rendered_screen_.clear();
   last_error_.clear();
+  data_source_ = std::move(options.data_source_override);
+  if (data_source_ == nullptr) {
+    last_error_ = "no TUI data source configured for this entrypoint";
+  }
   session_id_.clear();
   request_sequence_ = 0;
   session_open_ = false;

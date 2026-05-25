@@ -20,9 +20,8 @@ function(dasall_tui_apply_ftxui_private_dependency target_name)
   )
 endfunction()
 
-add_library(dasall_tui_prototype_core STATIC
+set(DASALL_TUI_SHARED_CORE_SOURCES
   src/app/TuiApp.cpp
-  src/data/FakeTuiDataSource.cpp
   src/model/TuiReducer.cpp
   src/terminal/FtxuiRendererAdapter.cpp
   src/terminal/TuiTerminalCapabilityProbe.cpp
@@ -30,6 +29,14 @@ add_library(dasall_tui_prototype_core STATIC
   src/view/TuiModelSelector.cpp
   src/view/TuiStatusPanel.cpp
   src/view/TuiTranscriptView.cpp
+)
+
+add_library(dasall_tui_core STATIC
+  ${DASALL_TUI_SHARED_CORE_SOURCES}
+)
+
+add_library(dasall_tui_prototype_core STATIC
+  src/data/FakeTuiDataSource.cpp
 )
 
 add_executable(dasall_tui_prototype EXCLUDE_FROM_ALL
@@ -46,6 +53,11 @@ add_executable(dasall_tui_manual_terminal EXCLUDE_FROM_ALL
   src/manual_terminal_main.cpp
 )
 
+target_include_directories(dasall_tui_core
+  PUBLIC
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+)
+
 target_include_directories(dasall_tui_prototype_core
   PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/src
@@ -54,18 +66,27 @@ target_include_directories(dasall_tui_prototype_core
 target_compile_features(dasall_tui_prototype PRIVATE cxx_std_20)
 target_compile_features(dasall-tui PRIVATE cxx_std_20)
 target_compile_features(dasall_tui_manual_terminal PRIVATE cxx_std_20)
+target_compile_features(dasall_tui_core PRIVATE cxx_std_20)
 target_compile_features(dasall_tui_prototype_core PRIVATE cxx_std_20)
 
 target_compile_definitions(dasall-tui PRIVATE DASALL_TUI_FORMAL_ENTRYPOINT=1)
 
 if(TARGET ftxui::component AND TARGET ftxui::dom AND TARGET ftxui::screen)
   target_compile_definitions(dasall_tui_prototype PRIVATE DASALL_TUI_PROTOTYPE_HAS_FTXUI=1)
+  target_compile_definitions(dasall_tui_core PRIVATE DASALL_TUI_RENDERER_USE_FTXUI=1)
   target_compile_definitions(dasall_tui_prototype_core PRIVATE DASALL_TUI_RENDERER_USE_FTXUI=1)
+  dasall_tui_apply_ftxui_private_dependency(dasall_tui_core)
   dasall_tui_apply_ftxui_private_dependency(dasall_tui_prototype_core)
 else()
   target_compile_definitions(dasall_tui_prototype PRIVATE DASALL_TUI_PROTOTYPE_HAS_FTXUI=0)
+  target_compile_definitions(dasall_tui_core PRIVATE DASALL_TUI_RENDERER_USE_FTXUI=0)
   target_compile_definitions(dasall_tui_prototype_core PRIVATE DASALL_TUI_RENDERER_USE_FTXUI=0)
 endif()
+
+target_link_libraries(dasall_tui_prototype_core
+  PUBLIC
+    dasall_tui_core
+)
 
 target_link_libraries(dasall_tui_prototype
   PRIVATE
@@ -74,7 +95,7 @@ target_link_libraries(dasall_tui_prototype
 
 target_link_libraries(dasall-tui
   PRIVATE
-    dasall_tui_prototype_core
+    dasall_tui_core
     dasall_platform
 )
 
@@ -91,6 +112,7 @@ install(TARGETS dasall-tui
   RUNTIME DESTINATION ${DASALL_INSTALL_BINDIR}
 )
 
+dasall_apply_common_options(dasall_tui_core)
 dasall_apply_common_options(dasall_tui_prototype_core)
 dasall_apply_common_options(dasall_tui_prototype)
 dasall_apply_common_options(dasall-tui)

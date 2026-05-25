@@ -11,6 +11,7 @@
 #include "PlatformError.h"
 #include "app/TuiApp.h"
 #include "data/DaemonTuiDataSource.h"
+#include "data/FakeTuiDataSource.h"
 #include "ipc/TuiIpcController.h"
 #include "ipc/TuiIpcControllerTestHooks.h"
 #include "support/TestAssertions.h"
@@ -192,6 +193,8 @@ void tui_app_degrades_to_narrow_mode_and_keeps_startup_clean() {
   TuiApp app;
   TuiAppOptions options;
   options.scenario_id = "narrow_cjk";
+  options.data_source_override =
+      std::make_unique<dasall::tui::data::FakeTuiDataSource>(options.scenario_id);
   options.probe_environment = make_narrow_environment();
   options.print_final_screen = false;
 
@@ -214,6 +217,8 @@ void tui_app_fail_closes_before_data_source_when_terminal_is_non_tty() {
   TuiApp app;
   TuiAppOptions options;
   options.scenario_id = "startup_failure";
+  options.data_source_override =
+      std::make_unique<dasall::tui::data::FakeTuiDataSource>(options.scenario_id);
   options.probe_environment = TuiTerminalProbeEnvironment{};
   options.print_final_screen = false;
 

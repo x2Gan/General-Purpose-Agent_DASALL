@@ -1594,7 +1594,7 @@ sh scripts/packaging/validate_gate_int_10_installed_package_qemu.sh -- qemu <ima
 17. `TUI-TODO-039` 已进一步在 `apps/tui/src/main.cpp` 与 `apps/tui/src/data/DaemonTuiDataSource.*` 落地 formal socket override：`DASALL_TUI_DAEMON_SOCKET` 可把 formal `dasall` 指向临时 socket，未设置或空值时保持 `/run/dasall/daemon.sock`；`DasallTuiSocketOverrideTest` 与 updated topology smoke 已建立 headless discoverability evidence。
 18. `TUI-TODO-040` 已进一步在 `apps/tui/src/app/TuiApp.*`、`apps/tui/src/model/TuiAction.h` 与 `apps/tui/src/model/TuiReducer.cpp` 落地 formal composer submit handoff：`TurnSubmitRequested` 现会组装真实 `TuiSubmitTurnRequest` 并把 success / failure / `validation_failed` 投影回 transcript、banner 与 composer state；`TuiAppSubmitTurnIntegrationTest` 与 updated topology smoke 已建立 scripted/headless submit evidence，因此 `BLK-TUI-010` 已关闭。
 19. `TUI-TODO-041` 已进一步在 `tests/integration/tui/TuiDaemonBackedE2ETest.cpp` 复用 `DaemonIntegrationHarness` 与 `DaemonTuiDataSource` 建立真实 daemon-backed E2E：formal TUI data source 现可在临时 socket 上完成 `open_session -> route_catalog -> submit_turn -> poll_events -> close_session`，并断言 accepted_async receipt、status/event projection、route projection 与 close ack；因此 build-tree true daemon-backed 口径已从设计冻结/局部测试提升为真实 roundtrip 证据。
-20. 但 TUI 当前仍不能宣称 installed release-ready：`TUI-TODO-042` 已补齐 installed smoke 与 artifact 基线，但 `TUI-TODO-043~044` 仍需补 formal/prototype purity gate 与 closeout evidence。
+20. 但 TUI 当前仍不能宣称 installed release-ready：`TUI-TODO-042` 已补齐 installed smoke 与 artifact 基线，`TUI-TODO-043` 已补齐 formal/prototype purity gate，但 `TUI-TODO-044` 仍需补最终 closeout evidence。
 
 ### 17.3 已闭合缺口
 
@@ -1637,8 +1637,9 @@ sh scripts/packaging/validate_gate_int_10_installed_package_qemu.sh -- qemu <ima
 
 1. `TUI-TODO-037`、`TUI-TODO-038`、`TUI-TODO-039`、`TUI-TODO-040`、`TUI-TODO-041` 已完成：协议收敛方向已冻结，daemon/access `tui_ipc.v1` server handler、formal socket override、formal submit UX 与真实 build-tree daemon-backed E2E 均已落盘，`BLK-TUI-009` 与 `BLK-TUI-010` 已关闭。
 2. `TUI-TODO-042` 已完成：installed package smoke 现已产出 `tui-daemon-backed-proof.json` 与 `tui-noninteractive.txt`，证明 installed bare `dasall` 可在 proof daemon / 临时 socket 上产出 accepted_async receipt，同时保留 non-TTY fail-closed / `dasall-cli` redirect 语义；但这条 installed smoke 证据仍不得单独外推为完整 installed release-ready。
-3. `TUI-TODO-043~044` 仍负责 formal/prototype binary purity 与 closeout evidence；在这些任务闭合前，TUI 只能陈述为“installed smoke 基线已具备”，不能宣称 installed release-ready。
-4. `TUI-PROTO-017`、`TUI-TODO-036`、`TUI-TODO-030/031/032/033/034/035/036`、`BLK-TUI-008-command-release-gate-recheck.md`、`TUI-PROTO-017-formal-sample-signoff.md` 与 `BLK-TUI-006-manual-terminal-evidence.md` 形成的 command release owner chain 仍然有效，但这条链不替代 042~044 的 release follow-up。
+3. `TUI-TODO-043` 已完成：formal `dasall` 现已改连 fake-free `dasall_tui_core`，`TuiApp` shared core 不再隐式创建 `FakeTuiDataSource`，prototype 入口与 fake-based integration tests 改为显式注入 fake source；`DasallTuiEntrypointPurityTest` 与直接执行的 purity test binary 已证明正式 `apps/tui/dasall` 不再携带 `FakeTuiDataSource` / `FakeScenario` 符号，同时 prototype binary 仍保留 fake path。
+4. `TUI-TODO-044` 仍负责 closeout evidence；在它闭合前，TUI 只能陈述为“installed smoke 基线与 release-binary purity gate 已具备”，不能宣称 installed release-ready。
+5. `TUI-PROTO-017`、`TUI-TODO-036`、`TUI-TODO-030/031/032/033/034/035/036`、`BLK-TUI-008-command-release-gate-recheck.md`、`TUI-PROTO-017-formal-sample-signoff.md` 与 `BLK-TUI-006-manual-terminal-evidence.md` 形成的 command release owner chain 仍然有效，但这条链不替代 044 的最终 release closeout。
 
 ### 17.5 建议复验命令
 

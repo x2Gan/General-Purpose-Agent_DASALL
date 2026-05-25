@@ -5,6 +5,7 @@
 #include <string>
 
 #include "app/TuiApp.h"
+#include "data/FakeTuiDataSource.h"
 #include "support/TestAssertions.h"
 
 namespace {
@@ -36,6 +37,8 @@ void tui_app_starts_full_screen_fake_session() {
   TuiApp app;
   TuiAppOptions options;
   options.scenario_id = "golden_ready";
+  options.data_source_override =
+      std::make_unique<dasall::tui::data::FakeTuiDataSource>(options.scenario_id);
   options.probe_environment = make_full_screen_environment();
   options.print_final_screen = false;
 
@@ -56,6 +59,8 @@ void tui_app_fail_closes_when_terminal_capabilities_are_blocking() {
   TuiApp app;
   TuiAppOptions options;
   options.scenario_id = "golden_ready";
+  options.data_source_override =
+      std::make_unique<dasall::tui::data::FakeTuiDataSource>(options.scenario_id);
   options.probe_environment = TuiTerminalProbeEnvironment{};
   options.print_final_screen = false;
 

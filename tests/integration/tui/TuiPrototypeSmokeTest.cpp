@@ -3,6 +3,7 @@
 #include <string>
 
 #include "app/TuiApp.h"
+#include "data/FakeTuiDataSource.h"
 #include "support/TestAssertions.h"
 
 namespace {
@@ -34,6 +35,8 @@ void tui_prototype_smoke_renders_fake_transcript_status_selector_and_composer() 
   TuiApp app;
   TuiAppOptions options;
   options.scenario_id = "planning_tools";
+  options.data_source_override =
+      std::make_unique<dasall::tui::data::FakeTuiDataSource>(options.scenario_id);
   options.probe_environment = make_full_screen_environment();
   options.bootstrap_tick_count = 2;
   options.initial_draft = "Hold the current draft while tool.search is running.";

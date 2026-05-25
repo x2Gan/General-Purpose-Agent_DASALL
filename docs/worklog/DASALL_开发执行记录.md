@@ -1,3 +1,35 @@
+# 记录 #809
+
+- 日期：2026-05-25
+- 阶段：tui/formal binary purity closure
+- 任务：TUI-TODO-043 拆分 formal/prototype core 并增加 fake contamination gate
+- 状态：已完成（代码、focused validation、TODO 回写已落盘；提交与推送待本轮 submission）
+
+### 改动
+
+1. 更新 `apps/tui/CMakeLists.txt`，新增 fake-free `dasall_tui_core`，把 `dasall_tui_prototype_core` 收敛为 fake-only extension，并让 formal `dasall` 改连 `dasall_tui_core`、prototype target 继续保留 fake path。
+2. 更新 `apps/tui/src/app/TuiApp.cpp` 与 `apps/tui/src/main.cpp`：shared `TuiApp` 不再隐式创建 `FakeTuiDataSource`，prototype main 显式注入 fake source，formal main 继续显式注入 `DaemonTuiDataSource`。
+3. 更新 `tests/integration/tui/TuiAppStartupTest.cpp`、`TuiAppStartupFailureTest.cpp`、`TuiPrototypeSmokeTest.cpp` 与新增 `DasallTuiEntrypointPurityTest.cpp`，让 fake-based tests 显式注入 fake source，并新增 formal/prototype 二进制符号审计 gate。
+
+### 验证
+
+1. 初始局部判别：`nm -C build/vscode-linux-ninja/apps/tui/dasall | rg 'FakeTuiDataSource|FakeScenario'`
+   - 结果：命中 fake 符号，证明 043 问题真实存在。
+2. `Build_CMakeTools(buildTargets=["dasall-tui"])`
+   - 结果：通过。
+3. `Build_CMakeTools(buildTargets=["dasall-tui","dasall_tui_entrypoint_purity_integration_test"])`
+   - 结果：通过。
+4. `RunCtest_CMakeTools(tests=["DasallTuiEntrypointPurityTest"])`
+   - 结果：命中仓库已知泛化 `生成失败`。
+5. `./build/vscode-linux-ninja/tests/integration/tui/dasall_tui_entrypoint_purity_integration_test`
+   - 结果：通过；无输出退出。
+
+### 结果
+
+1. formal `apps/tui/dasall` 不再把 `FakeTuiDataSource` / `FakeScenario` 符号混入 release-facing binary，formal/prototype purity gate 已闭合。
+2. prototype binary 仍保持可构建、可执行，并继续承载 fake/demo scenario 路径。
+3. 下一原子任务：`TUI-TODO-044` 回写评审后集成证据与 closeout 口径。
+
 # 记录 #808
 
 - 日期：2026-05-25
