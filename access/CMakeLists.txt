@@ -47,6 +47,7 @@ target_sources(dasall_access
     src/daemon/DaemonDiagnosticsHandler.cpp
     src/daemon/DaemonHealthService.cpp
     src/daemon/DaemonProtocolAdapter.cpp
+    src/daemon/TuiIpcProtocolAdapter.cpp
     src/daemon/DaemonResponseBuilderWithReceipt.cpp
     src/daemon/DaemonTaskQueryHandler.cpp
     src/ProtocolAdapterRegistry.cpp

@@ -97,6 +97,7 @@ class DaemonBootstrap {
   DaemonLifecycleController lifecycle_;
   std::atomic<bool> stop_requested_{false};
   std::int32_t receive_deadline_ms_ = 5000;
+  std::string effective_profile_id_ = "daemon.default";
   mutable std::mutex dispatch_mutex_;
   std::condition_variable dispatch_cv_;
   std::deque<dasall::platform::IpcChannelHandle> pending_channels_;

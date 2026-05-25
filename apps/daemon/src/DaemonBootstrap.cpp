@@ -4,7 +4,27 @@
 #include <string>
 #include <utility>
 
+#include "../../../access/src/daemon/TuiIpcProtocolAdapter.h"
+
 namespace dasall::apps::daemon {
+
+namespace {
+
+dasall::access::daemon::TuiIpcSessionStore g_tui_ipc_session_store;
+
+[[nodiscard]] std::string resolve_daemon_peer_ref(
+    const dasall::access::LocalPeerUidFact& peer_fact,
+    std::string_view decoded_peer_ref = {}) {
+  if (peer_fact.eligible_for_local_trusted) {
+    return "local_trusted:" + std::to_string(peer_fact.peer_uid);
+  }
+  if (!decoded_peer_ref.empty()) {
+    return std::string(decoded_peer_ref);
+  }
+  return "untrusted";
+}
+
+}  // namespace
 
 DaemonBootstrap::~DaemonBootstrap() {
   request_dispatch_stop(false);
@@ -169,11 +189,17 @@ std::size_t DaemonBootstrap::active_connection_count() const {
 void DaemonBootstrap::configure_from_context(const DaemonProcessContext& context) {
   ipc_ = context.ipc;
   gateway_ = context.access_gateway;
+  effective_profile_id_ = context.effective_profile_id;
   listener_host_.emplace(ipc_);
   listener_host_->set_listen_options(dasall::platform::ListenOptions{
       .backlog = context.bootstrap_config.listen_backlog,
       .max_payload_bytes = context.bootstrap_config.max_payload_bytes,
   });
+  {
+    std::lock_guard<std::mutex> lock(g_tui_ipc_session_store.mutex);
+    g_tui_ipc_session_store.next_session_id = 0U;
+    g_tui_ipc_session_store.sessions.clear();
+  }
   supervisor_adapter_.emplace(
       context.watchdog_service,
       DaemonSupervisorAdapterOptions{
@@ -218,13 +244,28 @@ DaemonBootstrap::ConnectionHandlingDisposition DaemonBootstrap::handle_connectio
     return ConnectionHandlingDisposition::Dropped;
   }
 
+  dasall::access::daemon::DaemonProtocolAdapter peer_adapter(ipc_);
+  const auto peer_fact =
+      peer_adapter.describe_local_peer_uid_fact(channel, "actor://daemon/local");
+
+  dasall::access::daemon::TuiIpcProtocolAdapter tui_adapter(ipc_);
+  tui_adapter.set_active_channel(channel, raw_payload);
+  if (tui_adapter.payload_looks_like_tui_ipc()) {
+    const auto decoded = tui_adapter.decode_tui_ipc_request();
+    const auto response = tui_adapter.dispatch_tui_ipc_operation(
+        decoded,
+        *gateway_,
+        g_tui_ipc_session_store,
+        resolve_daemon_peer_ref(peer_fact),
+        effective_profile_id_);
+    return tui_adapter.encode_tui_ipc_response(response)
+               ? ConnectionHandlingDisposition::Completed
+               : ConnectionHandlingDisposition::FatalError;
+  }
+
   // 构造 DaemonProtocolAdapter 并注入连接上下文
   dasall::access::daemon::DaemonProtocolAdapter adapter(ipc_);
   adapter.set_active_channel(channel, raw_payload);
-
-  // 获取 peer identity（用于 local trusted 判定）
-  const auto peer_fact =
-      adapter.describe_local_peer_uid_fact(channel, "actor://daemon/local");
 
   // 解码请求 -> InboundPacket
   auto packet = adapter.decode();
@@ -233,14 +274,7 @@ DaemonBootstrap::ConnectionHandlingDisposition DaemonBootstrap::handle_connectio
   }
 
   // 将 peer identity 注入 packet.peer_ref（以 "local_trusted:" 前缀标记）
-  if (peer_fact.eligible_for_local_trusted) {
-    packet.peer_ref = "local_trusted:" + std::to_string(peer_fact.peer_uid);
-  } else {
-    // 非信任来源：保持原 peer_ref 或标记为 untrusted
-    if (packet.peer_ref.empty()) {
-      packet.peer_ref = "untrusted";
-    }
-  }
+  packet.peer_ref = resolve_daemon_peer_ref(peer_fact, packet.peer_ref);
 
   // 通过 IAccessGateway 主链处理请求
   const auto dispatch_result = gateway_->submit(packet);

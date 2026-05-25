@@ -1,3 +1,36 @@
+# 记录 #804
+
+- 日期：2026-05-25
+- 阶段：tui/daemon access server handler implementation
+- 任务：TUI-TODO-038 实现 daemon-side `tui_ipc.v1` server handler
+- 状态：已完成（代码、测试、TODO 回写已落盘；提交与推送待本轮 submission）
+
+### 改动
+
+1. 新增 `access/src/daemon/TuiIpcProtocolAdapter.h/.cpp`，在 access owner 内部实现 `tui_ipc.v1` server-side DTO、JSON codec、`decode_tui_ipc_request()` / `dispatch_tui_ipc_operation()` / `encode_tui_ipc_response()`、本地 `TuiIpcSessionStore`，并为 `open_session` / `submit_turn` / `poll_events` / `route_catalog` / `close_session` 五个 operation 提供最小 dispatch；其中 `submit_turn` 复用既有 `IAccessGateway::submit()` 主链。
+2. 更新 `apps/daemon/src/DaemonBootstrap.h/.cpp`，新增 `effective_profile_id_` 与按 payload 分流：命中 `tui_ipc.v1` envelope 时走 `TuiIpcProtocolAdapter`，否则继续保留既有 `DaemonProtocolAdapter` 的 CLI daemon frame 路径。
+3. 更新 `access/CMakeLists.txt`、`tests/unit/access/CMakeLists.txt` 并新增 `tests/unit/access/daemon/TuiIpcProtocolAdapterTest.cpp`，注册 `dasall_tui_ipc_protocol_adapter_unit_test`、`TuiIpcProtocolAdapterTest` 与 `DaemonTuiIpcServerHandlerTest`，覆盖 open-session success、`schema_mismatch` / `unknown_operation` / `validation_failed` 负例，以及 `open_session -> submit_turn -> poll_events -> close_session` 最小 server dispatch 闭环。
+4. 新增 `docs/todos/tui/deliverables/TUI-TODO-038-daemon-access-tui-ipc-server-handler.md`，并同步回写 TUI 专项 TODO 与总账：`TUI-TODO-038` Done，`BLK-TUI-009` Closed，下一原子任务转为 `TUI-TODO-039`。
+
+### 验证
+
+1. `Build_CMakeTools(buildTargets=["dasall_tui_ipc_protocol_adapter_unit_test","dasall-daemon"])`
+   - 结果：通过。
+2. `ListTests_CMakeTools()`
+   - 结果：执行通过；仓库当前仍存在 CTest 集成工具的泛化生成问题。
+3. `RunCtest_CMakeTools(tests=["TuiIpcProtocolAdapterTest","DaemonTuiIpcServerHandlerTest"])`
+   - 结果：工具仍返回仓库已知泛化 `生成失败`，未给出具体失败用例。
+4. `./build/vscode-linux-ninja/tests/unit/access/dasall_tui_ipc_protocol_adapter_unit_test && echo PASS`
+   - 结果：通过；输出 `PASS`。
+5. `./build/vscode-linux-ninja/tests/unit/apps/daemon/dasall-daemon_bootstrap_unit_test && echo PASS`
+   - 结果：通过；binary 维持 exit 0，输出 `PASS`。
+
+### 结果
+
+1. daemon/access 现已存在与 client `TuiIpcController` 对齐的 `tui_ipc.v1` server handler，真实 daemon bootstrap 也已能在 TUI envelope 与既有 CLI daemon frame 之间正确分流。
+2. `TUI-TODO-038` 已完成，`BLK-TUI-009` 已关闭；但这仍只是 L2 focused server evidence，不得外推为 true daemon-backed E2E 已完成。
+3. 下一原子任务：`TUI-TODO-039` 增加 formal TUI socket override 与 headless test seam。
+
 # 记录 #803
 
 - 日期：2026-05-25

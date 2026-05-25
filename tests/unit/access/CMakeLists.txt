@@ -588,6 +588,38 @@ list(APPEND DASALL_ACCESS_UNIT_TEST_EXECUTABLE_TARGETS
   dasall_access_daemon_protocol_adapter_unit_test
 )
 
+add_executable(dasall_tui_ipc_protocol_adapter_unit_test
+  daemon/TuiIpcProtocolAdapterTest.cpp
+)
+
+target_link_libraries(dasall_tui_ipc_protocol_adapter_unit_test
+  PRIVATE
+    dasall_test_support
+    dasall_access
+    dasall_platform
+)
+
+target_include_directories(dasall_tui_ipc_protocol_adapter_unit_test
+  PRIVATE
+    ${CMAKE_SOURCE_DIR}/access/src
+)
+
+dasall_apply_common_options(dasall_tui_ipc_protocol_adapter_unit_test)
+
+add_test(NAME TuiIpcProtocolAdapterTest
+  COMMAND dasall_tui_ipc_protocol_adapter_unit_test
+)
+set_tests_properties(TuiIpcProtocolAdapterTest PROPERTIES LABELS "unit;access")
+
+add_test(NAME DaemonTuiIpcServerHandlerTest
+  COMMAND dasall_tui_ipc_protocol_adapter_unit_test
+)
+set_tests_properties(DaemonTuiIpcServerHandlerTest PROPERTIES LABELS "unit;access")
+
+list(APPEND DASALL_ACCESS_UNIT_TEST_EXECUTABLE_TARGETS
+  dasall_tui_ipc_protocol_adapter_unit_test
+)
+
 
 # ACC-TODO-026: HttpProtocolAdapterTest
 add_executable(dasall_access_http_protocol_adapter_unit_test
