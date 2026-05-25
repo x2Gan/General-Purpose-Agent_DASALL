@@ -649,7 +649,7 @@ int main(int argc, char* argv[]) {
       entry.config_revision.value_or("daemon-entry:" + daemon_profile_id);
     pipeline_options.bootstrap_config.entry_type = "daemon";
     pipeline_options.bootstrap_config.listen_ref = entry.bootstrap_config.socket_path;
-    pipeline_options.bootstrap_config.allowed_protocols = {"ipc_uds"};
+    pipeline_options.bootstrap_config.allowed_protocols = {"ipc_uds", "tui_ipc.v1"};
     pipeline_options.bootstrap_config.dispatch_deadline_ms =
       static_cast<int>(entry.bootstrap_config.dispatch_timeout_ms);
     pipeline_options.bootstrap_config.result_replay_ttl_ms =

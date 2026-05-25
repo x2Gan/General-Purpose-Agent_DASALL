@@ -1,0 +1,178 @@
+#!/bin/sh
+set -eu
+
+. /etc/default/dasall-daemon
+: "${DASALL_DAEMON_PROFILE_ID:?missing DASALL_DAEMON_PROFILE_ID}"
+
+SMOKE_DIR=$(mktemp -d /tmp/dasall-tui-daemon-backed.XXXXXX)
+PROOF_FILE="${SMOKE_DIR}/tui-daemon-backed-proof.json"
+PROOF_DAEMON_ROOT=
+PROOF_DAEMON_SOCKET=
+PROOF_DAEMON_LOG=
+PROOF_DAEMON_ARTIFACT_ROOT=
+PROOF_DAEMON_STATE_ROOT=
+PROOF_DAEMON_PID=
+
+assert_json_contains() {
+  json_payload=$1
+  expected=$2
+  label=$3
+
+  printf '%s\n' "$json_payload" | grep -Fq "$expected" || {
+    printf '%s: expected JSON fragment not found: %s\n' "$label" "$expected" >&2
+    exit 1
+  }
+}
+
+assert_json_matches() {
+  json_payload=$1
+  expected_regex=$2
+  label=$3
+
+  printf '%s\n' "$json_payload" | grep -Eq "$expected_regex" || {
+    printf '%s: expected JSON pattern not found: %s\n' "$label" "$expected_regex" >&2
+    exit 1
+  }
+}
+
+cleanup() {
+  if [ -n "${PROOF_DAEMON_PID}" ]; then
+    kill "${PROOF_DAEMON_PID}" >/dev/null 2>&1 || true
+    PROOF_DAEMON_PID=
+  fi
+  if [ -n "${PROOF_DAEMON_ROOT}" ]; then
+    rm -rf "${PROOF_DAEMON_ROOT}"
+    PROOF_DAEMON_ROOT=
+    PROOF_DAEMON_SOCKET=
+    PROOF_DAEMON_LOG=
+    PROOF_DAEMON_ARTIFACT_ROOT=
+    PROOF_DAEMON_STATE_ROOT=
+  fi
+  systemctl disable --now dasall-daemon.service >/dev/null 2>&1 || true
+  rm -rf "$SMOKE_DIR"
+}
+
+wait_for_daemon_ready() {
+  attempt=0
+  while [ "$attempt" -lt 30 ]; do
+    if systemctl is-enabled --quiet dasall-daemon.service >/dev/null 2>&1 &&
+       systemctl is-active --quiet dasall-daemon.service >/dev/null 2>&1 &&
+       [ -S /run/dasall/daemon.sock ] &&
+       [ "$(stat -c '%U:%G' /run/dasall/daemon.sock 2>/dev/null)" = "dasall:dasall" ] &&
+       [ "$(stat -c '%a' /run/dasall/daemon.sock 2>/dev/null)" = "600" ] &&
+       dasall-cli ping --json >/dev/null 2>&1 &&
+       dasall-cli readiness --json >/dev/null 2>&1; then
+      return 0
+    fi
+    attempt=$((attempt + 1))
+    sleep 1
+  done
+
+  systemctl status --no-pager dasall-daemon.service >&2 || true
+  return 1
+}
+
+wait_for_proof_daemon_ready() {
+  attempt=0
+  while [ "$attempt" -lt 30 ]; do
+    if [ -S "$PROOF_DAEMON_SOCKET" ] &&
+       runuser -u dasall -- dasall-cli --socket-path "$PROOF_DAEMON_SOCKET" ping --json >/dev/null 2>&1 &&
+       runuser -u dasall -- dasall-cli --socket-path "$PROOF_DAEMON_SOCKET" readiness --json >/dev/null 2>&1; then
+      return 0
+    fi
+    attempt=$((attempt + 1))
+    sleep 1
+  done
+
+  cat "$PROOF_DAEMON_LOG" >&2 || true
+  return 1
+}
+
+start_proof_daemon() {
+  PROOF_DAEMON_ROOT=$(mktemp -d /tmp/dasall-tui-proof-daemon.XXXXXX)
+  PROOF_DAEMON_SOCKET="${PROOF_DAEMON_ROOT}/daemon.sock"
+  PROOF_DAEMON_LOG="${PROOF_DAEMON_ROOT}/daemon.log"
+  PROOF_DAEMON_ARTIFACT_ROOT="${PROOF_DAEMON_ROOT}/artifacts"
+  PROOF_DAEMON_STATE_ROOT="${PROOF_DAEMON_ROOT}/state"
+  PROOF_DAEMON_PID_FILE="${PROOF_DAEMON_ROOT}/daemon.pid"
+  PROOF_DAEMON_CONFIG_FILE="${PROOF_DAEMON_ROOT}/daemon.json"
+
+  install -d -o dasall -g dasall -m 700 \
+    "$PROOF_DAEMON_ROOT" \
+    "$PROOF_DAEMON_ARTIFACT_ROOT" \
+    "$PROOF_DAEMON_STATE_ROOT"
+
+  python3 - /etc/dasall/daemon.json "$PROOF_DAEMON_CONFIG_FILE" "$PROOF_DAEMON_SOCKET" <<'PY'
+import json
+import sys
+
+source_path = sys.argv[1]
+target_path = sys.argv[2]
+socket_path = sys.argv[3]
+
+with open(source_path, encoding='utf-8') as handle:
+    payload = json.load(handle)
+
+daemon_config = payload.setdefault('daemon', {})
+daemon_config['socket_path'] = socket_path
+
+with open(target_path, 'w', encoding='utf-8') as handle:
+    json.dump(payload, handle, indent=2)
+    handle.write('\n')
+PY
+  chown dasall:dasall "$PROOF_DAEMON_CONFIG_FILE"
+  chmod 600 "$PROOF_DAEMON_CONFIG_FILE"
+
+  runuser -u dasall -- env DASALL_DAEMON_ASYNC_RECEIPT_PROOF_DIR="$PROOF_DAEMON_ARTIFACT_ROOT" DASALL_RUNTIME_STATE_ROOT_OVERRIDE="$PROOF_DAEMON_STATE_ROOT" /usr/sbin/dasall-daemon --profile-id "$DASALL_DAEMON_PROFILE_ID" --config-file "$PROOF_DAEMON_CONFIG_FILE" >"$PROOF_DAEMON_LOG" 2>&1 &
+  PROOF_DAEMON_PID=$!
+  wait_for_proof_daemon_ready
+}
+
+trap cleanup EXIT
+
+systemctl enable --now dasall-daemon.service
+wait_for_daemon_ready
+
+set +e
+TUI_STDERR=$(dasall 2>&1)
+TUI_EXIT_CODE=$?
+set -e
+[ "$TUI_EXIT_CODE" -eq 1 ] || {
+  printf 'bare dasall should fail closed without a TTY, got %s: %s\n' "$TUI_EXIT_CODE" "$TUI_STDERR" >&2
+  exit 1
+}
+printf '%s\n' "$TUI_STDERR" | grep -Eq 'std(in|out|err) is not attached to a TTY' || {
+  printf 'bare dasall should explain the non-TTY startup blocker, got: %s\n' "$TUI_STDERR" >&2
+  exit 1
+}
+printf '%s\n' "$TUI_STDERR" | grep -Fq 'Use dasall-cli for non-interactive control-plane tasks.' || {
+  printf 'bare dasall should redirect non-interactive usage to dasall-cli, got: %s\n' "$TUI_STDERR" >&2
+  exit 1
+}
+
+start_proof_daemon
+
+TUI_DAEMON_BACKED_JSON=$(runuser -u dasall -- env \
+  DASALL_TUI_DAEMON_SOCKET="$PROOF_DAEMON_SOCKET" \
+  DASALL_TUI_SCRIPTED_SMOKE=daemon_roundtrip \
+  DASALL_TUI_SCRIPTED_SMOKE_PROMPT='autopkgtest daemon-backed tui roundtrip' \
+  DASALL_TUI_SCRIPTED_SMOKE_PROFILE_ID="$DASALL_DAEMON_PROFILE_ID" \
+  dasall)
+printf '%s\n' "$TUI_DAEMON_BACKED_JSON" > "$PROOF_FILE"
+
+assert_json_contains "$TUI_DAEMON_BACKED_JSON" '"mode":"daemon_roundtrip"' 'autopkgtest tui smoke mode'
+assert_json_contains "$TUI_DAEMON_BACKED_JSON" '"shutdown_clean":true' 'autopkgtest tui smoke shutdown'
+assert_json_contains "$TUI_DAEMON_BACKED_JSON" '"session_closed_cleanly":true' 'autopkgtest tui smoke close'
+assert_json_contains "$TUI_DAEMON_BACKED_JSON" "\"profile_id\":\"${DASALL_DAEMON_PROFILE_ID}\"" 'autopkgtest tui smoke profile'
+assert_json_contains "$TUI_DAEMON_BACKED_JSON" '"daemon_readiness":"ready"' 'autopkgtest tui smoke readiness'
+assert_json_contains "$TUI_DAEMON_BACKED_JSON" '"current_provider_id":"daemon-local"' 'autopkgtest tui smoke provider'
+assert_json_contains "$TUI_DAEMON_BACKED_JSON" '"current_model_id":"dasall-core"' 'autopkgtest tui smoke model'
+assert_json_contains "$TUI_DAEMON_BACKED_JSON" '"status_stage":"accepted_async"' 'autopkgtest tui smoke stage'
+assert_json_contains "$TUI_DAEMON_BACKED_JSON" '"status_current_tool":"access.submit"' 'autopkgtest tui smoke current tool'
+assert_json_contains "$TUI_DAEMON_BACKED_JSON" '"latest_transcript_content":"queued for daemon-backed execution"' 'autopkgtest tui smoke transcript'
+assert_json_contains "$TUI_DAEMON_BACKED_JSON" '"latest_banner_title":"Turn submitted"' 'autopkgtest tui smoke banner'
+assert_json_matches "$TUI_DAEMON_BACKED_JSON" '"transcript_count":[1-9][0-9]*' 'autopkgtest tui smoke transcript count'
+assert_json_contains "$TUI_DAEMON_BACKED_JSON" '"rendered_screen_contains_receipt":true' 'autopkgtest tui smoke rendered receipt'
+assert_json_contains "$TUI_DAEMON_BACKED_JSON" '"rendered_screen_contains_route":true' 'autopkgtest tui smoke rendered route'
+
+test -f "$PROOF_FILE"

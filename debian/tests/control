@@ -2,6 +2,10 @@ Tests: pkg-smoke-local-control-plane
 Depends: @, systemd, python3
 Restrictions: needs-root, isolation-machine
 
+Tests: tui-daemon-backed
+Depends: @, systemd
+Restrictions: needs-root, isolation-machine
+
 Tests: pkg-smoke-common-assets
 Depends: @
 Restrictions: isolation-container

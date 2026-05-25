@@ -445,12 +445,10 @@ wait_for_async_receipt_proof_daemon_ready() {
   return 1
 }
 
-verify_installed_async_receipt_flow() {
-  stop_async_receipt_proof_daemon
+start_async_receipt_proof_daemon() {
+  proof_daemon_profile_id=$1
 
-  proof_profile_id=$(run_root_sh '. /etc/default/dasall-daemon && : "${DASALL_DAEMON_PROFILE_ID:?missing DASALL_DAEMON_PROFILE_ID}" && printf "%s" "${DASALL_DAEMON_PROFILE_ID}"')
-  proof_request_id='acc-fix-001-installed-async-proof'
-  proof_request='{"prompt":"installed async receipt positive proof"}'
+  stop_async_receipt_proof_daemon
 
   ASYNC_RECEIPT_PROOF_ROOT=$(run_root mktemp -d /tmp/dasall-async-receipt-proof.XXXXXX)
   ASYNC_RECEIPT_PROOF_SOCKET="${ASYNC_RECEIPT_PROOF_ROOT}/daemon.sock"
@@ -486,11 +484,19 @@ PY
   run_root chown dasall:dasall "$ASYNC_RECEIPT_PROOF_CONFIG_FILE"
   run_root chmod 600 "$ASYNC_RECEIPT_PROOF_CONFIG_FILE"
 
-  run_root_sh "runuser -u dasall -- env DASALL_DAEMON_ASYNC_RECEIPT_PROOF_DIR='$ASYNC_RECEIPT_PROOF_ARTIFACT_ROOT' DASALL_RUNTIME_STATE_ROOT_OVERRIDE='$ASYNC_RECEIPT_PROOF_STATE_ROOT' /usr/sbin/dasall-daemon --profile-id '$proof_profile_id' --config-file '$ASYNC_RECEIPT_PROOF_CONFIG_FILE' >'$ASYNC_RECEIPT_PROOF_LOG' 2>&1 & echo \$! >'$ASYNC_RECEIPT_PROOF_PID_FILE'"
+  run_root_sh "runuser -u dasall -- env DASALL_DAEMON_ASYNC_RECEIPT_PROOF_DIR='$ASYNC_RECEIPT_PROOF_ARTIFACT_ROOT' DASALL_RUNTIME_STATE_ROOT_OVERRIDE='$ASYNC_RECEIPT_PROOF_STATE_ROOT' /usr/sbin/dasall-daemon --profile-id '$proof_daemon_profile_id' --config-file '$ASYNC_RECEIPT_PROOF_CONFIG_FILE' >'$ASYNC_RECEIPT_PROOF_LOG' 2>&1 & echo \$! >'$ASYNC_RECEIPT_PROOF_PID_FILE'"
   ASYNC_RECEIPT_PROOF_PID=$(run_root cat "$ASYNC_RECEIPT_PROOF_PID_FILE")
   assert_non_empty "$ASYNC_RECEIPT_PROOF_PID" 'async receipt proof daemon pid'
   wait_for_async_receipt_proof_daemon_ready "$ASYNC_RECEIPT_PROOF_SOCKET" "$ASYNC_RECEIPT_PROOF_LOG" || \
     fail 'async receipt proof daemon did not become ready'
+}
+
+verify_installed_async_receipt_flow() {
+  proof_profile_id=$(run_root_sh '. /etc/default/dasall-daemon && : "${DASALL_DAEMON_PROFILE_ID:?missing DASALL_DAEMON_PROFILE_ID}" && printf "%s" "${DASALL_DAEMON_PROFILE_ID}"')
+  proof_request_id='acc-fix-001-installed-async-proof'
+  proof_request='{"prompt":"installed async receipt positive proof"}'
+
+  start_async_receipt_proof_daemon "$proof_profile_id"
 
   PROOF_SUBMIT_JSON=$(run_dasall_cli dasall-cli --socket-path "$ASYNC_RECEIPT_PROOF_SOCKET" run "$proof_request" --async --request-id "$proof_request_id" --json --timeout-ms 30000)
   assert_json_contains "$PROOF_SUBMIT_JSON" '"disposition":"accepted_async"' 'installed async receipt submit'
@@ -841,12 +847,29 @@ verify_validate_only() {
   run_root_sh '. /etc/default/dasall-daemon && : "${DASALL_DAEMON_PROFILE_ID:?missing DASALL_DAEMON_PROFILE_ID}" && /usr/sbin/dasall-daemon --validate-only --profile-id="${DASALL_DAEMON_PROFILE_ID}" --config-file /etc/dasall/daemon.json'
 }
 
-verify_explicit_start() {
+verify_tui_noninteractive_redirect() {
+  set +e
+  TUI_STDERR=$(dasall 2>&1)
+  TUI_EXIT_CODE=$?
+  set -e
+  [ "$TUI_EXIT_CODE" -eq 1 ] || fail "bare dasall should fail closed without a TTY, got ${TUI_EXIT_CODE}: ${TUI_STDERR}"
+  assert_text_matches "$TUI_STDERR" 'std(in|out|err) is not attached to a TTY' 'tui non-tty smoke'
+  assert_text_contains "$TUI_STDERR" 'Use dasall-cli for non-interactive control-plane tasks.' 'tui non-tty redirect'
+  if [ -n "$PACKAGE_SMOKE_ARTIFACT_DIR" ]; then
+    write_artifact_file 'tui-noninteractive.txt' "$TUI_STDERR"
+  fi
+}
+
+start_explicit_daemon_and_verify_tui_baseline() {
+  restore_secret_before_start=$1
+
   log 'verifying daemon stays stopped until explicit service enable/start'
   run_root_sh '! systemctl is-enabled --quiet dasall-daemon.service >/dev/null 2>&1'
   run_root_sh '! systemctl is-active --quiet dasall-daemon.service >/dev/null 2>&1'
 
-  restore_preserved_llm_secret
+  if [ "$restore_secret_before_start" -eq 1 ]; then
+    restore_preserved_llm_secret
+  fi
 
   run_root systemctl enable --now dasall-daemon.service
   wait_for_daemon_ready
@@ -856,19 +879,52 @@ verify_explicit_start() {
   run_root test -S /run/dasall/daemon.sock
   run_root_sh 'test "$(stat -c "%U:%G" /run/dasall/daemon.sock)" = "dasall:dasall"'
   run_root_sh 'test "$(stat -c "%a" /run/dasall/daemon.sock)" = "600"'
-  set +e
-  TUI_STDERR=$(dasall 2>&1)
-  TUI_EXIT_CODE=$?
-  set -e
-  [ "$TUI_EXIT_CODE" -eq 1 ] || fail "bare dasall should fail closed without a TTY, got ${TUI_EXIT_CODE}: ${TUI_STDERR}"
-  assert_text_contains "$TUI_STDERR" 'stdin is not attached to a TTY' 'tui non-tty smoke'
-  assert_text_contains "$TUI_STDERR" 'Use dasall-cli for non-interactive control-plane tasks.' 'tui non-tty redirect'
-  if [ -n "$PACKAGE_SMOKE_ARTIFACT_DIR" ]; then
-    write_artifact_file 'tui-noninteractive.txt' "$TUI_STDERR"
-  fi
+  verify_tui_noninteractive_redirect
 
   run_dasall_cli dasall-cli ping --json >/dev/null
   run_dasall_cli dasall-cli readiness --json >/dev/null
+}
+
+verify_installed_tui_daemon_backed_flow() {
+  tui_smoke_profile_id=$(run_root_sh '. /etc/default/dasall-daemon && : "${DASALL_DAEMON_PROFILE_ID:?missing DASALL_DAEMON_PROFILE_ID}" && printf "%s" "${DASALL_DAEMON_PROFILE_ID}"')
+
+  start_async_receipt_proof_daemon "$tui_smoke_profile_id"
+
+  TUI_DAEMON_BACKED_JSON=$(run_dasall_cli env \
+    DASALL_TUI_DAEMON_SOCKET="$ASYNC_RECEIPT_PROOF_SOCKET" \
+    DASALL_TUI_SCRIPTED_SMOKE=daemon_roundtrip \
+    DASALL_TUI_SCRIPTED_SMOKE_PROMPT='installed daemon-backed tui roundtrip' \
+    DASALL_TUI_SCRIPTED_SMOKE_PROFILE_ID="$tui_smoke_profile_id" \
+    dasall)
+
+  assert_json_contains "$TUI_DAEMON_BACKED_JSON" '"mode":"daemon_roundtrip"' 'installed tui smoke mode'
+  assert_json_contains "$TUI_DAEMON_BACKED_JSON" '"shutdown_clean":true' 'installed tui smoke shutdown'
+  assert_json_contains "$TUI_DAEMON_BACKED_JSON" '"session_closed_cleanly":true' 'installed tui smoke close_session'
+  assert_json_contains "$TUI_DAEMON_BACKED_JSON" "\"profile_id\":\"${tui_smoke_profile_id}\"" 'installed tui smoke profile id'
+  assert_json_contains "$TUI_DAEMON_BACKED_JSON" '"daemon_readiness":"ready"' 'installed tui smoke readiness'
+  assert_json_contains "$TUI_DAEMON_BACKED_JSON" '"current_provider_id":"daemon-local"' 'installed tui smoke provider projection'
+  assert_json_contains "$TUI_DAEMON_BACKED_JSON" '"current_model_id":"dasall-core"' 'installed tui smoke model projection'
+  assert_json_contains "$TUI_DAEMON_BACKED_JSON" '"status_stage":"accepted_async"' 'installed tui smoke status stage'
+  assert_json_contains "$TUI_DAEMON_BACKED_JSON" '"status_current_tool":"access.submit"' 'installed tui smoke current tool'
+  assert_json_contains "$TUI_DAEMON_BACKED_JSON" '"latest_transcript_content":"queued for daemon-backed execution"' 'installed tui smoke transcript receipt'
+  assert_json_contains "$TUI_DAEMON_BACKED_JSON" '"latest_banner_title":"Turn submitted"' 'installed tui smoke submit banner'
+  assert_json_matches "$TUI_DAEMON_BACKED_JSON" '"transcript_count":[1-9][0-9]*' 'installed tui smoke transcript count'
+  assert_json_contains "$TUI_DAEMON_BACKED_JSON" '"rendered_screen_contains_receipt":true' 'installed tui smoke rendered receipt'
+  assert_json_contains "$TUI_DAEMON_BACKED_JSON" '"rendered_screen_contains_route":true' 'installed tui smoke rendered route'
+  write_artifact_file 'tui-daemon-backed-proof.json' "$TUI_DAEMON_BACKED_JSON"
+
+  stop_async_receipt_proof_daemon
+}
+
+verify_tui_daemon_backed_check() {
+  log 'verifying installed TUI daemon-backed smoke'
+  start_explicit_daemon_and_verify_tui_baseline 0
+  verify_installed_tui_daemon_backed_flow
+}
+
+verify_explicit_start() {
+  start_explicit_daemon_and_verify_tui_baseline 1
+
   require_command python3
   ensure_artifact_dir
   if [ -n "$PACKAGE_SMOKE_ARTIFACT_DIR" ]; then
@@ -1204,30 +1260,32 @@ PY
 
 usage() {
   cat <<'EOF'
-Usage: bash scripts/packaging/pkg_smoke_install.sh [--explicit-start-check]
+Usage: bash scripts/packaging/pkg_smoke_install.sh [--explicit-start-check] [--tui-daemon-backed-check]
 EOF
 }
 
 EXPLICIT_START_CHECK=0
+TUI_DAEMON_BACKED_CHECK=0
 
-case "${1:-}" in
-  "")
-    ;;
-  --explicit-start-check)
-    EXPLICIT_START_CHECK=1
-    shift
-    ;;
-  -h|--help)
-    usage
-    exit 0
-    ;;
-  *)
-    usage
-    fail "unknown option: ${1}"
-    ;;
-esac
-
-[ "$#" -eq 0 ] || fail 'unexpected positional arguments'
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --explicit-start-check)
+      EXPLICIT_START_CHECK=1
+      ;;
+    --tui-daemon-backed-check)
+      TUI_DAEMON_BACKED_CHECK=1
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    *)
+      usage
+      fail "unknown option: ${1}"
+      ;;
+  esac
+  shift
+done
 
 require_command dpkg
 require_command dpkg-parsechangelog
@@ -1247,6 +1305,8 @@ verify_validate_only
 
 if [ "$EXPLICIT_START_CHECK" -eq 1 ]; then
   verify_explicit_start
+elif [ "$TUI_DAEMON_BACKED_CHECK" -eq 1 ]; then
+  verify_tui_daemon_backed_check
 fi
 
 log 'install smoke passed'

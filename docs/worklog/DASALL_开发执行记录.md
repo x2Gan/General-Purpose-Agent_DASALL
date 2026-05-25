@@ -1,3 +1,31 @@
+# 记录 #808
+
+- 日期：2026-05-25
+- 阶段：tui/installed smoke closure
+- 任务：TUI-TODO-042 增加 installed package TUI daemon-backed smoke
+- 状态：已完成（代码、authoritative smoke、TODO 回写已落盘；提交与推送待本轮 submission）
+
+### 改动
+
+1. 更新 `apps/daemon/src/main.cpp`，把 installed daemon 默认 `allowed_protocols` 补齐 `tui_ipc.v1`，避免 formal bare `dasall` 在 installed daemon 上被 protocol allowlist 提前拒绝。
+2. 更新 `scripts/packaging/pkg_smoke_install.sh` 与 `debian/tests/tui-daemon-backed`，把 installed TUI daemon-backed smoke / autopkgtest 收敛到 installed async-receipt proof daemon + 临时 socket 路径，并把 non-TTY 断言改为接受当前正式 stdio blocker 文案。
+3. 新增 `docs/todos/tui/deliverables/TUI-TODO-042-installed-tui-daemon-backed-smoke.md`，并同步回写 TUI 专项 TODO 与总账：`TUI-TODO-042` Done，下一原子任务转为 `TUI-TODO-043`。
+
+### 验证
+
+1. `Build_CMakeTools(buildTargets=["dasall-daemon","dasall-tui"])`
+   - 结果：通过。
+2. `sh -n scripts/packaging/pkg_smoke_install.sh && sh -n debian/tests/tui-daemon-backed && echo PASS`
+   - 结果：通过；输出 `PASS`。
+3. `DASALL_PACKAGE_SMOKE_ARTIFACT_DIR=/tmp/dasall-tui-042-smoke bash scripts/packaging/pkg_smoke_install.sh --tui-daemon-backed-check`
+   - 结果：通过；输出 `install smoke passed`。
+
+### 结果
+
+1. `/tmp/dasall-tui-042-smoke/tui-daemon-backed-proof.json` 已证明 installed bare `dasall` 可在 installed package 环境中完成 daemon-backed roundtrip，并产出 `status_stage:"accepted_async"`、`status_current_tool:"access.submit"`、receipt 与 route 可见证据。
+2. `/tmp/dasall-tui-042-smoke/tui-noninteractive.txt` 已证明 bare `dasall` 在非 TTY 下继续 fail-closed，并把非交互用法 redirect 到 `dasall-cli`。
+3. 下一原子任务：`TUI-TODO-043` 拆分 formal/prototype core 并增加 fake contamination gate。
+
 # 记录 #807
 
 - 日期：2026-05-25
