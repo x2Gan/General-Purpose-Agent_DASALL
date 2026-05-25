@@ -54,7 +54,11 @@ class RecordingDataSource final : public ITuiDataSource {
   }
 
   TuiPollEventsResult poll_events(const TuiPollEventsRequest&) override {
-    return TuiPollEventsResult{.events = {}, .next_cursor = std::nullopt, .issue = std::nullopt};
+    if (poll_events_delivered) {
+      return TuiPollEventsResult{.events = {}, .next_cursor = next_cursor, .issue = std::nullopt};
+    }
+    poll_events_delivered = true;
+    return TuiPollEventsResult{.events = poll_events_batch, .next_cursor = next_cursor, .issue = std::nullopt};
   }
 
   TuiRouteCatalogResult route_catalog(const TuiRouteCatalogRequest&) override {
@@ -76,6 +80,9 @@ class RecordingDataSource final : public ITuiDataSource {
   std::optional<TuiTurnReceipt> submit_receipt;
   std::optional<TuiDataSourceIssue> submit_issue;
   std::vector<TuiSubmitTurnRequest> submit_requests;
+  std::vector<TuiEventProjection> poll_events_batch;
+  std::optional<std::string> next_cursor;
+  bool poll_events_delivered = false;
 };
 
 [[nodiscard]] TuiTerminalProbeEnvironment make_full_screen_environment() {
@@ -137,8 +144,43 @@ class RecordingDataSource final : public ITuiDataSource {
       .receipt_ref = "receipt-ref-040",
       .submitted_at = "2026-05-25T12:40:01Z",
       .summary_text = "submit turn accepted for daemon execution",
+      .response_text = std::nullopt,
       .reason_code = std::nullopt,
   };
+}
+
+[[nodiscard]] TuiTurnReceipt make_completed_receipt() {
+  TuiTurnReceipt receipt{
+      .request_id = "submit-receipt-completed-040",
+      .trace_id = "trace-submit-receipt-completed-040",
+      .session_id = "session-submit-040",
+      .disposition = "completed",
+      .receipt_ref = "receipt-ref-completed-040",
+      .submitted_at = "2026-05-25T12:40:02Z",
+      .summary_text = "completed by daemon-backed execution",
+      .response_text = std::string("llm.origin=deepseek-prod/deepseek-reasoner final answer"),
+      .reason_code = std::nullopt,
+  };
+  return receipt;
+}
+
+[[nodiscard]] TuiEventProjection make_completed_event() {
+  TuiEventProjection event;
+  event.event_cursor = "cursor-completed-040";
+  event.event_kind = "turn.receipt";
+  event.session_id = "session-submit-040";
+  event.timestamp = "2026-05-25T12:40:03Z";
+  event.turn_receipt = make_completed_receipt();
+  event.status_delta = dasall::tui::data::TuiStatusProjection{
+      .stage = "completed",
+      .current_tool = "access.submit",
+      .pending_interaction = "none",
+      .budget_summary = "budget ok",
+      .recovery_summary = "stable",
+      .health_summary = "healthy",
+      .safe_mode_summary = "completed by daemon-backed execution",
+  };
+  return event;
 }
 
 [[nodiscard]] TuiAction make_submit_action() {
@@ -190,10 +232,13 @@ void tui_app_submit_turn_assembles_request_and_projects_receipt() {
                "submit request should preserve the current route preferred depth tier");
 
   assert_equal(1, static_cast<int>(app.screen_model().transcript.size()),
-               "successful submit should append a receipt projection into the transcript");
-  assert_equal(std::string("submit turn accepted for daemon execution"),
+               "successful submit should append the submitted user message into the transcript");
+  assert_equal(std::string("user"),
+               app.screen_model().transcript.back().role,
+               "successful submit transcript entry should be attributed to the user");
+  assert_equal(std::string("Hello from formal submit path"),
                app.screen_model().transcript.back().content,
-               "receipt projection should surface the receipt summary in the transcript");
+               "successful submit transcript entry should surface the composer draft text");
   assert_equal(std::string("submitting"),
                app.screen_model().composer.mode,
                "successful submit should keep the composer in submitting mode until later polling updates arrive");
@@ -254,12 +299,56 @@ void tui_app_submit_turn_restores_draft_and_surfaces_validation_rejection() {
               "validation rejection should remain visible through the app-level last_error surface");
 }
 
+void tui_app_submit_turn_completed_event_releases_composer_and_projects_response_text() {
+  auto data_source = std::make_unique<RecordingDataSource>();
+  data_source->route_catalog_view = make_route_catalog();
+  data_source->submit_receipt = make_completed_receipt();
+  data_source->poll_events_batch.push_back(make_completed_event());
+  data_source->next_cursor = std::string("cursor-completed-040");
+
+  TuiApp app;
+  TuiAppOptions options;
+  options.scenario_id = "formal_submit_completed";
+  options.probe_environment = make_full_screen_environment();
+  options.print_final_screen = false;
+  options.initial_draft = std::string("Who are you?");
+  options.scripted_actions.push_back(make_submit_action());
+  options.post_action_tick_count = 1;
+  options.data_source_override = std::move(data_source);
+
+  const int exit_code = app.run(std::move(options));
+
+  assert_equal(0, exit_code,
+               "completed daemon-backed submit should keep the app run green");
+  assert_equal(2,
+               static_cast<int>(app.screen_model().transcript.size()),
+               "completed daemon-backed submit should keep one user row and one assistant row");
+  assert_equal(std::string("user"),
+               app.screen_model().transcript.front().role,
+               "completed daemon-backed submit should preserve the submitted user row");
+  assert_equal(std::string("Who are you?"),
+               app.screen_model().transcript.front().content,
+               "completed daemon-backed submit should show the original user text");
+  assert_equal(std::string("llm.origin=deepseek-prod/deepseek-reasoner final answer"),
+               app.screen_model().transcript.back().content,
+               "completed daemon-backed submit should project response_text instead of the generic receipt summary");
+  assert_equal(std::string("assistant"),
+               app.screen_model().transcript.back().role,
+               "completed daemon-backed submit should attribute response_text to the assistant");
+  assert_equal(std::string("ready"),
+               app.screen_model().composer.mode,
+               "completed daemon-backed submit should release the composer after terminal status arrives");
+  assert_true(app.screen_model().composer.can_submit,
+              "completed daemon-backed submit should restore submit availability");
+}
+
 }  // namespace
 
 int main() {
   try {
     tui_app_submit_turn_assembles_request_and_projects_receipt();
     tui_app_submit_turn_restores_draft_and_surfaces_validation_rejection();
+    tui_app_submit_turn_completed_event_releases_composer_and_projects_response_text();
   } catch (const std::exception& exception) {
     std::cerr << exception.what() << '\n';
     return 1;

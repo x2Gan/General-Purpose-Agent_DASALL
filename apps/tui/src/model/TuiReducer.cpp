@@ -40,7 +40,11 @@ void fail_closed(TuiScreenModel& model,
   if (event.turn_receipt.has_value()) {
     const auto& receipt = *event.turn_receipt;
     message.role = "assistant";
-    message.content = receipt.summary_text.empty() ? receipt.disposition : receipt.summary_text;
+    if (receipt.response_text.has_value() && !receipt.response_text->empty()) {
+      message.content = *receipt.response_text;
+    } else {
+      message.content = receipt.summary_text.empty() ? receipt.disposition : receipt.summary_text;
+    }
 
     if (!receipt.disposition.empty()) {
       message.badges.push_back(receipt.disposition);
@@ -217,6 +221,26 @@ TuiScreenModel reduce(TuiScreenModel current, TuiAction action) {
       }
 
       current.transcript.push_back(build_message_view(*action.event));
+      clear_debug_reason_if_unspecified(current, action);
+      return current;
+
+    case TuiActionType::TranscriptMessageAppended:
+      if (!action.transcript_content.has_value()) {
+        fail_closed(current,
+                    action,
+                    "missing_transcript_message_payload",
+                    "TranscriptMessageAppended requires transcript_content");
+        return current;
+      }
+
+      current.transcript.push_back(TuiMessageView{
+          .role = action.transcript_role.value_or(std::string{"system"}),
+          .content = *action.transcript_content,
+          .timestamp = action.transcript_timestamp.value_or(std::string{}),
+          .badges = action.transcript_badges,
+          .collapsible = false,
+          .collapsed = false,
+      });
       clear_debug_reason_if_unspecified(current, action);
       return current;
 

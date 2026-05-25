@@ -85,7 +85,7 @@ constexpr std::size_t kNarrowPanelWidth = 32;
 
 [[nodiscard]] std::string pending_summary(const data::TuiStatusProjection& status) {
   const std::string pending = normalize_token(status.pending_interaction);
-  if (!pending.empty()) {
+  if (!pending.empty() && lowercase_copy(pending) != "none") {
     return pending;
   }
 
@@ -236,7 +236,7 @@ std::string TuiStatusPanel::format_health_summary() const {
 
 std::string TuiStatusPanel::format_decision_summary() const {
   const std::string pending = normalize_token(status_.pending_interaction);
-  if (!pending.empty()) {
+  if (!pending.empty() && lowercase_copy(pending) != "none") {
     return "awaiting " + pending;
   }
 

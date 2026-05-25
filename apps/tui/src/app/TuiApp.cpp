@@ -1,10 +1,24 @@
 #include "app/TuiApp.h"
 
 #include <algorithm>
+#include <cerrno>
+#include <csignal>
+#include <cctype>
+#include <cstring>
+#include <iostream>
 #include <sstream>
 #include <utility>
 
+#if !defined(_WIN32)
+#include <poll.h>
+#include <sys/ioctl.h>
+#include <termios.h>
+#include <unistd.h>
+#endif
+
+#include "command/TuiSlashCommandParser.h"
 #include "model/TuiReducer.h"
+#include "view/TuiTextWidth.h"
 
 namespace dasall::tui::app {
 namespace {
@@ -15,6 +29,330 @@ using dasall::tui::model::TuiBanner;
 using dasall::tui::model::TuiBannerLevel;
 using dasall::tui::model::TuiModalKind;
 using dasall::tui::model::TuiModalState;
+
+#if !defined(_WIN32)
+
+volatile std::sig_atomic_t interactive_resize_requested = 0;
+
+void handle_interactive_resize_signal(int) { interactive_resize_requested = 1; }
+
+struct InteractiveTerminalSize {
+  std::size_t columns = 80;
+  std::size_t rows = 24;
+};
+
+[[nodiscard]] bool same_interactive_size(
+    const InteractiveTerminalSize& left,
+    const InteractiveTerminalSize& right) noexcept {
+  return left.columns == right.columns && left.rows == right.rows;
+}
+
+[[nodiscard]] InteractiveTerminalSize read_interactive_terminal_size() {
+  for (const int file_descriptor : {STDOUT_FILENO, STDERR_FILENO, STDIN_FILENO}) {
+    winsize size{};
+    if (::ioctl(file_descriptor, TIOCGWINSZ, &size) == 0 &&
+        size.ws_col > 0U && size.ws_row > 0U) {
+      return InteractiveTerminalSize{static_cast<std::size_t>(size.ws_col),
+                                     static_cast<std::size_t>(size.ws_row)};
+    }
+  }
+
+  return InteractiveTerminalSize{};
+}
+
+void write_interactive_stdout(std::string_view text) {
+  const char* cursor = text.data();
+  std::size_t remaining = text.size();
+  while (remaining > 0U) {
+    const ssize_t written = ::write(STDOUT_FILENO, cursor, remaining);
+    if (written < 0) {
+      if (errno == EINTR) {
+        continue;
+      }
+      return;
+    }
+    if (written == 0) {
+      return;
+    }
+    cursor += written;
+    remaining -= static_cast<std::size_t>(written);
+  }
+}
+
+[[nodiscard]] std::string encode_interactive_newlines(std::string_view text) {
+  std::string encoded;
+  encoded.reserve(text.size() + 16U);
+  for (const char character : text) {
+    if (character == '\n') {
+      encoded += "\r\n";
+    } else {
+      encoded.push_back(character);
+    }
+  }
+  return encoded;
+}
+
+[[nodiscard]] std::string_view interactive_redraw_prefix() noexcept {
+  return "\x1b[?25l\x1b[H\x1b[J";
+}
+
+class InteractiveTerminalSession {
+ public:
+  InteractiveTerminalSession() = default;
+  InteractiveTerminalSession(const InteractiveTerminalSession&) = delete;
+  InteractiveTerminalSession& operator=(const InteractiveTerminalSession&) = delete;
+
+  ~InteractiveTerminalSession() { stop(); }
+
+  [[nodiscard]] bool start(std::ostream& error_stream) {
+    if (::tcgetattr(STDIN_FILENO, &original_termios_) != 0) {
+      error_stream << "failed to read terminal attributes: " << std::strerror(errno)
+                   << '\n';
+      return false;
+    }
+
+    has_original_termios_ = true;
+    enter_alternate_screen();
+    return enable_raw(error_stream);
+  }
+
+  void stop() {
+    disable_raw();
+    leave_alternate_screen();
+  }
+
+ private:
+  [[nodiscard]] bool enable_raw(std::ostream& error_stream) {
+    if (!has_original_termios_) {
+      return false;
+    }
+
+    termios raw = original_termios_;
+    raw.c_iflag &= static_cast<tcflag_t>(~(BRKINT | ICRNL | INPCK | ISTRIP | IXON));
+    raw.c_oflag &= static_cast<tcflag_t>(~(OPOST));
+    raw.c_cflag |= CS8;
+    raw.c_lflag &= static_cast<tcflag_t>(~(ECHO | ICANON | IEXTEN | ISIG));
+    raw.c_cc[VMIN] = 0;
+    raw.c_cc[VTIME] = 1;
+
+    if (::tcsetattr(STDIN_FILENO, TCSAFLUSH, &raw) != 0) {
+      error_stream << "failed to enable raw terminal mode: " << std::strerror(errno)
+                   << '\n';
+      return false;
+    }
+
+    raw_enabled_ = true;
+    return true;
+  }
+
+  void disable_raw() {
+    if (!raw_enabled_ || !has_original_termios_) {
+      return;
+    }
+    static_cast<void>(::tcsetattr(STDIN_FILENO, TCSAFLUSH, &original_termios_));
+    raw_enabled_ = false;
+  }
+
+  void enter_alternate_screen() {
+    if (alternate_screen_active_) {
+      return;
+    }
+    write_interactive_stdout("\x1b[?1049h\x1b[?25l\x1b[2J\x1b[H");
+    alternate_screen_active_ = true;
+  }
+
+  void leave_alternate_screen() {
+    if (!alternate_screen_active_) {
+      return;
+    }
+    write_interactive_stdout("\x1b[?25h\x1b[?1049l");
+    alternate_screen_active_ = false;
+  }
+
+  termios original_termios_{};
+  bool has_original_termios_ = false;
+  bool raw_enabled_ = false;
+  bool alternate_screen_active_ = false;
+};
+
+class InteractiveResizeSignalGuard {
+ public:
+  InteractiveResizeSignalGuard() {
+    struct sigaction action{};
+    action.sa_handler = handle_interactive_resize_signal;
+    sigemptyset(&action.sa_mask);
+    action.sa_flags = 0;
+    installed_ = ::sigaction(SIGWINCH, &action, &previous_action_) == 0;
+  }
+
+  InteractiveResizeSignalGuard(const InteractiveResizeSignalGuard&) = delete;
+  InteractiveResizeSignalGuard& operator=(const InteractiveResizeSignalGuard&) = delete;
+
+  ~InteractiveResizeSignalGuard() {
+    if (installed_) {
+      static_cast<void>(::sigaction(SIGWINCH, &previous_action_, nullptr));
+    }
+  }
+
+ private:
+  struct sigaction previous_action_{};
+  bool installed_ = false;
+};
+
+[[nodiscard]] bool is_csi_cursor_sequence(std::string_view sequence,
+                                          const char final_byte) noexcept {
+  if (sequence.size() < 3U || sequence[0] != '\x1b' || sequence[1] != '[' ||
+      sequence.back() != final_byte) {
+    return false;
+  }
+
+  for (std::size_t index = 2U; index + 1U < sequence.size(); ++index) {
+    const char byte = sequence[index];
+    if ((byte < '0' || byte > '9') && byte != ';' && byte != '?') {
+      return false;
+    }
+  }
+  return true;
+}
+
+[[nodiscard]] bool is_cursor_up_sequence(std::string_view sequence) noexcept {
+  return sequence == "\x1bOA" || is_csi_cursor_sequence(sequence, 'A');
+}
+
+[[nodiscard]] bool is_cursor_down_sequence(std::string_view sequence) noexcept {
+  return sequence == "\x1bOB" || is_csi_cursor_sequence(sequence, 'B');
+}
+
+[[nodiscard]] bool is_cursor_right_sequence(std::string_view sequence) noexcept {
+  return sequence == "\x1bOC" || is_csi_cursor_sequence(sequence, 'C');
+}
+
+[[nodiscard]] bool is_cursor_left_sequence(std::string_view sequence) noexcept {
+  return sequence == "\x1bOD" || is_csi_cursor_sequence(sequence, 'D');
+}
+
+[[nodiscard]] bool is_delete_sequence(std::string_view sequence) noexcept {
+  if (sequence.size() < 4U || sequence[0] != '\x1b' || sequence[1] != '[' ||
+      sequence.back() != '~' || sequence[2] != '3') {
+    return false;
+  }
+
+  for (std::size_t index = 3U; index + 1U < sequence.size(); ++index) {
+    const char byte = sequence[index];
+    if ((byte < '0' || byte > '9') && byte != ';') {
+      return false;
+    }
+  }
+  return true;
+}
+
+[[nodiscard]] bool is_escape_sequence_final_byte(const unsigned char byte) noexcept {
+  return byte >= 0x40U && byte <= 0x7EU;
+}
+
+[[nodiscard]] bool escape_sequence_complete(std::string_view sequence) noexcept {
+  if (sequence.empty() || sequence.front() != '\x1b') {
+    return true;
+  }
+  if (sequence.size() == 1U) {
+    return false;
+  }
+
+  const char prefix = sequence[1];
+  if (prefix == '[') {
+    for (std::size_t index = 2U; index < sequence.size(); ++index) {
+      if (is_escape_sequence_final_byte(static_cast<unsigned char>(sequence[index]))) {
+        return true;
+      }
+    }
+    return false;
+  }
+  if (prefix == 'O') {
+    return sequence.size() >= 3U;
+  }
+  if (prefix == '\r' || prefix == '\n') {
+    return true;
+  }
+
+  return true;
+}
+
+[[nodiscard]] std::size_t escape_sequence_length(std::string_view buffer) noexcept {
+  if (buffer.empty() || buffer.front() != '\x1b') {
+    return 0U;
+  }
+  if (buffer.size() == 1U) {
+    return 1U;
+  }
+
+  const char prefix = buffer[1];
+  if (prefix == '[') {
+    for (std::size_t index = 2U; index < buffer.size(); ++index) {
+      if (is_escape_sequence_final_byte(static_cast<unsigned char>(buffer[index]))) {
+        return index + 1U;
+      }
+    }
+    return buffer.size();
+  }
+  if (prefix == 'O') {
+    return std::min<std::size_t>(3U, buffer.size());
+  }
+  if (prefix == '\r' || prefix == '\n') {
+    return 2U;
+  }
+
+  return 1U;
+}
+
+[[nodiscard]] std::string read_pending_escape_bytes() {
+  std::string sequence = "\x1b";
+  while (!escape_sequence_complete(sequence) && sequence.size() < 16U) {
+    pollfd descriptor{.fd = STDIN_FILENO, .events = POLLIN, .revents = 0};
+    if (::poll(&descriptor, 1, 15) <= 0 || (descriptor.revents & POLLIN) == 0) {
+      break;
+    }
+
+    char byte{};
+    const ssize_t bytes_read = ::read(STDIN_FILENO, &byte, 1U);
+    if (bytes_read <= 0) {
+      break;
+    }
+    sequence.push_back(byte);
+  }
+  return sequence;
+}
+
+void erase_previous_text_token(std::string& text, std::size_t& cursor_offset) {
+  cursor_offset = view::clamp_to_terminal_text_offset(text, cursor_offset);
+  if (cursor_offset == 0U) {
+    return;
+  }
+
+  const std::size_t previous = view::previous_terminal_text_offset(text, cursor_offset);
+  text.erase(previous, cursor_offset - previous);
+  cursor_offset = previous;
+}
+
+void insert_printable_text(std::string& draft,
+                           std::size_t& cursor_offset,
+                           std::string_view bytes) {
+  std::string printable;
+  printable.reserve(bytes.size());
+  for (const unsigned char byte : bytes) {
+    if (byte >= 0x20U && byte != 0x7FU) {
+      printable.push_back(static_cast<char>(byte));
+    }
+  }
+  if (printable.empty()) {
+    return;
+  }
+
+  cursor_offset = view::clamp_to_terminal_text_offset(draft, cursor_offset);
+  draft.insert(cursor_offset, printable);
+  cursor_offset += printable.size();
+}
+
+#endif
 
 void apply_reduced_action(model::TuiScreenModel& screen_model,
                           const model::TuiAction& action) {
@@ -103,13 +441,19 @@ void apply_reduced_action(model::TuiScreenModel& screen_model,
   return action;
 }
 
-[[nodiscard]] model::TuiAction make_event_action(
-    data::TuiEventProjection event,
+[[nodiscard]] model::TuiAction make_transcript_message_action(
+    std::string role,
+    std::string content,
+    std::string timestamp,
+    std::vector<std::string> badges,
     std::string debug_reason) {
   TuiAction action;
-  action.type = TuiActionType::EventAppended;
+  action.type = TuiActionType::TranscriptMessageAppended;
   action.debug_reason = std::move(debug_reason);
-  action.event = std::move(event);
+  action.transcript_role = std::move(role);
+  action.transcript_content = std::move(content);
+  action.transcript_timestamp = std::move(timestamp);
+  action.transcript_badges = std::move(badges);
   return action;
 }
 
@@ -140,16 +484,20 @@ void apply_reduced_action(model::TuiScreenModel& screen_model,
          issue.reason_code == "daemon_unavailable";
 }
 
-[[nodiscard]] data::TuiEventProjection make_submit_receipt_event(
-    const data::TuiTurnReceipt& receipt,
-    std::string_view session_id) {
-  data::TuiEventProjection event;
-  event.event_kind = "turn_receipt";
-  event.session_id = receipt.session_id.empty() ? std::string(session_id)
-                                                : receipt.session_id;
-  event.timestamp = receipt.submitted_at;
-  event.turn_receipt = receipt;
-  return event;
+[[nodiscard]] std::string dots_spinner_frame(const std::size_t index) {
+  switch (index % 3U) {
+    case 0U:
+      return "processing.";
+    case 1U:
+      return "processing..";
+    default:
+      return "processing...";
+  }
+}
+
+[[nodiscard]] bool composer_waiting_for_response(
+    const model::TuiComposerState& composer) noexcept {
+  return composer.mode == "submitting" || composer.mode == "pending-interaction";
 }
 
 }  // namespace
@@ -225,8 +573,206 @@ int TuiApp::run(TuiAppOptions options) {
     show_selector_preview(*options.selector_preview_mode);
   }
 
+  if (options.interactive_session) {
+    return run_interactive_session();
+  }
+
   render_current_screen(options.print_final_screen);
   return shutdown();
+}
+
+int TuiApp::run_interactive_session() {
+#if defined(_WIN32)
+  render_current_screen(true);
+  return shutdown();
+#else
+  InteractiveTerminalSession terminal_session;
+  if (!terminal_session.start(std::cerr)) {
+    shutdown_close_reason_ = "interactive_terminal_start_failed";
+    return shutdown();
+  }
+
+  InteractiveResizeSignalGuard resize_guard;
+  InteractiveTerminalSize terminal_size = read_interactive_terminal_size();
+  terminal_width_ = terminal_size.columns;
+  terminal_height_ = terminal_size.rows;
+
+  auto redraw = [this]() {
+    render_current_screen(false);
+    write_interactive_stdout(interactive_redraw_prefix());
+    write_interactive_stdout(encode_interactive_newlines(last_rendered_screen_));
+    write_interactive_stdout("\x1b[H");
+  };
+
+  redraw();
+
+  while (!exit_requested_) {
+    const InteractiveTerminalSize observed_size = read_interactive_terminal_size();
+    if (interactive_resize_requested != 0 ||
+        !same_interactive_size(observed_size, terminal_size)) {
+      interactive_resize_requested = 0;
+      terminal_size = observed_size;
+      terminal_width_ = terminal_size.columns;
+      terminal_height_ = terminal_size.rows;
+      redraw();
+    }
+
+    while (tick()) {
+      redraw();
+    }
+
+    if (advance_interactive_animation()) {
+      redraw();
+    }
+
+    pollfd descriptor{.fd = STDIN_FILENO, .events = POLLIN, .revents = 0};
+    const int poll_result = ::poll(&descriptor, 1, 100);
+    if (poll_result < 0 && errno == EINTR) {
+      continue;
+    }
+    if (poll_result < 0) {
+      shutdown_close_reason_ = "interactive_terminal_poll_failed";
+      break;
+    }
+    if (poll_result == 0) {
+      continue;
+    }
+    if ((descriptor.revents & (POLLERR | POLLHUP)) != 0 &&
+        (descriptor.revents & POLLIN) == 0) {
+      shutdown_close_reason_ = "interactive_terminal_closed";
+      break;
+    }
+    if ((descriptor.revents & POLLIN) == 0) {
+      continue;
+    }
+
+    char input_buffer[64]{};
+    const ssize_t bytes_read = ::read(STDIN_FILENO, input_buffer, sizeof(input_buffer));
+    if (bytes_read <= 0) {
+      continue;
+    }
+
+    std::string draft = composer_.state().text;
+    std::size_t cursor_offset = composer_.state().cursor_offset;
+
+    for (std::size_t offset = 0; offset < static_cast<std::size_t>(bytes_read); ++offset) {
+      const unsigned char byte = static_cast<unsigned char>(input_buffer[offset]);
+      if (byte == 0x03U || byte == 0x04U) {
+        shutdown_close_reason_ = "interactive_terminal_exit";
+        exit_requested_ = true;
+        break;
+      }
+
+      if (byte == 0x1BU) {
+        sync_pending_draft(draft, cursor_offset, "interactive_text_before_escape");
+        std::string sequence = "\x1b";
+        if (offset + 1U < static_cast<std::size_t>(bytes_read)) {
+          const std::size_t sequence_length =
+              escape_sequence_length(std::string_view(input_buffer + offset,
+                                                      static_cast<std::size_t>(bytes_read) -
+                                                          offset));
+          sequence.assign(input_buffer + offset, sequence_length);
+          offset += sequence_length > 0U ? sequence_length - 1U : 0U;
+        } else {
+          sequence = read_pending_escape_bytes();
+        }
+
+        if (is_cursor_up_sequence(sequence)) {
+          static_cast<void>(composer_.handle_key(view::TuiComposerKeyEvent{
+              .key = view::TuiComposerKey::Up,
+              .text = {},
+              .cursor_at_boundary = true,
+              .draft_unmodified = true}));
+          sync_composer_state();
+        } else if (is_cursor_down_sequence(sequence)) {
+          static_cast<void>(composer_.handle_key(
+              view::TuiComposerKeyEvent{.key = view::TuiComposerKey::Down, .text = {}}));
+          sync_composer_state();
+        } else if (is_cursor_left_sequence(sequence)) {
+          static_cast<void>(composer_.handle_key(
+              view::TuiComposerKeyEvent{.key = view::TuiComposerKey::Left, .text = {}}));
+          sync_composer_state();
+        } else if (is_cursor_right_sequence(sequence)) {
+          static_cast<void>(composer_.handle_key(
+              view::TuiComposerKeyEvent{.key = view::TuiComposerKey::Right, .text = {}}));
+          sync_composer_state();
+        } else if (is_delete_sequence(sequence)) {
+          static_cast<void>(composer_.handle_key(
+              view::TuiComposerKeyEvent{.key = view::TuiComposerKey::Delete, .text = {}}));
+          sync_composer_state();
+        } else if (sequence == "\x1b\r" || sequence == "\x1b\n") {
+          static_cast<void>(composer_.handle_key(
+              view::TuiComposerKeyEvent{.key = view::TuiComposerKey::AltEnter, .text = {}}));
+          sync_composer_state();
+        } else if (screen_model_.modal.kind != model::TuiModalKind::None) {
+          hide_modal("interactive_modal_hidden");
+        }
+
+        draft = composer_.state().text;
+        cursor_offset = composer_.state().cursor_offset;
+        continue;
+      }
+
+      if (byte == '\r') {
+        sync_pending_draft(draft, cursor_offset, "interactive_text_before_submit");
+        if (screen_model_.modal.kind != model::TuiModalKind::None) {
+          hide_modal("interactive_modal_hidden");
+        } else {
+          handle_interactive_submit();
+        }
+        draft = composer_.state().text;
+        cursor_offset = composer_.state().cursor_offset;
+        continue;
+      }
+
+      if (byte == '\n') {
+        cursor_offset = view::clamp_to_terminal_text_offset(draft, cursor_offset);
+        draft.insert(cursor_offset, "\n");
+        ++cursor_offset;
+        continue;
+      }
+
+      if (byte == 0x02U || byte == 0x06U) {
+        sync_pending_draft(draft,
+                           cursor_offset,
+                           byte == 0x02U ? "interactive_text_before_ctrl_b"
+                                         : "interactive_text_before_ctrl_f");
+        static_cast<void>(composer_.handle_key(view::TuiComposerKeyEvent{
+            .key = byte == 0x02U ? view::TuiComposerKey::Left
+                                 : view::TuiComposerKey::Right,
+            .text = {}}));
+        sync_composer_state();
+        draft = composer_.state().text;
+        cursor_offset = composer_.state().cursor_offset;
+        continue;
+      }
+
+      if (byte == 0x12U) {
+        sync_pending_draft(draft, cursor_offset, "interactive_text_before_reverse_search");
+        static_cast<void>(composer_.handle_key(
+            view::TuiComposerKeyEvent{.key = view::TuiComposerKey::CtrlR, .text = {}}));
+        sync_composer_state();
+        draft = composer_.state().text;
+        cursor_offset = composer_.state().cursor_offset;
+        continue;
+      }
+
+      if (byte == 0x7FU || byte == 0x08U) {
+        erase_previous_text_token(draft, cursor_offset);
+        continue;
+      }
+
+      insert_printable_text(draft,
+                            cursor_offset,
+                            std::string_view(input_buffer + offset, 1U));
+    }
+
+    sync_pending_draft(draft, cursor_offset, "interactive_text_changed");
+    redraw();
+  }
+
+  return shutdown();
+#endif
 }
 
 void TuiApp::dispatch_action(const model::TuiAction& action) {
@@ -274,6 +820,7 @@ void TuiApp::dispatch_action(const model::TuiAction& action) {
       break;
 
     case TuiActionType::RouteUpdated:
+    case TuiActionType::TranscriptMessageAppended:
     case TuiActionType::Noop:
     case TuiActionType::FocusChanged:
     case TuiActionType::BannerAdded:
@@ -365,6 +912,32 @@ void TuiApp::clear_composer_draft_preserving_history() {
   static_cast<void>(composer_.handle_key(event));
 }
 
+void TuiApp::set_composer_text(std::string text,
+                               const std::optional<std::size_t> cursor_offset,
+                               std::string debug_reason) {
+  const view::TuiComposerKeyEvent event{
+      .key = view::TuiComposerKey::TextChanged,
+      .text = std::move(text),
+      .cursor_offset = cursor_offset,
+  };
+  static_cast<void>(composer_.handle_key(event));
+  sync_composer_state();
+  screen_model_.debug_reason = std::move(debug_reason);
+}
+
+void TuiApp::sync_pending_draft(const std::string& draft,
+                                const std::size_t cursor_offset,
+                                std::string debug_reason) {
+  const std::size_t clamped_cursor =
+      view::clamp_to_terminal_text_offset(draft, cursor_offset);
+  if (draft == composer_.state().text &&
+      clamped_cursor == composer_.state().cursor_offset) {
+    return;
+  }
+
+  set_composer_text(draft, clamped_cursor, std::move(debug_reason));
+}
+
 void TuiApp::restore_composer_draft(std::string text,
                                     const std::size_t cursor_offset) {
   static_cast<void>(composer_.set_busy(false));
@@ -418,12 +991,26 @@ void TuiApp::dispatch_composer_submit() {
     }
     return;
   }
+  if (!result.receipt.has_value()) {
+    restore_composer_draft(previous_draft, previous_cursor_offset);
+    apply_reduced_action(screen_model_,
+                         make_banner_action(model::TuiBannerLevel::Error,
+                                            "Turn submit failed",
+                                            "submit_turn succeeded without a receipt payload.",
+                                            "missing_submit_receipt",
+                                            "turn_submit_missing_receipt",
+                                            true));
+    return;
+  }
 
   last_error_.clear();
   apply_reduced_action(screen_model_,
-                       make_event_action(
-                           make_submit_receipt_event(*result.receipt, session_id_),
-                           "submit_turn_receipt"));
+                       make_transcript_message_action(
+                           "user",
+                           update.action.text,
+                           result.receipt->submitted_at,
+                           {"submitted"},
+                           "submit_turn_user_message"));
   apply_reduced_action(screen_model_,
                        make_banner_action(
                            model::TuiBannerLevel::Info,
@@ -433,6 +1020,37 @@ void TuiApp::dispatch_composer_submit() {
                                : result.receipt->summary_text,
                            result.receipt->reason_code.value_or(std::string{}),
                            "turn_submit_requested"));
+}
+
+void TuiApp::handle_interactive_submit() {
+  const command::TuiSlashCommandParser parser;
+  const command::TuiSlashCommandParseResult parse_result =
+      parser.parse(composer_.state().text);
+  if (!parse_result.is_slash_command) {
+    dispatch_composer_submit();
+    return;
+  }
+
+  if (!parse_result.accepted) {
+    dispatch_action(parse_result.to_action());
+    return;
+  }
+
+  clear_composer_draft_preserving_history();
+  sync_composer_state();
+
+  if (parse_result.command.kind == command::TuiSlashCommandKind::Editor) {
+    apply_reduced_action(screen_model_,
+                         make_banner_action(model::TuiBannerLevel::Warning,
+                                            "External editor unavailable",
+                                            "Formal TUI interactive editor wiring is not available yet.",
+                                            "external_editor_unavailable",
+                                            "interactive_editor_unavailable",
+                                            true));
+    return;
+  }
+
+  dispatch_action(parse_result.to_action());
 }
 
 void TuiApp::handle_foreground_session_clear() {
@@ -478,6 +1096,13 @@ void TuiApp::handle_foreground_session_clear() {
   if (session_reopened && route_reloaded) {
     sync_composer_busy_from_status();
   }
+}
+
+void TuiApp::hide_modal(std::string debug_reason) {
+  TuiAction action;
+  action.type = TuiActionType::ModalHidden;
+  action.debug_reason = std::move(debug_reason);
+  dispatch_action(action);
 }
 
 const model::TuiScreenModel& TuiApp::screen_model() const noexcept {
@@ -627,11 +1252,50 @@ void TuiApp::sync_composer_state() {
   submit_action.debug_reason = "composer_state_sync:submit";
   submit_action.composer_can_submit = composer_.state().can_submit;
   apply_reduced_action(screen_model_, submit_action);
+
+  screen_model_.composer.cursor_offset = composer_.state().cursor_offset;
+  screen_model_.composer.history_query = composer_.state().history_query;
+  screen_model_.composer.dirty = composer_.state().dirty;
+  screen_model_.composer.cursor_visible = composer_.state().cursor_visible;
+  screen_model_.composer.activity_indicator = composer_.state().activity_indicator;
 }
 
 void TuiApp::sync_composer_busy_from_status() {
   static_cast<void>(composer_.set_busy(status_requires_busy_composer(screen_model_.status)));
   sync_composer_state();
+}
+
+bool TuiApp::advance_interactive_animation() {
+  bool changed = false;
+
+  ++animation_cursor_tick_;
+  if (animation_cursor_tick_ >= 5U) {
+    animation_cursor_tick_ = 0;
+    animation_cursor_visible_ = !animation_cursor_visible_;
+    changed = true;
+  }
+
+  if (screen_model_.composer.cursor_visible != animation_cursor_visible_) {
+    screen_model_.composer.cursor_visible = animation_cursor_visible_;
+    changed = true;
+  }
+
+  if (composer_waiting_for_response(screen_model_.composer)) {
+    animation_spinner_index_ = (animation_spinner_index_ + 1U) % 3U;
+    const std::string indicator = dots_spinner_frame(animation_spinner_index_);
+    if (screen_model_.composer.activity_indicator != indicator) {
+      screen_model_.composer.activity_indicator = indicator;
+      changed = true;
+    }
+    return changed;
+  }
+
+  animation_spinner_index_ = 0;
+  if (!screen_model_.composer.activity_indicator.empty()) {
+    screen_model_.composer.activity_indicator.clear();
+    changed = true;
+  }
+  return changed;
 }
 
 void TuiApp::show_selector_preview(const data::TuiRoutePreferenceMode mode) {
@@ -797,10 +1461,19 @@ std::string TuiApp::startup_mode_to_string(
 }
 
 bool TuiApp::status_requires_busy_composer(const data::TuiStatusProjection& status) {
-  return !trim_copy(status.pending_interaction).empty() ||
-         !trim_copy(status.current_tool).empty() ||
-         trim_copy(status.stage) == "tool_calling" ||
-         trim_copy(status.stage) == "waiting_interaction";
+  const std::string stage = trim_copy(status.stage);
+  if (stage == "completed" || stage == "rejected" || stage == "cancelled" ||
+      stage == "timeout" || stage == "failed") {
+    return false;
+  }
+
+  const std::string pending_interaction = trim_copy(status.pending_interaction);
+  if (!pending_interaction.empty() && pending_interaction != "none") {
+    return true;
+  }
+
+  return stage == "accepted_async" || stage == "tool_calling" ||
+         stage == "waiting_interaction";
 }
 
 std::string TuiApp::next_request_id(std::string_view prefix) {

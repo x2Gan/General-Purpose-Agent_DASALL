@@ -814,6 +814,7 @@ void append_optional_bool_member(std::string& out,
   append_string_member(json, "receipt_ref", receipt.receipt_ref, first);
   append_string_member(json, "submitted_at", receipt.submitted_at, first);
   append_string_member(json, "summary_text", receipt.summary_text, first);
+  append_optional_string_member(json, "response_text", receipt.response_text, first);
   append_optional_string_member(json, "reason_code", receipt.reason_code, first);
   json.push_back('}');
   return json;
@@ -1190,6 +1191,22 @@ void append_optional_bool_member(std::string& out,
   return "request rejected by daemon-backed access gateway";
 }
 
+[[nodiscard]] std::optional<std::string> response_text_for_dispatch(
+    const RuntimeDispatchResult& dispatch_result) {
+  if (!dispatch_result.publish_envelope.has_value() ||
+      !dispatch_result.publish_envelope->agent_result.has_value()) {
+    return std::nullopt;
+  }
+
+  const auto& response_text =
+      dispatch_result.publish_envelope->agent_result->response_text;
+  if (!response_text.has_value() || response_text->empty()) {
+    return std::nullopt;
+  }
+
+  return response_text;
+}
+
 [[nodiscard]] std::string extract_receipt_ref(
     const RuntimeDispatchResult& dispatch_result,
     std::string_view fallback_request_id) {
@@ -1428,6 +1445,7 @@ void append_optional_bool_member(std::string& out,
   receipt.receipt_ref = extract_receipt_ref(dispatch_result, envelope.request_id);
   receipt.submitted_at = now_utc_timestamp();
   receipt.summary_text = receipt_summary_for_dispatch(dispatch_result);
+  receipt.response_text = response_text_for_dispatch(dispatch_result);
 
   TuiIpcEventProjection event;
   event.event_kind = "turn.receipt";

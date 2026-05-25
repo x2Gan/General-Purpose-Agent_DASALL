@@ -21,8 +21,10 @@ using namespace std::chrono_literals;
 using dasall::access::AccessDisposition;
 using dasall::access::AsyncTaskRegistry;
 using dasall::access::DaemonAccessPipelineOptions;
+using dasall::access::PublishEnvelope;
 using dasall::access::RuntimeDispatchRequest;
 using dasall::access::RuntimeDispatchResult;
+using dasall::contracts::AgentResult;
 using dasall::tests::integration::access_support::DaemonIntegrationHarness;
 using dasall::tests::support::assert_equal;
 using dasall::tests::support::assert_true;
@@ -53,19 +55,23 @@ using dasall::tui::ipc::TuiIpcControllerOptions;
   return "local://uid/" + std::to_string(::getuid());
 }
 
-[[nodiscard]] DaemonAccessPipelineOptions make_daemon_options() {
+[[nodiscard]] DaemonAccessPipelineOptions make_daemon_options(
+    DaemonAccessPipelineOptions::RuntimeDispatchBackend runtime_dispatch_backend = {}) {
   DaemonAccessPipelineOptions options;
   options.bootstrap_config.allowed_protocols = {"ipc_uds", "tui_ipc.v1"};
   options.auth_view.trusted_local_subjects = {current_local_actor_ref()};
   options.daemon_profile_id = "daemon.tui.e2e";
   options.async_task_registry =
       std::make_shared<AsyncTaskRegistry>("tui-daemon-e2e-secret", 30s);
-  options.runtime_dispatch_backend = [](const RuntimeDispatchRequest& request) {
+  options.runtime_dispatch_backend = std::move(runtime_dispatch_backend);
+  if (!options.runtime_dispatch_backend) {
+    options.runtime_dispatch_backend = [](const RuntimeDispatchRequest& request) {
     RuntimeDispatchResult result;
     result.disposition = AccessDisposition::AcceptedAsync;
     result.receipt_ref = std::string("receipt:") + request.packet.packet_id;
     return result;
-  };
+    };
+  }
   return options;
 }
 
@@ -79,8 +85,9 @@ struct FormalTuiRoundtripArtifacts {
 
 class TuiDaemonBackedE2EHarness {
  public:
-  TuiDaemonBackedE2EHarness()
-      : daemon_(make_daemon_options()),
+  explicit TuiDaemonBackedE2EHarness(
+    DaemonAccessPipelineOptions options = make_daemon_options())
+    : daemon_(std::move(options)),
   data_source_(make_controller_options(daemon_.socket_path())) {}
 
   [[nodiscard]] FormalTuiRoundtripArtifacts run_formal_tui_roundtrip() {
@@ -233,11 +240,59 @@ void formal_tui_roundtrip_uses_real_daemon_socket_and_projects_receipt_event() {
               "daemon-backed TUI E2E should stop the in-process daemon cleanly after the roundtrip");
 }
 
+void formal_tui_roundtrip_projects_completed_response_text() {
+  TuiDaemonBackedE2EHarness harness(make_daemon_options(
+      [](const RuntimeDispatchRequest& request) {
+        RuntimeDispatchResult result;
+        result.disposition = AccessDisposition::Completed;
+
+        AgentResult agent_result;
+        agent_result.response_text = std::string("daemon-backed final answer");
+
+        PublishEnvelope envelope;
+        envelope.result_id = std::string("result:") + request.packet.packet_id;
+        envelope.agent_result = std::move(agent_result);
+        result.publish_envelope = std::move(envelope);
+        return result;
+      }));
+  const FormalTuiRoundtripArtifacts artifacts = harness.run_formal_tui_roundtrip();
+
+  assert_equal(std::string("completed"),
+               artifacts.submit_turn.receipt->disposition,
+               "completed daemon-backed TUI E2E should preserve completed submit disposition");
+  assert_true(artifacts.submit_turn.receipt->response_text.has_value(),
+              "completed daemon-backed TUI E2E should surface response_text on submit receipt");
+  assert_equal(std::string("daemon-backed final answer"),
+               *artifacts.submit_turn.receipt->response_text,
+               "completed daemon-backed TUI E2E should preserve response_text on submit receipt");
+
+  assert_equal(1, static_cast<int>(artifacts.poll_events.events.size()),
+               "completed daemon-backed TUI E2E should return a single completed receipt event on first poll");
+  const auto& event = artifacts.poll_events.events.front();
+  assert_true(event.turn_receipt.has_value(),
+              "completed daemon-backed TUI E2E should embed the completed receipt inside the event batch");
+  assert_true(event.turn_receipt->response_text.has_value(),
+              "completed daemon-backed TUI E2E should preserve response_text inside poll_events");
+  assert_equal(std::string("daemon-backed final answer"),
+               *event.turn_receipt->response_text,
+               "completed daemon-backed TUI E2E should preserve response_text value inside poll_events");
+  assert_true(event.status_delta.has_value(),
+              "completed daemon-backed TUI E2E should include terminal status projection");
+  assert_equal(std::string("completed"),
+               event.status_delta->stage,
+               "completed daemon-backed TUI E2E should project completed into the event status stage");
+
+  harness.stop();
+  assert_true(harness.daemon_stopped_cleanly(),
+              "completed daemon-backed TUI E2E should stop the in-process daemon cleanly");
+}
+
 }  // namespace
 
 int main() {
   try {
     formal_tui_roundtrip_uses_real_daemon_socket_and_projects_receipt_event();
+    formal_tui_roundtrip_projects_completed_response_text();
   } catch (const std::exception& exception) {
     std::cerr << exception.what() << '\n';
     return 1;

@@ -22,6 +22,7 @@ endfunction()
 
 set(DASALL_TUI_SHARED_CORE_SOURCES
   src/app/TuiApp.cpp
+  src/command/TuiSlashCommandParser.cpp
   src/model/TuiReducer.cpp
   src/terminal/FtxuiRendererAdapter.cpp
   src/terminal/TuiTerminalCapabilityProbe.cpp

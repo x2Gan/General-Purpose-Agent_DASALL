@@ -153,6 +153,7 @@ void reducer_resets_foreground_session_state_for_clear() {
       .role = "assistant",
       .content = "stale transcript",
       .timestamp = "2026-05-23T18:26:00Z",
+      .badges = {},
   });
   model.composer.text = "stale draft";
   model.composer.mode = "editing";

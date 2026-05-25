@@ -156,6 +156,28 @@ void status_panel_fails_closed_for_missing_fields_in_narrow_layout() {
               "missing critical status fields should mark the panel degraded");
 }
 
+void status_panel_treats_literal_none_pending_as_no_pending_decision() {
+  TuiStatusPanel panel(TuiStatusProjection{
+      .stage = "completed",
+      .current_tool = "access.submit",
+      .pending_interaction = "none",
+      .budget_summary = "budget ok",
+      .recovery_summary = "stable",
+      .health_summary = "healthy",
+      .safe_mode_summary = "completed by daemon-backed execution",
+  });
+  const TuiStatusPanelRenderResult render_result = panel.render_status_panel(48);
+  const std::string rendered_text = join_rendered_lines(render_result);
+
+  assert_true(rendered_text.find("pending: none") != std::string::npos,
+              "literal none pending state should still render as a readable status value");
+  assert_equal("stable",
+               render_result.decision_summary,
+               "literal none pending state should not be interpreted as awaiting user input");
+  assert_true(rendered_text.find("decision: awaiting none") == std::string::npos,
+              "status panel should not render awaiting none for terminal receipts");
+}
+
 void status_panel_files_avoid_owner_private_or_renderer_dependencies() {
   const std::string header_text =
       read_text_file(std::filesystem::path{DASALL_TUI_STATUS_PANEL_HEADER});
@@ -191,6 +213,7 @@ int main() {
     status_panel_renders_textual_badges_for_fake_status();
     status_panel_renders_pending_and_recovery_reasons();
     status_panel_fails_closed_for_missing_fields_in_narrow_layout();
+    status_panel_treats_literal_none_pending_as_no_pending_decision();
     status_panel_files_avoid_owner_private_or_renderer_dependencies();
   } catch (const std::exception& exception) {
     std::cerr << "[TuiStatusPanelTest] FAILED: " << exception.what() << '\n';

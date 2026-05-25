@@ -58,6 +58,7 @@ enum class TuiActionType {
   StatusUpdated,
   RouteUpdated,
   EventAppended,
+  TranscriptMessageAppended,
   ComposerTextChanged,
   ComposerModeChanged,
   ComposerSubmitAvailabilityChanged,
@@ -79,6 +80,10 @@ struct TuiAction {
   std::optional<data::TuiStatusProjection> status;
   std::optional<data::TuiModelRouteProjection> route;
   std::optional<data::TuiEventProjection> event;
+  std::optional<std::string> transcript_role;
+  std::optional<std::string> transcript_content;
+  std::optional<std::string> transcript_timestamp;
+  std::vector<std::string> transcript_badges;
   std::optional<std::string> composer_text;
   std::optional<std::string> composer_mode;
   std::optional<bool> composer_can_submit;

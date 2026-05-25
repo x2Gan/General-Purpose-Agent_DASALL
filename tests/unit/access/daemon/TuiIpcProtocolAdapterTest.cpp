@@ -365,6 +365,101 @@ void daemon_tui_ipc_server_handler_dispatches_submit_poll_and_close() {
               "close_session should acknowledge successful session closure");
 }
 
+  void daemon_tui_ipc_server_handler_projects_completed_response_text() {
+    using dasall::access::AccessDisposition;
+    using dasall::access::PublishEnvelope;
+    using dasall::access::daemon::TuiIpcPollEventsBatch;
+    using dasall::access::daemon::TuiIpcProtocolAdapter;
+    using dasall::access::daemon::TuiIpcSessionStore;
+    using dasall::access::daemon::TuiIpcSessionView;
+    using dasall::access::daemon::TuiIpcTurnReceipt;
+    using dasall::contracts::AgentResult;
+    using dasall::tests::support::assert_equal;
+    using dasall::tests::support::assert_true;
+
+    auto ipc = std::make_shared<CapturingIpc>();
+    FakeAccessGateway gateway;
+    gateway.next_result.disposition = AccessDisposition::Completed;
+
+    AgentResult agent_result;
+    agent_result.response_text = std::string("daemon completed final answer");
+    PublishEnvelope envelope;
+    envelope.result_id = "result-completed-040";
+    envelope.agent_result = std::move(agent_result);
+    gateway.next_result.publish_envelope = std::move(envelope);
+
+    TuiIpcSessionStore session_store;
+    dasall::platform::IpcChannelHandle channel{.native_fd = 18U};
+
+    TuiIpcProtocolAdapter open_adapter(ipc);
+    open_adapter.set_active_channel(
+      channel,
+      make_payload(build_request(
+        "open_session",
+        "req-open-completed-040",
+        "trace-open-completed-040",
+        R"({"profile_id":"desktop_full","startup_mode_hint":"full"})")));
+    const auto open_decoded = open_adapter.decode_tui_ipc_request();
+    const auto open_response = open_adapter.dispatch_tui_ipc_operation(
+      open_decoded, gateway, session_store, "local_trusted:1000", "desktop_full");
+    const auto* session = std::get_if<TuiIpcSessionView>(&*open_response.payload);
+    assert_true(session != nullptr,
+          "open_session should produce a session payload before completed submit_turn");
+
+    TuiIpcProtocolAdapter submit_adapter(ipc);
+    submit_adapter.set_active_channel(
+      channel,
+      make_payload(build_request(
+        "submit_turn",
+        "req-submit-completed-040",
+        "trace-submit-completed-040",
+        R"({"user_input":"hello daemon","next_preference":{"mode":"auto","user_visible_summary":"auto","source":"selector","applies_to_next_turn_only":true}})",
+        session->session_id)));
+    const auto submit_decoded = submit_adapter.decode_tui_ipc_request();
+    const auto submit_response = submit_adapter.dispatch_tui_ipc_operation(
+      submit_decoded, gateway, session_store, "local_trusted:1000", "desktop_full");
+    const auto* receipt = std::get_if<TuiIpcTurnReceipt>(&*submit_response.payload);
+    assert_true(receipt != nullptr,
+          "completed submit_turn should project a turn receipt");
+    assert_equal(std::string("completed"),
+           receipt->disposition,
+           "completed submit_turn should preserve completed disposition");
+    assert_true(receipt->response_text.has_value(),
+          "completed submit_turn should include runtime response_text on the receipt");
+    assert_equal(std::string("daemon completed final answer"),
+           *receipt->response_text,
+           "completed submit_turn should preserve runtime response_text on the receipt");
+
+    assert_true(submit_adapter.encode_tui_ipc_response(submit_response),
+          "completed submit response should encode back onto the active IPC channel");
+    assert_contains(as_text(ipc->sent_payload),
+            R"("response_text":"daemon completed final answer")",
+            "completed submit response should serialize response_text for TUI clients");
+
+    TuiIpcProtocolAdapter poll_adapter(ipc);
+    poll_adapter.set_active_channel(
+      channel,
+      make_payload(build_request(
+        "poll_events",
+        "req-poll-completed-040",
+        "trace-poll-completed-040",
+        R"({})",
+        session->session_id)));
+    const auto poll_decoded = poll_adapter.decode_tui_ipc_request();
+    const auto poll_response = poll_adapter.dispatch_tui_ipc_operation(
+      poll_decoded, gateway, session_store, "local_trusted:1000", "desktop_full");
+    const auto* batch = std::get_if<TuiIpcPollEventsBatch>(&*poll_response.payload);
+    assert_true(batch != nullptr && !batch->events.empty(),
+          "poll_events should return the completed submit event");
+    assert_true(batch->events.front().turn_receipt.has_value(),
+          "completed poll event should include a turn receipt");
+    assert_true(batch->events.front().turn_receipt->response_text.has_value(),
+          "completed poll event should preserve runtime response_text");
+    assert_equal(std::string("daemon completed final answer"),
+           *batch->events.front().turn_receipt->response_text,
+           "completed poll event should preserve runtime response_text value");
+  }
+
 }  // namespace
 
 int main() {
@@ -372,6 +467,7 @@ int main() {
     tui_ipc_protocol_adapter_decodes_open_session_and_encodes_success_response();
     tui_ipc_protocol_adapter_surfaces_schema_mismatch_unknown_operation_and_validation_rejected();
     daemon_tui_ipc_server_handler_dispatches_submit_poll_and_close();
+    daemon_tui_ipc_server_handler_projects_completed_response_text();
   } catch (const std::exception& ex) {
     std::cerr << "[TuiIpcProtocolAdapterTest] FAILED: " << ex.what() << '\n';
     return 1;

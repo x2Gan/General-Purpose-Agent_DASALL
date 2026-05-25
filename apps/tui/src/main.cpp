@@ -270,5 +270,8 @@ int main(int argc, char* argv[]) {
 
   dasall::tui::app::TuiApp app;
   dasall::tui::app::TuiAppOptions options = make_default_options();
+#if DASALL_TUI_FORMAL_ENTRYPOINT
+  options.interactive_session = true;
+#endif
   return app.run(std::move(options));
 }

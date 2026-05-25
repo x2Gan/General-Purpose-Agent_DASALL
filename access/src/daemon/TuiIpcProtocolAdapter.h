@@ -101,6 +101,7 @@ struct TuiIpcTurnReceipt {
   std::string receipt_ref;
   std::string submitted_at;
   std::string summary_text;
+  std::optional<std::string> response_text;
   std::optional<std::string> reason_code;
 };
 

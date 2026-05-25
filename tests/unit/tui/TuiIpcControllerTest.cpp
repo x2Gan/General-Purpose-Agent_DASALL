@@ -199,6 +199,7 @@ void submit_turn_roundtrip_preserves_request_context_and_receipt() {
   receipt.receipt_ref = "receipt-022";
   receipt.submitted_at = "2026-05-23T13:22:00Z";
   receipt.summary_text = "queued for daemon execution";
+  receipt.response_text = std::string("daemon final response text");
 
   TuiIpcResponseEnvelope response;
   response.operation = TuiIpcOperation::SubmitTurn;
@@ -219,6 +220,9 @@ void submit_turn_roundtrip_preserves_request_context_and_receipt() {
   assert_equal(std::string("receipt-022"),
                result.receipt->receipt_ref,
                "submit_turn should preserve receipt_ref from daemon response");
+  assert_equal(std::string("daemon final response text"),
+               result.receipt->response_text.value_or(std::string()),
+               "submit_turn should preserve response_text from daemon response");
   assert_true(ipc->close_called,
               "tui ipc controller should close the channel after a roundtrip");
   assert_true(ipc->last_connect_deadline_ms == 15000,

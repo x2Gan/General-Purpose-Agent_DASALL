@@ -820,6 +820,8 @@ void append_optional_payload_member(
   append_string_member(json, "submitted_at", receipt.submitted_at, first);
   append_string_member(json, "summary_text", receipt.summary_text, first);
   append_optional_string_member(
+      json, "response_text", receipt.response_text, first);
+  append_optional_string_member(
       json, "reason_code", receipt.reason_code, first);
   json.push_back('}');
   return json;
@@ -1179,6 +1181,7 @@ void append_optional_payload_member(
          read_required_string(object, "receipt_ref", &receipt->receipt_ref) &&
          read_required_string(object, "submitted_at", &receipt->submitted_at) &&
          read_required_string(object, "summary_text", &receipt->summary_text) &&
+         read_optional_string(object, "response_text", &receipt->response_text) &&
          read_optional_string(object, "reason_code", &receipt->reason_code);
 }
 
