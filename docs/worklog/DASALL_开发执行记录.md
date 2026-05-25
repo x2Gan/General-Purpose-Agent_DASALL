@@ -1,3 +1,29 @@
+# 记录 #810
+
+- 日期：2026-05-25
+- 阶段：tui/review closeout evidence
+- 任务：TUI-TODO-044 回写评审后集成证据与 closeout 口径
+- 状态：已完成（closeout deliverable、TODO、总账与 worklog 已收口；提交与推送待本轮 submission）
+
+### 改动
+
+1. 新增 `docs/todos/tui/deliverables/TUI-TODO-044-review-closeout-evidence.md`，把 `TUI-TODO-037~043` 的协议冻结、focused/scripted IPC、true daemon-backed E2E、installed smoke 与 formal binary purity 证据整理成一份 closeout evidence matrix。
+2. 更新 TUI 专项 TODO 与总账，把 review follow-up `037~044` 统一回写为 Done，并把当前 owner-authoritative 口径固定为“true daemon-backed / local installed smoke / binary purity 已闭合，但仍不直接宣称 qemu / release-ready”。
+3. 明确旧 `001~036` 历史 closeout 与 command release owner chain 继续有效，但它们从 044 起只应被引用为 focused / command-release 证据，不再被误解为 true daemon-backed ready。
+
+### 验证
+
+1. `rg -n "TUI-TODO-037" docs/todos/tui/deliverables/TUI-TODO-044-review-closeout-evidence.md`
+   - 结果：应命中 037~043 证据矩阵与 closeout 口径。
+2. `rg -n "true daemon-backed" docs/worklog/DASALL_开发执行记录.md`
+   - 结果：应命中本条与前序 037~043 worklog，证明 true daemon-backed 分层口径已经回写而非被历史 closeout 覆盖。
+
+### 结果
+
+1. `TUI-TODO-037~044` review follow-up 已全部完成，TUI owner closeout 现已明确区分 focused/scripted IPC、build-tree true daemon-backed E2E、local installed smoke、formal binary purity 与 release-ready。
+2. 当前可采信结论是：TUI local review closeout 已闭合，但 qemu / release-runner / soak 仍属于更高层环境证据，不在本轮 closeout 内直接宣称完成。
+3. 本专项到 044 为止无新的 owner-local blocker；若后续要形成 release-ready 结论，应继续由 packaging / release 环境补齐更高层证据。
+
 # 记录 #809
 
 - 日期：2026-05-25
