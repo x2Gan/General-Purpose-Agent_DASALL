@@ -1,3 +1,29 @@
+# 记录 #823
+
+- 日期：2026-05-26
+- 阶段：knowledge/runtime-owned selective refresh automation closeout
+- 任务：KNO-TODO-045 Runtime-owned selective refresh automation 口径闭合
+- 状态：D 已完成（双轨设计包、TODO 回写与 D Gate 已落盘；Build 待执行）
+
+### 改动
+
+1. 新增 `docs/todos/knowledge/deliverables/KNO-TODO-045-runtime-owned-selective-refresh-automation口径闭合双轨任务包.md`，收口 045 的本地证据、外部实践、Design 原子清单、Design -> Build 映射与 D Gate。
+2. 回写 `docs/todos/knowledge/DASALL_knowledge子系统专项TODO.md`，将 045 标记为“D 包已落盘并通过 D Gate，Build 待落地 runtime-owned selective delta provider”，并补 12.2 专章说明 selective provider、skip/selective/full-scan fallback 三态计划与 owner boundary。
+3. 回写 `docs/todos/DASALL_子系统查漏补缺专项记录.md`，补充 045 的设计完成证据，确认当前缺口位于 runtime timer callback 仍固定提交 empty `CorpusChangeSet`，而不是 Knowledge refresh worker 缺失。
+
+### 验证
+
+1. D Gate 人工复核
+   - 结果：通过。当前 Build 切口已压缩到 `apps/runtime_support` selective provider 与两个 focused integration gate，不需要扩大到 watcher / `contracts/` / release soak。
+2. 工作树范围复核
+   - 结果：当前 D 阶段改动仅包含 045 deliverable 与 TODO/worklog 文档回写，适合独立提交。
+
+### 结果
+
+1. `KNO-TODO-045-D` 已完成：本轮实现假设已固定为“runtime owner 复用 `SourceScanner` inventory diff 生成 selective delta，timer tick 按 `Skip / Selective / FullScanFallback` 计划驱动 refresh”。
+2. `KNO-TODO-045-B` 的代码目标、测试目标与验收命令已经锁定，下一步进入实现与 focused 验证。
+3. 041 的 periodic full-scan automation 现在被明确降级为 fallback 基线；045 完成前，不再把其口径误写成真正 selective automation。
+
 # 记录 #822
 
 - 日期：2026-05-26
