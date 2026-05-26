@@ -140,7 +140,37 @@ class RecordingTimer final : public dasall::platform::ITimer {
   int periodic_callbacks = 0;
 };
 
-class FakeRuntimeVectorRecallStore final : public dasall::knowledge::retrieve::IVectorRecallStore {
+[[nodiscard]] dasall::knowledge::retrieve::RecallHit make_runtime_dense_hit() {
+  dasall::knowledge::retrieve::RecallHit hit;
+  hit.corpus_id = "adr_normative";
+  hit.document_id = "adr-006";
+  hit.chunk_id = "adr-006#runtime-hybrid-canary";
+  hit.score = 0.93F;
+  hit.raw_snippet = "ContextOrchestrator PromptComposer owner boundary evidence.";
+  hit.citation_ref = "ADR-006#context-owner";
+  hit.updated_at = 1713657600000;
+  hit.authority_level = dasall::knowledge::AuthorityLevel::Normative;
+  hit.tags = {"normative", "architecture"};
+  return hit;
+}
+
+class DenseHitRuntimeVectorRecallStore final : public dasall::knowledge::retrieve::IVectorRecallStore {
+ public:
+  [[nodiscard]] bool available() const override {
+    return true;
+  }
+
+  [[nodiscard]] dasall::knowledge::retrieve::DenseQueryInputMode query_input_mode() const override {
+    return dasall::knowledge::retrieve::DenseQueryInputMode::TextOnly;
+  }
+
+  [[nodiscard]] std::vector<dasall::knowledge::retrieve::RecallHit> search(
+      const dasall::knowledge::retrieve::DenseQueryRequest&) const override {
+    return {make_runtime_dense_hit()};
+  }
+};
+
+class NoHitRuntimeVectorRecallStore final : public dasall::knowledge::retrieve::IVectorRecallStore {
  public:
   [[nodiscard]] bool available() const override {
     return true;
@@ -169,7 +199,7 @@ class EmbeddingRequiredRuntimeVectorRecallStore final
 
   [[nodiscard]] std::vector<dasall::knowledge::retrieve::RecallHit> search(
       const dasall::knowledge::retrieve::DenseQueryRequest&) const override {
-    return {};
+    return {make_runtime_dense_hit()};
   }
 };
 
@@ -284,7 +314,7 @@ compose_live_dependency_set(
           .build_dense_snapshot_override = build_fake_dense_snapshot,
           .create_vector_recall_store_override =
               [](const dasall::knowledge::DenseStoreFactoryContext&) {
-                return std::make_unique<FakeRuntimeVectorRecallStore>();
+                return std::make_unique<DenseHitRuntimeVectorRecallStore>();
               },
           .create_query_encoder_override = {},
           .knowledge_refresh_timer = std::move(knowledge_refresh_timer),
@@ -412,6 +442,54 @@ void runtime_live_composition_emits_hybrid_marker_when_encoder_is_ready() {
                      automation_fallback_prefix),
           "runtime live composition matrix should keep automation ready stratified on the encoder-ready path for " +
             spec.composition_owner);
+  }
+}
+
+void runtime_live_composition_omits_hybrid_marker_when_dense_lane_has_no_hits() {
+  const auto policy_snapshot = load_runtime_policy_snapshot();
+  for (const auto& spec : owner_specs()) {
+    const TempStateRoot assets_root("dasall-runtime-live-matrix-assets-dense-empty");
+    const TempStateRoot state_root("dasall-runtime-live-matrix-state-dense-empty");
+    copy_installed_runtime_assets(assets_root.path());
+    auto timer = std::make_shared<RecordingTimer>();
+
+    const auto composition = dasall::apps::runtime_support::compose_minimal_live_dependency_set(
+        policy_snapshot,
+        spec.composition_owner,
+        dasall::apps::runtime_support::RuntimeLiveDependencyCompositionOptions{
+            .readonly_assets_root_override = assets_root.path(),
+            .runtime_library_root_override = {},
+            .state_root_override = state_root.path(),
+            .build_dense_snapshot_override = build_fake_dense_snapshot,
+            .create_vector_recall_store_override =
+                [](const dasall::knowledge::DenseStoreFactoryContext&) {
+                  return std::make_unique<NoHitRuntimeVectorRecallStore>();
+                },
+            .create_query_encoder_override = {},
+            .knowledge_refresh_timer = timer,
+        });
+    assert_true(composition.ok(),
+                "runtime live composition matrix should compose when the dense lane returns no canary hits for " +
+                    spec.composition_owner + ": " + composition.error);
+
+    const auto ready_marker =
+        std::string("runtime:") + spec.composition_owner +
+        ":knowledge-installed-assets-ready";
+    const auto hybrid_canary_marker =
+        std::string("runtime:") + spec.composition_owner +
+        ":knowledge-hybrid-canary-ready";
+    const auto automation_ready_marker =
+      std::string("runtime:") + spec.composition_owner +
+      ":knowledge-refresh-automation-ready";
+    assert_true(contains_port(composition.dependency_set->external_evidence, ready_marker),
+                "runtime live composition matrix should keep installed ready marker when dense lane has no canary hits for " +
+                    spec.composition_owner);
+    assert_true(!contains_port(composition.dependency_set->external_evidence, hybrid_canary_marker),
+                "runtime live composition matrix should omit hybrid ready marker until the dense lane returns a canary hit for " +
+                    spec.composition_owner);
+    assert_true(contains_port(composition.dependency_set->external_evidence, automation_ready_marker),
+                "runtime live composition matrix should keep automation ready marker independent from dense canary hits for " +
+                    spec.composition_owner);
   }
 }
 
@@ -601,6 +679,7 @@ int main() {
   try {
     runtime_live_composition_keeps_ready_markers_stratified();
     runtime_live_composition_emits_hybrid_marker_when_encoder_is_ready();
+    runtime_live_composition_omits_hybrid_marker_when_dense_lane_has_no_hits();
     runtime_live_composition_fail_closes_when_required_ports_are_missing();
     runtime_live_composition_marks_degraded_runtime_when_knowledge_is_missing();
     runtime_live_composition_omits_hybrid_marker_when_encoder_is_missing();

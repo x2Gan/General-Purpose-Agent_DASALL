@@ -13,6 +13,7 @@ namespace {
 using dasall::knowledge::AuthorityLevel;
 using dasall::knowledge::index::IndexReader;
 using dasall::knowledge::index::IndexWriter;
+using dasall::knowledge::index::DenseSnapshotBuildResult;
 using dasall::knowledge::index::IndexWriterDeps;
 using dasall::knowledge::index::VersionLedger;
 using dasall::knowledge::index::VersionLedgerDeps;
@@ -99,6 +100,7 @@ void test_index_writer_builds_initial_snapshot_and_preserves_active_on_invalid_b
       .read_snapshot_checksum = [&reader](std::string_view snapshot_id) {
         return reader.read_snapshot_checksum(snapshot_id);
       },
+      .ledger_path = snapshots.path / "ledger.txt",
   });
 
   std::int64_t now_ms = 1713657601000;
@@ -160,11 +162,63 @@ void test_index_writer_builds_initial_snapshot_and_preserves_active_on_invalid_b
                "invalid batch must not replace the active snapshot");
 }
 
+void test_index_writer_builds_dense_snapshot_from_seeded_effective_chunks() {
+  TempDirectory snapshots("dasall-index-writer-dense-seeded-test");
+  IndexReader reader;
+  VersionLedger ledger(VersionLedgerDeps{
+      .read_snapshot_checksum = [&reader](std::string_view snapshot_id) {
+        return reader.read_snapshot_checksum(snapshot_id);
+      },
+      .ledger_path = snapshots.path / "ledger.txt",
+  });
+
+  std::int64_t now_ms = 1713657601000;
+  std::vector<std::vector<std::string>> dense_request_chunk_ids;
+  IndexWriterDeps deps;
+  deps.snapshots_root = [&snapshots]() { return snapshots.path; };
+  deps.now_ms = [&now_ms]() { return now_ms; };
+  deps.build_dense_snapshot = [&dense_request_chunk_ids](const auto& request) {
+    std::vector<std::string> chunk_ids;
+    for (const auto& chunk : request.chunk_records) {
+      chunk_ids.push_back(chunk.chunk_id);
+    }
+    dense_request_chunk_ids.push_back(std::move(chunk_ids));
+
+    DenseSnapshotBuildResult result;
+    result.ok = true;
+    return result;
+  };
+
+  IndexWriter writer(reader, ledger, deps);
+  auto initial_batch = make_batch(
+      'd', {make_chunk_record('e', 'f', "doclineage:source-002", "seeded dense policy")});
+  initial_batch.vector_enabled = true;
+
+  const auto initial_report = writer.apply_update_batch(initial_batch);
+  assert_true(initial_report.ok, "initial vector batch should build a snapshot");
+
+  auto seeded_batch = make_batch('1', {});
+  seeded_batch.vector_enabled = true;
+  now_ms += 1000;
+  const auto seeded_report = writer.apply_update_batch(seeded_batch);
+  assert_true(seeded_report.ok, "seeded vector batch should build a snapshot");
+
+  assert_equal(2, static_cast<int>(dense_request_chunk_ids.size()),
+               "dense builder should be called for both vector snapshots");
+  assert_equal(1, static_cast<int>(dense_request_chunk_ids.front().size()),
+               "initial dense snapshot should receive inserted chunks");
+  assert_equal(1, static_cast<int>(dense_request_chunk_ids.back().size()),
+               "seeded dense snapshot should receive effective chunks copied from active lexical DB");
+  assert_equal(dense_request_chunk_ids.front().front(), dense_request_chunk_ids.back().front(),
+               "seeded dense snapshot should rebuild the active chunk set, not an empty delta");
+}
+
 }  // namespace
 
 int main() {
   try {
     test_index_writer_builds_initial_snapshot_and_preserves_active_on_invalid_batch();
+    test_index_writer_builds_dense_snapshot_from_seeded_effective_chunks();
   } catch (const std::exception& exception) {
     std::cerr << exception.what() << '\n';
     return 1;

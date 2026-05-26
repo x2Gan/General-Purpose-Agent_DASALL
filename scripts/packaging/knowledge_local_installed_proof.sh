@@ -194,6 +194,7 @@ reset_existing_state() {
   run_root_sh '
     systemctl disable --now dasall-daemon.service >/dev/null 2>&1 || true
     dpkg -P dasall dasall-daemon dasall-cli dasall-common >/dev/null 2>&1 || true
+    rm -rf /var/lib/dasall/knowledge /var/lib/dasall/memory /run/dasall
   '
 }
 

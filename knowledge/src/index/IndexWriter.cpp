@@ -529,6 +529,56 @@ void insert_chunk_record(sqlite3* database, const ingest::ChunkRecord& record) {
   return static_cast<std::size_t>(sqlite3_column_int64(statement.handle, 0));
 }
 
+[[nodiscard]] std::string column_text_or_empty(sqlite3_stmt* statement, int column) {
+  const auto* text = sqlite3_column_text(statement, column);
+  return text == nullptr ? std::string{} : std::string(reinterpret_cast<const char*>(text));
+}
+
+[[nodiscard]] std::vector<ingest::ChunkRecord> load_current_chunk_records(sqlite3* database) {
+  auto statement = prepare_statement(
+      database,
+      "SELECT chunk_id, document_id, corpus_id, source_id, source_uri, chunk_text, "
+      "citation_ref, updated_at, authority_level, language, tags, version, token_estimate, "
+      "span_begin, span_end, document_lineage_id FROM chunks ORDER BY row_id;");
+
+  std::vector<ingest::ChunkRecord> records;
+  while (sqlite3_step(statement.handle) == SQLITE_ROW) {
+    ingest::ChunkRecord record;
+    record.chunk_id = column_text_or_empty(statement.handle, 0);
+    record.document_id = column_text_or_empty(statement.handle, 1);
+    record.corpus_id = column_text_or_empty(statement.handle, 2);
+    record.source_id = column_text_or_empty(statement.handle, 3);
+    record.source_uri = column_text_or_empty(statement.handle, 4);
+    record.chunk_text = column_text_or_empty(statement.handle, 5);
+    record.citation_ref = column_text_or_empty(statement.handle, 6);
+    record.updated_at_ms = sqlite3_column_int64(statement.handle, 7);
+    record.authority_level = static_cast<AuthorityLevel>(sqlite3_column_int(statement.handle, 8));
+    record.language = column_text_or_empty(statement.handle, 9);
+    if (record.language.empty()) {
+      record.language = "und";
+    }
+    record.tags = deserialize_tags(column_text_or_empty(statement.handle, 10));
+    record.version = column_text_or_empty(statement.handle, 11);
+    record.token_estimate = static_cast<std::size_t>(sqlite3_column_int64(statement.handle, 12));
+    record.span_begin = static_cast<std::size_t>(sqlite3_column_int64(statement.handle, 13));
+    record.span_end = static_cast<std::size_t>(sqlite3_column_int64(statement.handle, 14));
+
+    const auto lineage_id = column_text_or_empty(statement.handle, 15);
+    record.metadata = {
+        {"document_class", "indexed_chunk"},
+        {"section_path", "indexed_snapshot"},
+        {"document_lineage_id", lineage_id.empty() ? record.document_id : lineage_id},
+    };
+
+    if (!record.has_consistent_values()) {
+      throw std::runtime_error("current_chunk_record_invalid");
+    }
+    records.push_back(std::move(record));
+  }
+
+  return records;
+}
+
 [[nodiscard]] std::optional<IndexManifest> read_manifest_sidecar(
     const std::filesystem::path& path) {
   std::ifstream input(path);
@@ -922,10 +972,12 @@ UpdateReport IndexWriter::apply_update_batch(const ingest::IndexUpdateBatch& bat
 
   std::vector<std::string> warnings = batch.warnings;
   auto tokenizer_profile = std::string(kDefaultTokenizerProfile);
-  auto vector_enabled = false;
+  auto vector_enabled = batch.vector_enabled.value_or(false);
   if (const auto manifest = reader_.current_manifest(); manifest.has_value()) {
     tokenizer_profile = manifest->tokenizer_profile;
-    vector_enabled = manifest->vector_enabled;
+    if (!batch.vector_enabled.has_value()) {
+      vector_enabled = manifest->vector_enabled;
+    }
   }
 
   ShadowIndex shadow;
@@ -1160,9 +1212,10 @@ IndexWriter::ShadowIndex IndexWriter::build_shadow_index(
     if (!deps_.build_dense_snapshot) {
       append_warning(warnings, "dense_snapshot_builder_missing");
     } else {
+      auto dense_chunk_records = load_current_chunk_records(database.handle);
       const auto dense_result = deps_.build_dense_snapshot(DenseSnapshotBuildRequest{
           .snapshot_dir = snapshot_dir,
-          .chunk_records = batch.chunk_records,
+          .chunk_records = std::move(dense_chunk_records),
       });
       if (!dense_result.has_consistent_values()) {
         throw std::runtime_error("dense_snapshot_result_inconsistent");

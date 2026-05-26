@@ -1,3 +1,65 @@
+# 记录 #822
+
+- 日期：2026-05-26
+- 阶段：knowledge/installed strict hybrid evidence closure
+- 任务：KNO-TODO-044 新包 strict installed proof / soak 复跑闭合
+- 状态：已完成（代码、Debian 包重建、strict proof / soak 与 TODO 回写已落盘）
+
+### 改动
+
+1. 更新 `memory/src/vector/SimpleLocalEmbeddingAdapter.cpp`，让 local/test/package fallback tokenization 保留非 ASCII UTF-8 字节，只把 ASCII 非字母数字字符视为分隔符，避免中文 chunk 被误判为 empty embedding。
+2. 扩展 `tests/unit/memory/SimpleLocalEmbeddingAdapterTest.cpp`，新增中文输入确定性、区分度与 L2 normalize 回归。
+3. 基于当前代码重新构建并安装 Debian 包，随后执行 KNO-TODO-044 fresh installed strict proof 与 10 轮 strict soak；artifact 固定在 `/tmp/dasall-kno-todo-044-proof-strict` 与 `/tmp/dasall-kno-todo-044-soak-strict`。
+4. 回写 `docs/todos/DASALL_子系统查漏补缺专项记录.md`、`docs/todos/knowledge/DASALL_knowledge子系统专项TODO.md` 与 `docs/ssot/BusinessChainIntegrationMatrix.md`，把 KNO-TODO-044 从 Blocked 提升为 Done，并明确 local L4 positive installed evidence 不外推 qemu / release-runner / production provider SLA。
+
+### 验证
+
+1. `Build_CMakeTools(buildTargets=["dasall_memory_simple_local_embedding_adapter_unit_test"])`
+   - 结果：通过。
+2. `RunCtest_CMakeTools(tests=["SimpleLocalEmbeddingAdapterTest"])`
+   - 结果：命中仓库已知泛化 `生成失败`，未给出测试输出；按既有回退口径直接执行 binary。
+3. `./build/vscode-linux-ninja/tests/unit/memory/dasall_memory_simple_local_embedding_adapter_unit_test && echo PASS`
+   - 结果：`PASS`。
+4. `dpkg-buildpackage -us -uc -b`
+   - 结果：通过；生成 `../dasall-common_0.1.0-1_all.deb`、`../dasall-cli_0.1.0-1_amd64.deb`、`../dasall-daemon_0.1.0-1_amd64.deb` 与 `../dasall_0.1.0-1_all.deb`。
+5. `bash scripts/packaging/knowledge_local_installed_proof.sh --artifact-dir /tmp/dasall-kno-todo-044-proof-strict --hybrid-canary`
+   - 结果：通过；`knowledge-proof.json` 记录 `hybrid_canary_mode=hybrid`、`runtime_canary_admitted`、`hybrid_canary_vector_backend_ready=true`、`hybrid_canary_dense_hit_count=3`。
+6. `bash scripts/packaging/knowledge_refresh_retrieve_soak.sh --artifact-dir /tmp/dasall-kno-todo-044-soak-strict --iterations 10 --hybrid-canary`
+   - 结果：通过；`knowledge-soak-summary.json` 记录 `iterations_completed=10`、`hybrid_mode_values=["hybrid"]`、`all_hybrid_iterations_admitted=true`、`all_hybrid_iterations_vector_backend_ready=true`、`min_hybrid_dense_hit_count=3`。
+
+### 结果
+
+1. KNO-TODO-044 已从“等待新包 strict rerun”闭合为当轮 local L4 positive installed evidence。
+2. KNO-TODO-040 的 strict proof / soak 脚本合同已由新包真实 installed artifact 兑现；历史 lexical fallback artifact 继续只作为问题发现证据。
+3. production default 仍保持 lexical-only，显式 allowlisted hybrid canary 才进入 Hybrid；KNO-TODO-043 production embedding provider 与 KNO-TODO-045 selective refresh automation 仍是后续独立任务。
+
+# 记录 #821
+
+- 日期：2026-05-26
+- 阶段：knowledge/vector production-closure remediation
+- 任务：KNO-TODO-042 strict hybrid ready marker 与 vector-enabled manifest 闭合
+- 状态：已完成（代码、focused validation、TODO 回写已落盘）
+
+### 改动
+
+1. 更新 `knowledge/include/ingest/IngestionCoordinator.h`、`knowledge/src/facade/KnowledgeService.cpp` 与 `knowledge/src/index/IndexWriter.cpp`，为 `IndexUpdateBatch` 增加可选 `vector_enabled` 覆盖，并由 Knowledge refresh 写入 `config_.vector_enabled`；首次 full refresh 现在可以生成 vector-enabled manifest，不再因无旧 manifest 默认关闭 dense readiness。
+2. 更新 `apps/runtime_support/src/RuntimeLiveDependencyComposition.cpp`，把 `knowledge-hybrid-canary-ready` marker 从“Hybrid admitted”提升为 strict positive 语义：必须同时满足 `mode=Hybrid`、`runtime_canary_admitted`、`vector_backend_ready=true` 与 `dense_hit_count>0`。
+3. 更新 `tests/integration/access/RuntimeLiveCompositionFailureMatrixTest.cpp` 与 `tests/integration/access/RuntimeKnowledgeHybridCanaryIntegrationTest.cpp`，把 fake dense store 拆成 dense-hit / empty-hit 两类夹具；新增 empty dense lane 不暴露 hybrid ready marker 的回归，并在 canary 正例中断言 vector backend ready 与 dense hit。
+4. 回写 `docs/todos/DASALL_子系统查漏补缺专项记录.md` 与 `docs/todos/knowledge/DASALL_knowledge子系统专项TODO.md`，新增 `KNO-TODO-042` ~ `KNO-TODO-045` 生产级整改闭合拆分：已完成 strict marker / manifest 修复，后续继续收敛 production provider、strict installed rerun 与真正 selective refresh automation。
+
+### 验证
+
+1. `cmake --build build/vscode-linux-ninja --target dasall_access_runtime_live_composition_failure_matrix_integration_test dasall_runtime_knowledge_hybrid_canary_integration_test -j2 && ./build/vscode-linux-ninja/tests/integration/access/dasall_access_runtime_live_composition_failure_matrix_integration_test && ./build/vscode-linux-ninja/tests/integration/access/dasall_runtime_knowledge_hybrid_canary_integration_test && echo PASS`
+   - 结果：`PASS`。
+2. `cmake --build build/vscode-linux-ninja --target dasall_knowledge_runtime_query_surface_integration_test dasall_runtime_knowledge_query_encoder_integration_test dasall_knowledge_retrieval_quality_regression_integration_test dasall_knowledge_mixed_corpus_hybrid_routing_integration_test dasall_knowledge_production_telemetry_integration_test dasall_access_knowledge_retrieve_payload_unit_test dasall_knowledge_runtime_auto_refresh_integration_test dasall_knowledge_refresh_loop_integration_test dasall_index_writer_unit_test dasall_index_writer_snapshot_swap_unit_test -j2` 后直接执行对应 binaries。
+   - 结果：`PASS`。
+
+### 结果
+
+1. runtime ready marker 现在与 installed strict proof 的核心语义一致，不再把只有 canary admission、但 dense lane 无命中的路径标为 `knowledge-hybrid-canary-ready`。
+2. 首次 installed/local refresh 可把 vector-enabled 配置写入 manifest，避免 `vector_backend_ready=false` 的假阴性阻塞 strict hybrid canary。
+3. 生产级闭合剩余三项已原子化：`KNO-TODO-043` production embedding provider、`KNO-TODO-044` 新包 strict installed proof / soak、`KNO-TODO-045` 真正 Runtime-owned selective refresh automation。
+
 # 记录 #820
 
 - 日期：2026-05-26

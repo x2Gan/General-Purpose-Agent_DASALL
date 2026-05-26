@@ -2,6 +2,7 @@
 
 #include <filesystem>
 #include <functional>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -15,6 +16,7 @@ struct IndexUpdateBatch {
   std::vector<ChunkRecord> chunk_records;
   std::vector<std::string> removed_document_ids;
   std::vector<std::string> warnings;
+  std::optional<bool> vector_enabled;
 
   [[nodiscard]] bool has_consistent_values() const;
 };

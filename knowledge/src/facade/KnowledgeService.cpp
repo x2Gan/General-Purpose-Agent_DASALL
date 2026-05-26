@@ -753,7 +753,8 @@ RefreshResult KnowledgeServiceFacade::run_real_refresh(const CorpusChangeSet& ch
                                        "corpus_change_set_inconsistent");
   }
 
-  const auto batch = deps_.ingestion_coordinator->build_update_batch(changes);
+  auto batch = deps_.ingestion_coordinator->build_update_batch(changes);
+  batch.vector_enabled = config_.vector_enabled;
   if (!batch.has_consistent_values()) {
     return make_refresh_failure_result(KnowledgeErrorCode::RefreshFailed,
                                        "ingestion batch is inconsistent",

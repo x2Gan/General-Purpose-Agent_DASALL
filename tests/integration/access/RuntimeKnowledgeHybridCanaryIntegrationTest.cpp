@@ -97,6 +97,20 @@ void copy_installed_runtime_assets(const fs::path& assets_root) {
          reason_codes.end();
 }
 
+[[nodiscard]] dasall::knowledge::retrieve::RecallHit make_runtime_dense_hit() {
+  dasall::knowledge::retrieve::RecallHit hit;
+  hit.corpus_id = "adr_normative";
+  hit.document_id = "adr-006";
+  hit.chunk_id = "adr-006#runtime-hybrid-canary";
+  hit.score = 0.93F;
+  hit.raw_snippet = "ContextOrchestrator PromptComposer owner boundary evidence.";
+  hit.citation_ref = "ADR-006#context-owner";
+  hit.updated_at = 1713657600000;
+  hit.authority_level = dasall::knowledge::AuthorityLevel::Normative;
+  hit.tags = {"normative", "architecture"};
+  return hit;
+}
+
 class FakeRuntimeVectorRecallStore final : public dasall::knowledge::retrieve::IVectorRecallStore {
  public:
   [[nodiscard]] bool available() const override {
@@ -109,7 +123,7 @@ class FakeRuntimeVectorRecallStore final : public dasall::knowledge::retrieve::I
 
   [[nodiscard]] std::vector<dasall::knowledge::retrieve::RecallHit> search(
       const dasall::knowledge::retrieve::DenseQueryRequest&) const override {
-    return {};
+    return {make_runtime_dense_hit()};
   }
 };
 
@@ -193,6 +207,12 @@ void runtime_hybrid_canary_admits_allowlisted_queries_only() {
                                      "runtime_canary_admitted"),
                 "runtime hybrid canary integration should record runtime_canary_admitted for " +
                     profile_id);
+    assert_true(positive_result.vector_backend_ready,
+          "runtime hybrid canary integration should prove ready vector backend for " +
+            profile_id);
+    assert_true(positive_result.dense_hit_count > 0U,
+          "runtime hybrid canary integration should prove dense hit for " +
+            profile_id);
     assert_true(positive_result.evidence.has_value() &&
                     !positive_result.evidence->slices.empty(),
                 "runtime hybrid canary integration should return evidence for allowlisted hybrid query on " +

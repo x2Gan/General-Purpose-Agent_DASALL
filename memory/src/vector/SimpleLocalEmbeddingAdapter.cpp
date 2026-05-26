@@ -37,6 +37,14 @@ void flush_token(std::string& token,
   token.clear();
 }
 
+[[nodiscard]] bool is_ascii_alnum(unsigned char ch) {
+  return ch < 128U && std::isalnum(ch) != 0;
+}
+
+[[nodiscard]] bool is_ascii_separator(unsigned char ch) {
+  return ch < 128U && std::isalnum(ch) == 0;
+}
+
 }  // namespace
 
 SimpleLocalEmbeddingAdapter::SimpleLocalEmbeddingAdapter(int dimension)
@@ -52,8 +60,13 @@ std::vector<float> SimpleLocalEmbeddingAdapter::embed(const std::string& text) c
   token.reserve(text.size());
 
   for (const unsigned char ch : text) {
-    if (std::isalnum(ch) != 0) {
+    if (is_ascii_alnum(ch)) {
       token.push_back(static_cast<char>(std::tolower(ch)));
+      continue;
+    }
+
+    if (!is_ascii_separator(ch)) {
+      token.push_back(static_cast<char>(ch));
       continue;
     }
 

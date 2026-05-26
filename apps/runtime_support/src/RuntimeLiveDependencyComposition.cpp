@@ -1598,7 +1598,9 @@ struct KnowledgeAutoRefreshArmResult {
       make_installed_knowledge_hybrid_canary_probe_query(allowed_corpora));
   return retrieve_result.ok &&
          retrieve_result.mode == knowledge::RetrievalMode::Hybrid &&
-         contains_string(retrieve_result.reason_codes, "runtime_canary_admitted");
+       contains_string(retrieve_result.reason_codes, "runtime_canary_admitted") &&
+       retrieve_result.vector_backend_ready &&
+       retrieve_result.dense_hit_count > 0U;
 }
 
 [[nodiscard]] std::string validate_installed_knowledge_positive_probe(
