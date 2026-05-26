@@ -30,8 +30,8 @@
 当前缺口不是 Knowledge refresh worker，也不是 timer callback 本身，而是 runtime automation 没有生成 delta。若在 runtime owner 内新增一个基于 `SourceScanner` inventory diff 的 refresh source provider，并让 timer tick 先消费该 provider，再决定 `Skip / Selective / FullScanFallback` 三种计划，则：
 
 1. 单文件变更可以只把目标 source URI 投到 `CorpusChangeSet.updated_sources`；
-2. 无变化 tick 可以跳过 refresh，而不是无条件 full-scan；
-3. provider 不可用或 inventory 失配时仍能安全回退到 `request_refresh({})` full-scan。
+2. installed selective provider 可以把 `SourceScanner` 产出的相对 source URI 归一成 installed descriptor root 对应的绝对路径，不会因为路径口径漂移漏选 target corpus；
+3. provider 不可用、inventory 失配、扫描 quarantine 或 no-change tick 时仍能安全回退到 `request_refresh({})` full-scan，以维持 freshness baseline。
 
 廉价反证：若 runtime auto-refresh focused test 仍只能观察到 empty `CorpusChangeSet`，或者 selective tick 后非目标 source 被错误纳入 refresh plan，则该假设不成立。
 
@@ -39,7 +39,8 @@
 
 1. Refresh trigger owner 继续属于 Runtime / apps；Knowledge 仍只消费 `CorpusChangeSet`，不新增 watcher、sleep loop 或 scheduler。
 2. Runtime selective provider 只负责从 runtime 可见的 installed assets 生成 delta，不接管 corpus catalog、chunking、snapshot swap 或 activation。
-3. full-scan 不再是默认 timer 行为，只在以下 fallback 条件触发：provider 缺失、provider 返回 fallback、inventory 基线失效或扫描结果整体 quarantine。
+3. installed selective provider 输出的 change set 必须与 installed descriptor root 使用同一绝对路径口径；manual control-plane 的相对 `changed_source` seam 继续保持既有 contract，不在 045 重写。
+4. full-scan 不再是默认“有变化”timer 行为，只在以下 fallback 条件触发：provider 缺失、provider 返回 fallback、inventory 基线失效、扫描结果整体 quarantine 或 tick 未观测到 delta。
 4. Busy 语义必须保持：若 tick 触发前 `health_snapshot().refresh_in_flight=true`，或 race 下 `request_refresh()` 返回 `Busy`，本次 tick 只做 benign skip，不补发第二个 refresh，也不把 Busy 转译成失败。
 5. `AccessGatewayFactory` 现有 manual `changed_source -> updated_sources` seam 保持 authoritative，不与自动化路径合并队列，不扩 payload schema。
 
@@ -48,8 +49,8 @@
 1. `apps/runtime_support/include/RuntimeLiveDependencyComposition.h`
    - 新增 runtime-owned refresh plan / provider seam，允许 focused test 注入 recording provider；production path 默认使用 filesystem selective provider。
 2. `apps/runtime_support/src/RuntimeLiveDependencyComposition.cpp`
-   - 新增 default selective provider：复用 `knowledge::ingest::SourceScanner` 与 installed asset corpus roots 建 baseline inventory，并在每次 tick 生成 `RuntimeKnowledgeRefreshPlan`。
-   - timer callback 逻辑从“固定 empty change set”改为“plan 驱动”：`Skip` 不调用 refresh，`Selective` 传 `CorpusChangeSet`，`FullScanFallback` 才传 empty change set。
+   - 新增 default selective provider：复用 `knowledge::ingest::SourceScanner` 与 installed asset corpus roots 建 baseline inventory，并在每次 tick 生成 `RuntimeKnowledgeRefreshPlan`；写入 change set 前会把相对 source URI 归一为 installed absolute path。
+   - timer callback 逻辑从“固定 empty change set”改为“plan 驱动”：`refresh_in_flight=true` 时直接 skip；`Selective` 传 `CorpusChangeSet`；`FullScanFallback` 才传 empty change set。
    - `AutoRefreshKnowledgeService` 同时持有 timer handle 与 refresh provider，确保 provider 生命周期与 runtime composition 一致。
 3. 测试面
    - 扩展 `tests/integration/knowledge/KnowledgeRuntimeAutoRefreshIntegrationTest.cpp`：新增 selective positive、fallback-to-full-scan 与 busy fail-safe focused case。
@@ -88,7 +89,7 @@
 
 1. 不改 `contracts/`，不新增 Knowledge-owned watcher/timer。
 2. selective provider 默认只依赖 runtime 可见 installed assets；manual control-plane seam 继续独立。
-3. full-scan 仅用于 fallback，不再作为默认 tick 行为。
+3. full-scan 仅用于 fallback，不再作为“有变化 tick”的默认行为。
 4. busy race 保持 benign skip，不新增后台排队层。
 
 ## 7. Build 原子清单
@@ -121,6 +122,14 @@
 
 1. runtime timer tick 默认先尝试 selective delta，而不是固定 full-scan；
 2. 单文件变更时，timer 触发的 refresh plan 能只把目标 source URI 送入 `CorpusChangeSet`；
-3. provider 无变化时允许 skip，无 provider / baseline 失配 / quarantine 时才回退 full-scan；
+3. installed selective provider 发给 Knowledge 的 source path 与 installed descriptor root 口径一致；provider 无 delta、无 provider / baseline 失配 / quarantine 时才回退 full-scan；
 4. busy refresh 不会被自动化吞掉或叠加排队；
 5. `KnowledgeRuntimeAutoRefreshIntegrationTest` 与 `KnowledgeRefreshLoopTest` 都能用 focused binary 证明上述语义。
+
+## 10. Build 完成证据
+
+1. `apps/runtime_support/include/RuntimeLiveDependencyComposition.h` 已新增 `RuntimeKnowledgeRefreshPlanKind`、`RuntimeKnowledgeRefreshPlan` 与 `IRuntimeKnowledgeRefreshSourceProvider`，让 runtime selective provider 可被 production path 默认接线，也可被 focused integration test 注入 recording provider。
+2. `apps/runtime_support/src/RuntimeLiveDependencyComposition.cpp` 已新增 default installed selective provider：围绕 `docs/architecture`、`docs/adr`、`docs/ssot`、`profiles/*/runtime_policy.yaml` 与 `llm/providers/*` 建 baseline inventory，并在 timer tick 中按 `Selective / FullScanFallback` 输出 refresh plan；provider 会把 `SourceScanner` 产出的相对 source URI 归一为 installed absolute path，从而匹配 installed descriptor roots。
+3. `tests/integration/knowledge/KnowledgeRuntimeAutoRefreshIntegrationTest.cpp` 已新增四类 focused case：default provider changed-asset 正例、注入 selective provider 的 target-only 正例、provider full-scan fallback 正例，以及通过扩展 ADR corpus 体量拉长窗口后的 busy skip 回归。
+4. `tests/integration/knowledge/KnowledgeRefreshLoopTest.cpp` 已新增 multi-corpus selective regression：当 `updated_sources` 只包含 ADR source 时，新的 active snapshot 只引入 ADR 更新，SSOT 非目标更新不会被误刷新；既有 busy reject、full-scan fallback 与 activation rollback 回归保持不变。
+5. 2026-05-26 已通过 `Build_CMakeTools(buildTargets=["dasall_knowledge_runtime_auto_refresh_integration_test","dasall_knowledge_refresh_loop_integration_test"])`；`RunCtest_CMakeTools(tests=["KnowledgeRuntimeAutoRefreshIntegrationTest","KnowledgeRefreshLoopTest"])` 继续命中仓库已知泛化 `生成失败`，因此按仓库既有回退口径直接执行 `./build/vscode-linux-ninja/tests/integration/knowledge/dasall_knowledge_runtime_auto_refresh_integration_test && ./build/vscode-linux-ninja/tests/integration/knowledge/dasall_knowledge_refresh_loop_integration_test && printf "%s\n" PASS`，结果为 `PASS`。

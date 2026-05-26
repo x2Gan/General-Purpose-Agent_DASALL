@@ -1,3 +1,34 @@
+# 记录 #824
+
+- 日期：2026-05-26
+- 阶段：knowledge/runtime-owned selective refresh automation build closeout
+- 任务：KNO-TODO-045 Runtime-owned selective refresh automation 实装
+- 状态：已完成（代码、focused integration、TODO 回写已落盘）
+
+### 改动
+
+1. 更新 `apps/runtime_support/include/RuntimeLiveDependencyComposition.h` 与 `apps/runtime_support/src/RuntimeLiveDependencyComposition.cpp`，新增 `RuntimeKnowledgeRefreshPlanKind`、`RuntimeKnowledgeRefreshPlan` 与 `IRuntimeKnowledgeRefreshSourceProvider`，把 runtime auto-refresh 从“固定 empty `CorpusChangeSet`”收口为 plan-driven selective-first 流程；default provider 复用 `knowledge::ingest::SourceScanner` inventory diff，并把相对 source URI 归一为 installed descriptor root 使用的绝对路径。
+2. 更新 `tests/integration/knowledge/KnowledgeRuntimeAutoRefreshIntegrationTest.cpp`，新增 default provider changed-asset selective、注入 provider target-only selective、provider full-scan fallback 与 busy skip 四类 focused case；busy case 通过扩展 ADR corpus 体量拉长 refresh 窗口，稳定验证 `refresh_in_flight` tick 的 benign skip 语义。
+3. 更新 `tests/integration/knowledge/KnowledgeRefreshLoopTest.cpp`，新增 multi-corpus selective regression，证明 `updated_sources` 仅包含 ADR source 时，active snapshot 只引入 ADR 更新，SSOT 非目标更新不会被误刷新。
+4. 回写 `docs/todos/knowledge/deliverables/KNO-TODO-045-runtime-owned-selective-refresh-automation口径闭合双轨任务包.md`、`docs/todos/knowledge/DASALL_knowledge子系统专项TODO.md` 与 `docs/todos/DASALL_子系统查漏补缺专项记录.md`，把 045 从 D Gate 升级到 Build 完成态，并记录 absolute source path 口径与 focused validation 证据。
+
+### 验证
+
+1. `Build_CMakeTools(buildTargets=["dasall_knowledge_runtime_auto_refresh_integration_test"])`
+   - 结果：通过。
+2. `./build/vscode-linux-ninja/tests/integration/knowledge/dasall_knowledge_runtime_auto_refresh_integration_test`
+   - 结果：通过。
+3. `./build/vscode-linux-ninja/tests/integration/knowledge/dasall_knowledge_runtime_auto_refresh_integration_test && ./build/vscode-linux-ninja/tests/integration/knowledge/dasall_knowledge_refresh_loop_integration_test && printf "%s\n" PASS`
+   - 结果：`PASS`。
+4. `RunCtest_CMakeTools(tests=["KnowledgeRuntimeAutoRefreshIntegrationTest","KnowledgeRefreshLoopTest"])`
+   - 结果：继续命中仓库已知泛化 `生成失败`，因此本轮沿用 direct-binary fallback 口径，不扩大验证面。
+
+### 结果
+
+1. `KNO-TODO-045-B` 已完成：runtime-owned automation 现已真正具备 selective-first、busy benign skip 与 full-scan fallback 分层语义，041 的 periodic full-scan 明确降级为 fallback 基线。
+2. installed selective provider 与 installed descriptor root 的路径口径已对齐，避免 selective delta 因相对/绝对路径漂移漏选 target corpus。
+3. Runtime 继续拥有触发与 delta 生成权，Knowledge 继续只消费 `CorpusChangeSet`；manual `changed_source -> updated_sources` control-plane seam 继续 authoritative，ADR-006 / ADR-007 / ADR-008 owner boundary 未回退。
+
 # 记录 #823
 
 - 日期：2026-05-26

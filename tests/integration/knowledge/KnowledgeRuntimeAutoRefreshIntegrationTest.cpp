@@ -32,10 +32,16 @@ constexpr char kDefaultProfileId[] = "desktop_full";
 constexpr char kCompositionOwner[] = "gateway.http-unary";
 constexpr char kBaselineToken[] = "runtimeautorefreshbaselineanchor";
 constexpr char kUpdatedToken[] = "runtimeautorefreshupdatedanchor";
+constexpr char kArchitectureBaselineToken[] =
+  "runtimeautorefresharchitecturebaselineanchor";
+constexpr char kArchitectureUpdatedToken[] =
+  "runtimeautorefresharchitectureupdatedanchor";
 constexpr std::int64_t kRefreshIntervalMs = 25;
 
 const fs::path kAutoRefreshDocument =
     fs::path("docs") / "adr" / "ADR-RUNTIME-AUTO-REFRESH.md";
+const fs::path kArchitectureDocument =
+  fs::path("docs") / "ssot" / "RuntimeAutoRefresh.md";
 
 struct ScopedTempDir {
   fs::path path;
@@ -56,6 +62,11 @@ void write_file(const fs::path& path, std::string_view content) {
   fs::create_directories(path.parent_path());
   std::ofstream output(path, std::ios::binary);
   output << content;
+}
+
+[[nodiscard]] std::string absolute_source_uri(const fs::path& assets_root,
+                                              const fs::path& relative_path) {
+  return (assets_root / relative_path).lexically_normal().generic_string();
 }
 
 void copy_memory_assets_only(const fs::path& assets_root) {
@@ -232,7 +243,100 @@ class RecordingTimer final : public dasall::platform::ITimer {
   std::unordered_map<std::uint64_t, dasall::platform::TimerCallback> callbacks_;
 };
 
-void knowledge_runtime_auto_refresh_uses_timer_tick_to_run_full_scan_refresh() {
+class RecordingRefreshSourceProvider final
+    : public dasall::apps::runtime_support::IRuntimeKnowledgeRefreshSourceProvider {
+ public:
+  [[nodiscard]] dasall::apps::runtime_support::RuntimeKnowledgeRefreshPlan next_plan() override {
+    std::lock_guard<std::mutex> lock(mutex_);
+    ++call_count_;
+    if (next_index_ < queued_plans_.size()) {
+      last_plan_ = queued_plans_[next_index_++];
+      return last_plan_;
+    }
+
+    last_plan_ = make_full_scan_fallback_plan();
+    return last_plan_;
+  }
+
+  void enqueue_plan(dasall::apps::runtime_support::RuntimeKnowledgeRefreshPlan plan) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    queued_plans_.push_back(std::move(plan));
+  }
+
+  [[nodiscard]] std::size_t call_count() const {
+    std::lock_guard<std::mutex> lock(mutex_);
+    return call_count_;
+  }
+
+  [[nodiscard]] dasall::apps::runtime_support::RuntimeKnowledgeRefreshPlan last_plan() const {
+    std::lock_guard<std::mutex> lock(mutex_);
+    return last_plan_;
+  }
+
+ private:
+  static dasall::apps::runtime_support::RuntimeKnowledgeRefreshPlan
+  make_full_scan_fallback_plan() {
+    dasall::apps::runtime_support::RuntimeKnowledgeRefreshPlan plan;
+    plan.kind =
+        dasall::apps::runtime_support::RuntimeKnowledgeRefreshPlanKind::FullScanFallback;
+    return plan;
+  }
+
+  mutable std::mutex mutex_;
+  std::vector<dasall::apps::runtime_support::RuntimeKnowledgeRefreshPlan> queued_plans_;
+  std::size_t next_index_ = 0U;
+  std::size_t call_count_ = 0U;
+  dasall::apps::runtime_support::RuntimeKnowledgeRefreshPlan last_plan_ =
+      make_full_scan_fallback_plan();
+};
+
+[[nodiscard]] dasall::apps::runtime_support::RuntimeKnowledgeRefreshPlan
+make_selective_refresh_plan(std::vector<std::string> updated_sources) {
+  dasall::apps::runtime_support::RuntimeKnowledgeRefreshPlan plan;
+  plan.kind = dasall::apps::runtime_support::RuntimeKnowledgeRefreshPlanKind::Selective;
+  plan.updated_sources = std::move(updated_sources);
+  return plan;
+}
+
+[[nodiscard]] dasall::apps::runtime_support::RuntimeKnowledgeRefreshPlan
+make_full_scan_fallback_plan() {
+  dasall::apps::runtime_support::RuntimeKnowledgeRefreshPlan plan;
+  plan.kind =
+      dasall::apps::runtime_support::RuntimeKnowledgeRefreshPlanKind::FullScanFallback;
+  return plan;
+}
+
+void wait_for_refresh_completion(
+    const std::shared_ptr<dasall::knowledge::IKnowledgeService>& service,
+    std::string_view label) {
+  const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+  while (std::chrono::steady_clock::now() < deadline) {
+    const auto health = service->health_snapshot();
+    if (!health.refresh_in_flight && health.last_refresh_status.has_value() &&
+        *health.last_refresh_status == dasall::knowledge::RefreshStatus::Completed) {
+      return;
+    }
+    std::this_thread::sleep_for(std::chrono::milliseconds(20));
+  }
+
+  throw std::runtime_error(std::string(label) +
+                           ": timed out waiting for async refresh completion");
+}
+
+[[nodiscard]] bool wait_for_refresh_in_flight(
+    const std::shared_ptr<dasall::knowledge::IKnowledgeService>& service) {
+  const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(2);
+  while (std::chrono::steady_clock::now() < deadline) {
+    if (service->health_snapshot().refresh_in_flight) {
+      return true;
+    }
+    std::this_thread::sleep_for(std::chrono::milliseconds(5));
+  }
+
+  return false;
+}
+
+void knowledge_runtime_auto_refresh_default_provider_detects_changed_asset() {
   ScopedTempDir temp_root{make_temp_root()};
   const auto assets_root = temp_root.path / "assets";
   const auto state_root = temp_root.path / "state";
@@ -256,6 +360,7 @@ void knowledge_runtime_auto_refresh_uses_timer_tick_to_run_full_scan_refresh() {
           .create_vector_recall_store_override = {},
           .create_query_encoder_override = {},
           .knowledge_refresh_timer = timer,
+          .knowledge_refresh_source_provider = nullptr,
       });
   assert_true(composition.ok(),
               "runtime auto-refresh integration should compose live runtime dependencies: " +
@@ -295,29 +400,202 @@ void knowledge_runtime_auto_refresh_uses_timer_tick_to_run_full_scan_refresh() {
   write_file(assets_root / kAutoRefreshDocument,
              "# Runtime Auto Refresh\n\nruntimeautorefreshupdatedanchor timer-driven refresh should surface this updated evidence.\n");
   timer->fire_all_periodic();
+    wait_for_refresh_completion(composition.dependency_set->knowledge_service,
+                  "runtime auto-refresh default provider");
 
-  const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(3);
-  while (std::chrono::steady_clock::now() < deadline) {
-    const auto snapshot = composition.dependency_set->knowledge_service->health_snapshot();
+    const auto refreshed_snapshot_id =
+      composition.dependency_set->knowledge_service->health_snapshot().active_snapshot_id;
+    assert_true(refreshed_snapshot_id != baseline_snapshot_id,
+          "runtime auto-refresh integration should update the active snapshot after a timer-triggered refresh");
+
     const auto retrieve_result = composition.dependency_set->knowledge_service->retrieve(
-        make_query("req-runtime-auto-refresh-updated", kUpdatedToken));
-    if (snapshot.active_snapshot_id != baseline_snapshot_id && retrieve_result.ok &&
-        retrieve_result.evidence.has_value() &&
-        evidence_contains_token(*retrieve_result.evidence, kUpdatedToken)) {
-      return;
-    }
-    std::this_thread::sleep_for(std::chrono::milliseconds(20));
+      make_query("req-runtime-auto-refresh-updated", kUpdatedToken));
+    assert_true(retrieve_result.ok && retrieve_result.evidence.has_value() &&
+            evidence_contains_token(*retrieve_result.evidence, kUpdatedToken),
+          "runtime auto-refresh integration should surface updated evidence after the default selective provider detects a changed asset");
   }
 
-  throw std::runtime_error(
-      "runtime auto-refresh integration should update the active snapshot after a timer-triggered full-scan refresh");
+  void knowledge_runtime_auto_refresh_respects_selective_provider_scope() {
+    ScopedTempDir temp_root{make_temp_root()};
+    const auto assets_root = temp_root.path / "assets";
+    const auto state_root = temp_root.path / "state";
+
+    copy_installed_runtime_assets(assets_root);
+    fs::create_directories(state_root);
+    write_file(assets_root / kAutoRefreshDocument,
+         "# Runtime Auto Refresh\n\nruntimeautorefreshbaselineanchor baseline evidence should be visible before automation.\n");
+    write_file(assets_root / kArchitectureDocument,
+         "# Runtime Auto Refresh Design\n\nruntimeautorefresharchitecturebaselineanchor architecture baseline evidence should remain active until that corpus is refreshed.\n");
+
+    const auto policy_snapshot =
+      with_refresh_interval(load_runtime_policy_snapshot(assets_root), kRefreshIntervalMs);
+    auto timer = std::make_shared<RecordingTimer>();
+    auto provider = std::make_shared<RecordingRefreshSourceProvider>();
+    const auto composition = dasall::apps::runtime_support::compose_minimal_live_dependency_set(
+      policy_snapshot,
+      kCompositionOwner,
+      dasall::apps::runtime_support::RuntimeLiveDependencyCompositionOptions{
+        .readonly_assets_root_override = assets_root,
+        .runtime_library_root_override = {},
+        .state_root_override = state_root,
+        .build_dense_snapshot_override = {},
+        .create_vector_recall_store_override = {},
+        .create_query_encoder_override = {},
+        .knowledge_refresh_timer = timer,
+        .knowledge_refresh_source_provider = provider,
+      });
+    assert_true(composition.ok() && composition.dependency_set != nullptr &&
+            composition.dependency_set->knowledge_service != nullptr,
+          "runtime auto-refresh integration should compose with an injected refresh provider");
+
+    write_file(assets_root / kAutoRefreshDocument,
+         "# Runtime Auto Refresh\n\nruntimeautorefreshupdatedanchor selective refresh should surface this updated ADR evidence.\n");
+    write_file(assets_root / kArchitectureDocument,
+         "# Runtime Auto Refresh Design\n\nruntimeautorefresharchitectureupdatedanchor architecture evidence should stay stale when the selective plan excludes this source.\n");
+      provider->enqueue_plan(make_selective_refresh_plan(
+        {absolute_source_uri(assets_root, kAutoRefreshDocument)}));
+
+    timer->fire_all_periodic();
+    wait_for_refresh_completion(composition.dependency_set->knowledge_service,
+                  "runtime auto-refresh selective provider scope");
+
+    const auto selective_retrieve = composition.dependency_set->knowledge_service->retrieve(
+      make_query("req-runtime-auto-refresh-selective", kUpdatedToken));
+    assert_true(selective_retrieve.ok && selective_retrieve.evidence.has_value() &&
+            evidence_contains_token(*selective_retrieve.evidence, kUpdatedToken),
+          "runtime auto-refresh integration should surface the updated ADR token when the provider emits a selective source plan");
+
+    const auto architecture_updated = composition.dependency_set->knowledge_service->retrieve(
+      make_query("req-runtime-auto-refresh-architecture-updated",
+           kArchitectureUpdatedToken));
+    assert_true(!architecture_updated.ok || !architecture_updated.evidence.has_value() ||
+            !evidence_contains_token(*architecture_updated.evidence,
+                        kArchitectureUpdatedToken),
+          "runtime auto-refresh integration should not refresh non-target corpora when the selective plan excludes their changed source");
+
+    const auto last_plan = provider->last_plan();
+    assert_true(provider->call_count() == 1U &&
+            last_plan.kind ==
+              dasall::apps::runtime_support::RuntimeKnowledgeRefreshPlanKind::Selective &&
+            last_plan.updated_sources.size() == 1U &&
+              last_plan.updated_sources.front() ==
+                absolute_source_uri(assets_root, kAutoRefreshDocument),
+          "runtime auto-refresh integration should forward the injected selective source delta unchanged into the timer callback path");
+  }
+
+  void knowledge_runtime_auto_refresh_falls_back_to_full_scan_when_provider_requests_it() {
+    ScopedTempDir temp_root{make_temp_root()};
+    const auto assets_root = temp_root.path / "assets";
+    const auto state_root = temp_root.path / "state";
+
+    copy_installed_runtime_assets(assets_root);
+    fs::create_directories(state_root);
+    write_file(assets_root / kArchitectureDocument,
+         "# Runtime Auto Refresh Design\n\nruntimeautorefresharchitecturebaselineanchor architecture baseline evidence should be visible before fallback refresh.\n");
+
+    const auto policy_snapshot =
+      with_refresh_interval(load_runtime_policy_snapshot(assets_root), kRefreshIntervalMs);
+    auto timer = std::make_shared<RecordingTimer>();
+    auto provider = std::make_shared<RecordingRefreshSourceProvider>();
+    const auto composition = dasall::apps::runtime_support::compose_minimal_live_dependency_set(
+      policy_snapshot,
+      kCompositionOwner,
+      dasall::apps::runtime_support::RuntimeLiveDependencyCompositionOptions{
+        .readonly_assets_root_override = assets_root,
+        .runtime_library_root_override = {},
+        .state_root_override = state_root,
+        .build_dense_snapshot_override = {},
+        .create_vector_recall_store_override = {},
+        .create_query_encoder_override = {},
+        .knowledge_refresh_timer = timer,
+        .knowledge_refresh_source_provider = provider,
+      });
+    assert_true(composition.ok() && composition.dependency_set != nullptr &&
+            composition.dependency_set->knowledge_service != nullptr,
+          "runtime auto-refresh integration should compose with an injected fallback provider");
+
+    write_file(assets_root / kArchitectureDocument,
+         "# Runtime Auto Refresh Design\n\nruntimeautorefresharchitectureupdatedanchor full-scan fallback should surface this architecture update.\n");
+    provider->enqueue_plan(make_full_scan_fallback_plan());
+
+    timer->fire_all_periodic();
+    wait_for_refresh_completion(composition.dependency_set->knowledge_service,
+                  "runtime auto-refresh full-scan fallback");
+
+    const auto retrieve_result = composition.dependency_set->knowledge_service->retrieve(
+      make_query("req-runtime-auto-refresh-architecture-fallback",
+           kArchitectureUpdatedToken));
+    assert_true(retrieve_result.ok && retrieve_result.evidence.has_value() &&
+            evidence_contains_token(*retrieve_result.evidence,
+                       kArchitectureUpdatedToken),
+          "runtime auto-refresh integration should retain the 041 full-scan fallback path when the provider explicitly requests it");
+  }
+
+  void knowledge_runtime_auto_refresh_skips_timer_tick_while_refresh_is_in_flight() {
+    ScopedTempDir temp_root{make_temp_root()};
+    const auto assets_root = temp_root.path / "assets";
+    const auto state_root = temp_root.path / "state";
+
+    copy_installed_runtime_assets(assets_root);
+    fs::create_directories(state_root);
+    write_file(assets_root / kAutoRefreshDocument,
+         "# Runtime Auto Refresh\n\nruntimeautorefreshbaselineanchor baseline evidence should be visible before busy-skip verification.\n");
+
+    const auto policy_snapshot =
+      with_refresh_interval(load_runtime_policy_snapshot(assets_root), kRefreshIntervalMs);
+    auto timer = std::make_shared<RecordingTimer>();
+    auto provider = std::make_shared<RecordingRefreshSourceProvider>();
+    provider->enqueue_plan(
+        make_selective_refresh_plan({absolute_source_uri(assets_root, kAutoRefreshDocument)}));
+    const auto composition = dasall::apps::runtime_support::compose_minimal_live_dependency_set(
+      policy_snapshot,
+      kCompositionOwner,
+      dasall::apps::runtime_support::RuntimeLiveDependencyCompositionOptions{
+        .readonly_assets_root_override = assets_root,
+        .runtime_library_root_override = {},
+        .state_root_override = state_root,
+        .build_dense_snapshot_override = {},
+        .create_vector_recall_store_override = {},
+        .create_query_encoder_override = {},
+        .knowledge_refresh_timer = timer,
+        .knowledge_refresh_source_provider = provider,
+      });
+    assert_true(composition.ok() && composition.dependency_set != nullptr &&
+            composition.dependency_set->knowledge_service != nullptr,
+          "runtime auto-refresh integration should compose with an injected provider for busy-skip verification");
+
+    const std::string busy_payload(65536U, 'b');
+    for (int index = 0; index < 24; ++index) {
+      write_file(assets_root / "docs" / "adr" /
+                     ("ADR-BUSY-" + std::to_string(index) + ".md"),
+                 "# ADR Busy\n\n" + busy_payload + "\n");
+    }
+
+    const auto manual_refresh =
+      composition.dependency_set->knowledge_service->request_refresh(
+        dasall::knowledge::CorpusChangeSet{});
+    assert_true(manual_refresh.has_consistent_values() &&
+            manual_refresh.status == dasall::knowledge::RefreshStatus::Accepted,
+          "runtime auto-refresh integration should accept the manual refresh used to create an in-flight busy window");
+    assert_true(wait_for_refresh_in_flight(composition.dependency_set->knowledge_service),
+          "runtime auto-refresh integration should observe the manual refresh as in-flight before firing the timer");
+
+    timer->fire_all_periodic();
+    assert_true(provider->call_count() == 0U,
+          "runtime auto-refresh integration should not consult the selective provider while a refresh is already in flight");
+
+    wait_for_refresh_completion(composition.dependency_set->knowledge_service,
+                  "runtime auto-refresh busy skip");
 }
 
 }  // namespace
 
 int main() {
   try {
-    knowledge_runtime_auto_refresh_uses_timer_tick_to_run_full_scan_refresh();
+    knowledge_runtime_auto_refresh_default_provider_detects_changed_asset();
+    knowledge_runtime_auto_refresh_respects_selective_provider_scope();
+    knowledge_runtime_auto_refresh_falls_back_to_full_scan_when_provider_requests_it();
+    knowledge_runtime_auto_refresh_skips_timer_tick_while_refresh_is_in_flight();
   } catch (const std::exception& ex) {
     std::cerr << ex.what() << std::endl;
     return 1;

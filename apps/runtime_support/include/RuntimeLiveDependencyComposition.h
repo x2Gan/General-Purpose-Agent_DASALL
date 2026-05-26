@@ -1,10 +1,12 @@
 #pragma once
 
+#include <cstdint>
 #include <filesystem>
 #include <functional>
 #include <memory>
 #include <string>
 #include <string_view>
+#include <vector>
 
 namespace dasall::profiles {
 
@@ -46,6 +48,27 @@ class IVectorRecallStore;
 
 namespace dasall::apps::runtime_support {
 
+enum class RuntimeKnowledgeRefreshPlanKind : std::uint8_t {
+  Skip = 0,
+  Selective = 1,
+  FullScanFallback = 2,
+};
+
+struct RuntimeKnowledgeRefreshPlan {
+  RuntimeKnowledgeRefreshPlanKind kind =
+      RuntimeKnowledgeRefreshPlanKind::FullScanFallback;
+  std::vector<std::string> added_sources;
+  std::vector<std::string> updated_sources;
+  std::vector<std::string> removed_sources;
+};
+
+class IRuntimeKnowledgeRefreshSourceProvider {
+ public:
+  virtual ~IRuntimeKnowledgeRefreshSourceProvider() = default;
+
+  [[nodiscard]] virtual RuntimeKnowledgeRefreshPlan next_plan() = 0;
+};
+
 struct RuntimeDependencyCompositionResult {
   std::shared_ptr<runtime::RuntimeDependencySet> dependency_set;
   std::string error;
@@ -68,6 +91,8 @@ struct RuntimeLiveDependencyCompositionOptions {
   std::function<std::unique_ptr<knowledge::retrieve::IQueryEncoder>()>
       create_query_encoder_override;
   std::shared_ptr<platform::ITimer> knowledge_refresh_timer;
+  std::shared_ptr<IRuntimeKnowledgeRefreshSourceProvider>
+      knowledge_refresh_source_provider;
 };
 
 [[nodiscard]] RuntimeDependencyCompositionResult compose_minimal_live_dependency_set(

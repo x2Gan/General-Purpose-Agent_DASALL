@@ -58,6 +58,7 @@
 #include "config/InstallLayout.h"
 #include "execution/BuiltinExecutorLane.h"
 #include "health/RuntimeHealthProbe.h"
+#include "ingest/SourceScanner.h"
 #include "ITimer.h"
 #include "maintenance/BackgroundMaintenanceHooks.h"
 #include "bridge/ToolServiceBridge.h"
@@ -1325,6 +1326,342 @@ class RuntimeControlPlaneHealthSignalProvider final
   };
 }
 
+struct RuntimeKnowledgeRefreshScanTarget {
+  knowledge::CorpusDescriptor descriptor;
+  knowledge::ingest::CorpusScanPlan plan;
+};
+
+[[nodiscard]] std::string normalize_runtime_refresh_path(const fs::path& path) {
+  return path.lexically_normal().generic_string();
+}
+
+[[nodiscard]] std::string make_runtime_refresh_source_uri(
+    const fs::path& assets_root,
+    std::string_view source_uri) {
+  const fs::path source_path(source_uri);
+  if (source_path.is_absolute()) {
+    return normalize_runtime_refresh_path(source_path);
+  }
+  return normalize_runtime_refresh_path(assets_root / source_path);
+}
+
+void append_unique_source(std::vector<std::string>& values, std::string value) {
+  if (value.empty() || contains_string(values, value)) {
+    return;
+  }
+  values.push_back(std::move(value));
+}
+
+void sort_and_deduplicate_sources(std::vector<std::string>& values) {
+  std::sort(values.begin(), values.end());
+  values.erase(std::unique(values.begin(), values.end()), values.end());
+}
+
+[[nodiscard]] bool runtime_refresh_plan_has_changes(
+    const RuntimeKnowledgeRefreshPlan& plan) {
+  return !plan.added_sources.empty() || !plan.updated_sources.empty() ||
+         !plan.removed_sources.empty();
+}
+
+[[nodiscard]] RuntimeKnowledgeRefreshPlan make_full_scan_fallback_plan() {
+  RuntimeKnowledgeRefreshPlan plan;
+  plan.kind = RuntimeKnowledgeRefreshPlanKind::FullScanFallback;
+  return plan;
+}
+
+[[nodiscard]] bool source_scan_delta_has_corpus_quarantine(
+    const knowledge::ingest::SourceScanDelta& delta,
+    std::string_view corpus_id) {
+  return contains_string(delta.quarantined_source_ids,
+                         std::string("corpus::") + std::string(corpus_id));
+}
+
+[[nodiscard]] knowledge::CorpusDescriptor make_runtime_refresh_descriptor(
+    std::string corpus_id,
+    std::string display_name,
+    const fs::path& source_root,
+    std::vector<std::string> tags,
+    knowledge::AuthorityLevel authority_level,
+    knowledge::SourceKind source_kind,
+    std::vector<knowledge::SourceFormat> allowed_formats,
+    std::vector<std::string> include_globs,
+    std::vector<std::string> exclude_globs,
+    std::vector<knowledge::RetrievalMode> supported_modes,
+    std::string default_language) {
+  knowledge::CorpusDescriptor descriptor;
+  descriptor.corpus_id = std::move(corpus_id);
+  descriptor.display_name = std::move(display_name);
+  descriptor.source_uri = normalize_runtime_refresh_path(source_root);
+  descriptor.trust_level = knowledge::TrustLevel::Trusted;
+  descriptor.authority_level = authority_level;
+  descriptor.source_kind = source_kind;
+  descriptor.allowed_formats = std::move(allowed_formats);
+  descriptor.include_globs = std::move(include_globs);
+  descriptor.exclude_globs = std::move(exclude_globs);
+  descriptor.supported_modes = std::move(supported_modes);
+  descriptor.tags = std::move(tags);
+  descriptor.metadata = {
+      {"baseline_class", "runtime_refresh_scan"},
+      {"owner_module", "runtime_support"},
+      {"refresh_strategy", "runtime_selective"},
+      {"default_language", std::move(default_language)},
+  };
+  return descriptor;
+}
+
+[[nodiscard]] std::vector<RuntimeKnowledgeRefreshScanTarget>
+make_runtime_knowledge_refresh_scan_targets(const fs::path& assets_root) {
+  std::vector<RuntimeKnowledgeRefreshScanTarget> targets;
+  const auto append_target = [&targets](knowledge::CorpusDescriptor descriptor) {
+    RuntimeKnowledgeRefreshScanTarget target;
+    target.plan.corpus_id = descriptor.corpus_id;
+    target.plan.root_uri = descriptor.source_uri;
+    target.plan.source_kind = descriptor.source_kind;
+    target.plan.include_globs = descriptor.include_globs;
+    target.plan.exclude_globs = descriptor.exclude_globs;
+    target.plan.allowed_formats = descriptor.allowed_formats;
+    target.plan.full_scan = false;
+    target.descriptor = std::move(descriptor);
+    targets.push_back(std::move(target));
+  };
+
+  append_target(make_runtime_refresh_descriptor(
+      "architecture_reference",
+      "DASALL architecture reference",
+      assets_root / "docs" / "architecture",
+      {"installed", "architecture", "reference"},
+      knowledge::AuthorityLevel::Reference,
+      knowledge::SourceKind::File,
+      {knowledge::SourceFormat::Markdown},
+      {"DASALL_Agent_architecture.md",
+       "DASALL_Engineering_Blueprint.md",
+       "DASALL_*详细设计*.md",
+       "platform_linux_detailed_design.md"},
+      {"*评审报告*.md",
+       "*迁移影响清单*.md",
+       "DASALL_boundary治理与优化说明.md"},
+      {knowledge::RetrievalMode::LexicalOnly, knowledge::RetrievalMode::Hybrid},
+      "zh-CN"));
+  append_target(make_runtime_refresh_descriptor(
+      "adr_normative",
+      "DASALL ADR normative corpus",
+      assets_root / "docs" / "adr",
+      {"installed", "adr", "normative"},
+      knowledge::AuthorityLevel::Normative,
+      knowledge::SourceKind::File,
+      {knowledge::SourceFormat::Markdown},
+      {"ADR-*.md"},
+      {},
+      {knowledge::RetrievalMode::LexicalOnly, knowledge::RetrievalMode::Hybrid},
+      "zh-CN"));
+  append_target(make_runtime_refresh_descriptor(
+      "ssot_normative",
+      "DASALL SSOT normative corpus",
+      assets_root / "docs" / "ssot",
+      {"installed", "ssot", "normative"},
+      knowledge::AuthorityLevel::Normative,
+      knowledge::SourceKind::File,
+      {knowledge::SourceFormat::Markdown},
+      {"*.md"},
+      {},
+      {knowledge::RetrievalMode::LexicalOnly, knowledge::RetrievalMode::Hybrid},
+      "zh-CN"));
+  append_target(make_runtime_refresh_descriptor(
+      "profile_policy_normative",
+      "DASALL profile policy normative corpus",
+      assets_root / "profiles",
+      {"installed", "profile", "normative"},
+      knowledge::AuthorityLevel::Normative,
+      knowledge::SourceKind::ConfigSnapshot,
+      {knowledge::SourceFormat::Yaml},
+      {"*/runtime_policy.yaml"},
+      {},
+      {knowledge::RetrievalMode::LexicalOnly},
+      "en"));
+  append_target(make_runtime_refresh_descriptor(
+      "dasall_llm_providers",
+      "DASALL LLM provider manifests",
+      assets_root / "llm" / "providers",
+      {"installed", "llm", "provider"},
+      knowledge::AuthorityLevel::Reference,
+      knowledge::SourceKind::File,
+      {knowledge::SourceFormat::Yaml},
+      {"*.yaml", "*.yml"},
+      {},
+      {knowledge::RetrievalMode::LexicalOnly},
+      "en"));
+  return targets;
+}
+
+class InstalledAssetKnowledgeRefreshSourceProvider final
+    : public IRuntimeKnowledgeRefreshSourceProvider {
+ public:
+  explicit InstalledAssetKnowledgeRefreshSourceProvider(fs::path assets_root)
+      : assets_root_(std::move(assets_root)),
+        scan_targets_(make_runtime_knowledge_refresh_scan_targets(assets_root_)) {
+    baseline_ready_ = rebuild_baseline_locked();
+  }
+
+  [[nodiscard]] RuntimeKnowledgeRefreshPlan next_plan() override {
+    std::scoped_lock lock(mutex_);
+    if (!baseline_ready_) {
+      baseline_ready_ = rebuild_baseline_locked();
+      return make_full_scan_fallback_plan();
+    }
+
+    RuntimeKnowledgeRefreshPlan plan;
+    plan.kind = RuntimeKnowledgeRefreshPlanKind::Selective;
+
+    for (const auto& target : scan_targets_) {
+      const auto previous_inventory = load_inventory_locked(target.descriptor.corpus_id);
+      const auto delta = scan_target_locked(target);
+      if (!delta.has_consistent_values() ||
+          source_scan_delta_has_corpus_quarantine(delta, target.descriptor.corpus_id)) {
+        baseline_ready_ = rebuild_baseline_locked();
+        return make_full_scan_fallback_plan();
+      }
+
+      for (const auto& record : delta.added) {
+        append_unique_source(plan.added_sources,
+                             make_runtime_refresh_source_uri(assets_root_,
+                                                             record.source_uri));
+      }
+      for (const auto& record : delta.updated) {
+        append_unique_source(plan.updated_sources,
+                             make_runtime_refresh_source_uri(assets_root_,
+                                                             record.source_uri));
+      }
+
+      for (const auto& removed_source_id : delta.removed_source_ids) {
+        const auto removed_it = std::find_if(previous_inventory.begin(), previous_inventory.end(),
+                                             [&removed_source_id](const auto& record) {
+                                               return record.source_id == removed_source_id;
+                                             });
+        if (removed_it != previous_inventory.end()) {
+          append_unique_source(plan.removed_sources,
+                               make_runtime_refresh_source_uri(assets_root_,
+                                                               removed_it->source_uri));
+        }
+      }
+
+      inventories_[target.descriptor.corpus_id] =
+          apply_delta_locked(previous_inventory, delta);
+    }
+
+    sort_and_deduplicate_sources(plan.added_sources);
+    sort_and_deduplicate_sources(plan.updated_sources);
+    sort_and_deduplicate_sources(plan.removed_sources);
+    if (!runtime_refresh_plan_has_changes(plan)) {
+      return make_full_scan_fallback_plan();
+    }
+    return plan;
+  }
+
+ private:
+  using SourceInventory = std::vector<knowledge::ingest::SourceRecord>;
+
+  [[nodiscard]] knowledge::ingest::SourceScanDelta scan_target_locked(
+      const RuntimeKnowledgeRefreshScanTarget& target) const {
+    knowledge::ingest::SourceScanner scanner(knowledge::ingest::SourceScannerDeps{
+        .lookup_corpus = [descriptor = target.descriptor](std::string_view corpus_id)
+            -> std::optional<knowledge::CorpusDescriptor> {
+          if (corpus_id == descriptor.corpus_id) {
+            return descriptor;
+          }
+          return std::nullopt;
+        },
+        .load_inventory = [this](std::string_view corpus_id) {
+          return load_inventory_locked(corpus_id);
+        },
+        .repository_root = [this]() {
+          return assets_root_;
+        },
+        .now_ms = []() {
+          return current_time_ms();
+        },
+    });
+    return scanner.scan(target.plan);
+  }
+
+  [[nodiscard]] SourceInventory load_inventory_locked(
+      std::string_view corpus_id) const {
+    const auto inventory_it = inventories_.find(std::string(corpus_id));
+    if (inventory_it == inventories_.end()) {
+      return {};
+    }
+    return inventory_it->second;
+  }
+
+  [[nodiscard]] SourceInventory apply_delta_locked(
+      const SourceInventory& previous_inventory,
+      const knowledge::ingest::SourceScanDelta& delta) const {
+    std::map<std::string, knowledge::ingest::SourceRecord, std::less<>> records;
+    for (const auto& record : previous_inventory) {
+      records[record.source_id] = record;
+    }
+    for (const auto& record : delta.added) {
+      records[record.source_id] = record;
+    }
+    for (const auto& record : delta.updated) {
+      records[record.source_id] = record;
+    }
+    for (const auto& removed_source_id : delta.removed_source_ids) {
+      records.erase(removed_source_id);
+    }
+
+    SourceInventory merged;
+    merged.reserve(records.size());
+    for (const auto& [source_id, record] : records) {
+      static_cast<void>(source_id);
+      merged.push_back(record);
+    }
+    return merged;
+  }
+
+  [[nodiscard]] bool rebuild_baseline_locked() {
+    if (scan_targets_.empty()) {
+      return false;
+    }
+
+    inventories_.clear();
+    for (const auto& target : scan_targets_) {
+      const auto delta = scan_target_locked(target);
+      if (!delta.has_consistent_values() ||
+          source_scan_delta_has_corpus_quarantine(delta, target.descriptor.corpus_id)) {
+        inventories_.clear();
+        return false;
+      }
+      inventories_[target.descriptor.corpus_id] = apply_delta_locked({}, delta);
+    }
+    return true;
+  }
+
+  fs::path assets_root_;
+  std::vector<RuntimeKnowledgeRefreshScanTarget> scan_targets_;
+  std::map<std::string, SourceInventory, std::less<>> inventories_;
+  bool baseline_ready_ = false;
+  mutable std::mutex mutex_;
+};
+
+[[nodiscard]] std::shared_ptr<IRuntimeKnowledgeRefreshSourceProvider>
+make_default_runtime_knowledge_refresh_source_provider(
+    const fs::path& readonly_assets_root) {
+  if (readonly_assets_root.empty()) {
+    return nullptr;
+  }
+  return std::make_shared<InstalledAssetKnowledgeRefreshSourceProvider>(
+      readonly_assets_root);
+}
+
+[[nodiscard]] knowledge::CorpusChangeSet make_runtime_knowledge_change_set(
+    const RuntimeKnowledgeRefreshPlan& plan) {
+  return knowledge::CorpusChangeSet{
+      .added_sources = plan.added_sources,
+      .updated_sources = plan.updated_sources,
+      .removed_sources = plan.removed_sources,
+  };
+}
+
 constexpr std::string_view kKnowledgeRefreshAutomationReadySuffix =
     ":knowledge-refresh-automation-ready";
 constexpr std::string_view kKnowledgeRefreshAutomationFallbackPrefix =
@@ -1340,10 +1677,13 @@ class AutoRefreshKnowledgeService final : public knowledge::IKnowledgeService {
  public:
   AutoRefreshKnowledgeService(std::shared_ptr<knowledge::IKnowledgeService> inner_service,
                               std::shared_ptr<platform::ITimer> timer,
-                              platform::TimerHandle timer_handle)
+                              platform::TimerHandle timer_handle,
+                              std::shared_ptr<IRuntimeKnowledgeRefreshSourceProvider>
+                                  refresh_source_provider)
       : inner_service_(std::move(inner_service)),
         timer_(std::move(timer)),
-        timer_handle_(timer_handle) {}
+        timer_handle_(timer_handle),
+        refresh_source_provider_(std::move(refresh_source_provider)) {}
 
   ~AutoRefreshKnowledgeService() override {
     if (timer_ != nullptr && timer_handle_.has_consistent_values()) {
@@ -1373,6 +1713,7 @@ class AutoRefreshKnowledgeService final : public knowledge::IKnowledgeService {
   std::shared_ptr<knowledge::IKnowledgeService> inner_service_;
   std::shared_ptr<platform::ITimer> timer_;
   platform::TimerHandle timer_handle_;
+  std::shared_ptr<IRuntimeKnowledgeRefreshSourceProvider> refresh_source_provider_;
 };
 
 struct KnowledgeAutoRefreshArmResult {
@@ -1401,7 +1742,9 @@ struct KnowledgeAutoRefreshArmResult {
     const std::shared_ptr<knowledge::IKnowledgeService>& knowledge_service,
     const std::shared_ptr<platform::ITimer>& timer,
     const std::int64_t refresh_interval_ms,
-    std::string_view composition_owner) {
+  std::string_view composition_owner,
+  const std::shared_ptr<IRuntimeKnowledgeRefreshSourceProvider>&
+    refresh_source_provider) {
   if (timer == nullptr) {
     return KnowledgeAutoRefreshArmResult{
         .service = knowledge_service,
@@ -1426,10 +1769,32 @@ struct KnowledgeAutoRefreshArmResult {
 
   const auto started = timer->start_periodic(
       make_knowledge_refresh_timer_spec(static_cast<std::uint32_t>(refresh_interval_ms)),
-      [knowledge_service](const platform::TimerDriftStats&) {
+      [knowledge_service, refresh_source_provider](const platform::TimerDriftStats&) {
         try {
+          if (knowledge_service->health_snapshot().refresh_in_flight) {
+            return;
+          }
+
+          const auto plan = refresh_source_provider != nullptr
+                                ? refresh_source_provider->next_plan()
+                                : make_full_scan_fallback_plan();
+          if (plan.kind == RuntimeKnowledgeRefreshPlanKind::Skip) {
+            return;
+          }
+
+          if (plan.kind == RuntimeKnowledgeRefreshPlanKind::Selective &&
+              runtime_refresh_plan_has_changes(plan)) {
+            static_cast<void>(knowledge_service->request_refresh(
+                make_runtime_knowledge_change_set(plan)));
+            return;
+          }
+
           static_cast<void>(knowledge_service->request_refresh(knowledge::CorpusChangeSet{}));
         } catch (...) {
+          try {
+            static_cast<void>(knowledge_service->request_refresh(knowledge::CorpusChangeSet{}));
+          } catch (...) {
+          }
         }
       });
   if (!started.ok()) {
@@ -1445,7 +1810,8 @@ struct KnowledgeAutoRefreshArmResult {
   return KnowledgeAutoRefreshArmResult{
       .service = std::make_shared<AutoRefreshKnowledgeService>(knowledge_service,
                                                                timer,
-                                                               *started.value),
+                                                               *started.value,
+                                                               refresh_source_provider),
       .evidence = make_runtime_knowledge_automation_evidence(
           composition_owner,
           kKnowledgeRefreshAutomationReadySuffix),
@@ -2454,11 +2820,19 @@ RuntimeDependencyCompositionResult compose_minimal_live_dependency_set(
     const auto positive_probe_error =
       validate_installed_knowledge_positive_probe(knowledge_result.service);
     if (positive_probe_error.empty()) {
+      auto knowledge_refresh_source_provider =
+          options.knowledge_refresh_source_provider;
+      if (knowledge_refresh_source_provider == nullptr) {
+        knowledge_refresh_source_provider =
+            make_default_runtime_knowledge_refresh_source_provider(
+                readonly_assets_root);
+      }
       const auto auto_refresh = arm_runtime_knowledge_auto_refresh(
           knowledge_result.service,
           options.knowledge_refresh_timer,
           policy_snapshot->capability_cache_policy().refresh_interval_ms,
-          composition_owner);
+          composition_owner,
+          knowledge_refresh_source_provider);
       dependency_set->knowledge_service = auto_refresh.service;
       dependency_set->external_evidence.push_back(
         std::string("runtime:") + std::string(composition_owner) +

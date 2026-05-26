@@ -4,6 +4,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <map>
 #include <memory>
 #include <mutex>
 #include <optional>
@@ -82,10 +83,14 @@ using dasall::tests::support::assert_equal;
 using dasall::tests::support::assert_true;
 
 constexpr std::string_view kCorpusId = "adr_normative";
+constexpr std::string_view kSsotCorpusId = "ssot_normative";
 constexpr std::string_view kDocumentSourceUri = "docs/adr/ADR-REFRESH.md";
+constexpr std::string_view kSsotSourceUri = "docs/ssot/Matrix.md";
 constexpr std::string_view kBaselineToken = "refreshstableanchor";
 constexpr std::string_view kUpdatedToken = "refreshupdatedanchor";
 constexpr std::string_view kFullScanUpdatedToken = "refreshfullscanupdatedanchor";
+constexpr std::string_view kSsotBaselineToken = "refreshssotbaselineanchor";
+constexpr std::string_view kSsotUpdatedToken = "refreshssotupdatedanchor";
 
 class TempDirectory {
  public:
@@ -115,13 +120,14 @@ void write_file(const std::filesystem::path& path, std::string_view content) {
   output << content;
 }
 
-[[nodiscard]] QueryNormalizePolicy make_normalize_policy() {
+[[nodiscard]] QueryNormalizePolicy make_normalize_policy(
+    std::vector<std::string> allowed_corpora = {std::string(kCorpusId)}) {
   QueryNormalizePolicy policy;
   policy.max_query_text_bytes = 512U;
   policy.max_lexical_terms = 16U;
   policy.max_top_k = 8U;
   policy.max_context_projection_items = 4U;
-  policy.allowed_corpora = {std::string(kCorpusId)};
+  policy.allowed_corpora = std::move(allowed_corpora);
   return policy;
 }
 
@@ -155,16 +161,18 @@ void write_file(const std::filesystem::path& path, std::string_view content) {
   return policy;
 }
 
-[[nodiscard]] CorpusDescriptor make_descriptor() {
+[[nodiscard]] CorpusDescriptor make_descriptor(std::string corpus_id,
+                                               std::string display_name,
+                                               std::string source_uri) {
   CorpusDescriptor descriptor;
-  descriptor.corpus_id = std::string(kCorpusId);
-  descriptor.display_name = "ADR Normative";
-  descriptor.source_uri = "docs/adr";
+  descriptor.corpus_id = std::move(corpus_id);
+  descriptor.display_name = std::move(display_name);
+  descriptor.source_uri = std::move(source_uri);
   descriptor.trust_level = TrustLevel::Trusted;
   descriptor.authority_level = AuthorityLevel::Normative;
   descriptor.source_kind = SourceKind::File;
   descriptor.allowed_formats = {SourceFormat::Markdown};
-  descriptor.include_globs = {"ADR-*.md"};
+  descriptor.include_globs = {"*.md"};
   descriptor.exclude_globs = {};
   descriptor.supported_modes = {RetrievalMode::LexicalOnly};
   descriptor.active_snapshot_id = "snapshot-bootstrap";
@@ -179,22 +187,35 @@ void write_file(const std::filesystem::path& path, std::string_view content) {
   return descriptor;
 }
 
-[[nodiscard]] KnowledgeQuery make_query(std::string request_id, std::string query_text) {
+[[nodiscard]] CorpusDescriptor make_descriptor() {
+  auto descriptor = make_descriptor(std::string(kCorpusId),
+                                    "ADR Normative",
+                                    "docs/adr");
+  descriptor.include_globs = {"ADR-*.md"};
+  return descriptor;
+}
+
+[[nodiscard]] KnowledgeQuery make_query(
+    std::string request_id,
+    std::string query_text,
+    std::vector<std::string> allowed_corpora = {std::string(kCorpusId)}) {
   KnowledgeQuery query;
   query.request_id = std::move(request_id);
   query.query_text = std::move(query_text);
   query.query_kind = KnowledgeQueryKind::PolicyEvidence;
-  query.allowed_corpora = {std::string(kCorpusId)};
+  query.allowed_corpora = std::move(allowed_corpora);
   query.top_k = 4U;
   query.max_context_projection_items = 2U;
   return query;
 }
 
-[[nodiscard]] SparseIndexSearchRequest make_search_request(std::string term) {
+[[nodiscard]] SparseIndexSearchRequest make_search_request(
+    std::string term,
+    std::vector<std::string> allowed_corpus_ids = {std::string(kCorpusId)}) {
   SparseIndexSearchRequest request;
   request.expression.match_expression = '"' + term + '"';
   request.expression.lexical_terms = {std::move(term)};
-  request.allowed_corpus_ids = {std::string(kCorpusId)};
+  request.allowed_corpus_ids = std::move(allowed_corpus_ids);
   request.minimum_authority_level = AuthorityLevel::Reference;
   request.top_k = 4U;
   return request;
@@ -236,6 +257,7 @@ class KnowledgeRefreshLoopHarness {
         .read_snapshot_checksum = [this](std::string_view snapshot_id) {
           return index_reader_ptr_->read_snapshot_checksum(snapshot_id);
         },
+        .ledger_path = {},
     });
 
     sparse_retriever_ = std::make_unique<SparseRetriever>(SparseRetrieverDeps{
@@ -456,6 +478,218 @@ class KnowledgeRefreshLoopHarness {
   std::unique_ptr<KnowledgeServiceFacade> service_;
 };
 
+class MultiCorpusKnowledgeRefreshLoopHarness {
+ public:
+  MultiCorpusKnowledgeRefreshLoopHarness()
+      : temp_directory_("dasall-knowledge-refresh-loop-multi-corpus-test"),
+        adr_source_path_(temp_directory_.path() / kDocumentSourceUri),
+        ssot_source_path_(temp_directory_.path() / kSsotSourceUri),
+        config_(make_config()) {
+    descriptors_ = {
+        make_descriptor(std::string(kCorpusId), "ADR Normative", "docs/adr"),
+        make_descriptor(std::string(kSsotCorpusId), "SSOT Normative", "docs/ssot"),
+    };
+    descriptors_.front().include_globs = {"ADR-*.md"};
+
+    auto corpus_catalog = std::make_unique<CorpusCatalog>();
+    assert_true(corpus_catalog->replace_all(descriptors_),
+                "multi-corpus refresh loop harness should install consistent corpus descriptors");
+    corpus_catalog_ptr_ = corpus_catalog.get();
+
+    auto index_reader = std::make_unique<IndexReader>();
+    index_reader_ptr_ = index_reader.get();
+
+    ledger_ = std::make_unique<VersionLedger>(VersionLedgerDeps{
+        .read_snapshot_checksum = [this](std::string_view snapshot_id) {
+          return index_reader_ptr_->read_snapshot_checksum(snapshot_id);
+        },
+        .ledger_path = {},
+    });
+
+    sparse_retriever_ = std::make_unique<SparseRetriever>(SparseRetrieverDeps{
+        .search_index = [this](const SparseIndexSearchRequest& request) {
+          return index_reader_ptr_->search_sparse(request);
+        },
+    });
+
+    IngestionCoordinatorDeps ingestion_deps;
+    ingestion_deps.load_catalog_snapshot = [this]() {
+      return corpus_catalog_ptr_->snapshot();
+    };
+    ingestion_deps.load_inventory = [this](std::string_view corpus_id) {
+      const auto inventory_it = inventories_.find(std::string(corpus_id));
+      if (inventory_it == inventories_.end()) {
+        return std::vector<SourceRecord>{};
+      }
+      return inventory_it->second;
+    };
+    ingestion_deps.repository_root = [this]() {
+      return temp_directory_.path();
+    };
+    ingestion_deps.now_ms = [this]() {
+      return now_ms_;
+    };
+
+    IndexWriterDeps writer_deps;
+    writer_deps.snapshots_root = [this]() {
+      return temp_directory_.path() / "snapshots";
+    };
+    writer_deps.now_ms = [this]() {
+      return now_ms_;
+    };
+    writer_deps.record_candidate = [this](const VersionLedgerEntry& entry) {
+      return ledger_->record_candidate(entry);
+    };
+    writer_deps.mark_active = [this](std::string_view snapshot_id, std::int64_t activated_at) {
+      return ledger_->mark_active(snapshot_id, activated_at);
+    };
+    writer_deps.refresh_catalog = [this](const IndexManifest& manifest) {
+      auto refreshed_descriptors = descriptors_;
+      for (auto& descriptor : refreshed_descriptors) {
+        descriptor.active_snapshot_id = manifest.snapshot_id;
+        descriptor.last_updated_ms = manifest.effective_at;
+      }
+      if (!corpus_catalog_ptr_->replace_all(refreshed_descriptors)) {
+        return false;
+      }
+      descriptors_ = refreshed_descriptors;
+      inventories_ = rebuild_inventory_from_disk();
+      return true;
+    };
+
+    auto recall_coordinator = std::make_unique<RecallCoordinator>(
+        RecallCoordinatorDeps{
+            .sparse_lane = [this](const dasall::knowledge::retrieve::SparseRetrieveRequest& request) {
+              return sparse_retriever_->retrieve(request);
+            },
+            .dense_bridge = nullptr,
+            .dense_lane = [](const DenseRecallRequest&) {
+              DenseRecallResult result;
+              result.ok = false;
+              result.failure_reason_codes = {"lane_unavailable"};
+              return result;
+            },
+        },
+        RecallCoordinatorPolicy{
+            .max_parallel_recall = 1U,
+            .sparse_lane_timeout_ms = 350,
+            .dense_lane_timeout_ms = 350,
+        });
+
+    KnowledgeServiceDeps deps;
+    deps.now_ms = [this] { return now_ms_; };
+    deps.query_normalizer = std::make_unique<QueryNormalizer>(
+        make_normalize_policy({std::string(kCorpusId), std::string(kSsotCorpusId)}));
+    deps.corpus_catalog = std::move(corpus_catalog);
+    deps.index_reader = std::move(index_reader);
+    deps.freshness_controller = std::make_unique<dasall::knowledge::FreshnessController>();
+    deps.corpus_router = std::make_unique<CorpusRouter>();
+    deps.recall_coordinator = std::move(recall_coordinator);
+    deps.reranker = std::make_unique<Reranker>();
+    deps.evidence_assembler = std::make_unique<EvidenceAssembler>();
+    deps.ingestion_coordinator = std::make_unique<IngestionCoordinator>(std::move(ingestion_deps),
+                                                                        make_chunk_policy());
+    deps.index_writer = std::make_unique<IndexWriter>(*index_reader_ptr_, *ledger_, writer_deps);
+
+    service_ = std::make_unique<KnowledgeServiceFacade>(std::move(deps));
+    assert_true(service_->init(config_),
+                "multi-corpus refresh loop harness should initialize the facade with a consistent config");
+  }
+
+  void write_adr_document(std::string_view content) {
+    write_file(adr_source_path_, content);
+    now_ms_ += 1000;
+  }
+
+  void write_ssot_document(std::string_view content) {
+    write_file(ssot_source_path_, content);
+    now_ms_ += 1000;
+  }
+
+  [[nodiscard]] RefreshResult refresh(const CorpusChangeSet& changes) {
+    now_ms_ += 1000;
+    return service_->request_refresh(changes);
+  }
+
+  [[nodiscard]] KnowledgeRetrieveResult retrieve(std::string request_id,
+                                                 std::string query_text) {
+    const auto result = service_->retrieve(
+        make_query(std::move(request_id),
+                   std::move(query_text),
+                   {std::string(kCorpusId), std::string(kSsotCorpusId)}));
+    assert_true(result.has_consistent_values(),
+                "multi-corpus refresh loop retrieve should preserve result invariants");
+    return result;
+  }
+
+  [[nodiscard]] std::string current_snapshot_id() const {
+    const auto manifest = index_reader_ptr_->current_manifest();
+    return manifest.has_value() ? manifest->snapshot_id : std::string();
+  }
+
+  [[nodiscard]] dasall::knowledge::KnowledgeHealthSnapshot health_snapshot() const {
+    const auto snapshot = service_->health_snapshot();
+    assert_true(snapshot.has_consistent_values(),
+                "multi-corpus refresh loop health snapshot should preserve public invariants");
+    return snapshot;
+  }
+
+ private:
+  [[nodiscard]] std::map<std::string, std::vector<SourceRecord>, std::less<>>
+  rebuild_inventory_from_disk() const {
+    std::map<std::string, std::vector<SourceRecord>, std::less<>> inventory;
+    for (const auto& descriptor : descriptors_) {
+      const SourceScanner scanner(SourceScannerDeps{
+          .lookup_corpus = [this](std::string_view corpus_id) {
+            return corpus_catalog_ptr_->snapshot().find_by_id(corpus_id);
+          },
+          .load_inventory = [](std::string_view) {
+            return std::vector<SourceRecord>{};
+          },
+          .repository_root = [this]() {
+            return temp_directory_.path();
+          },
+          .now_ms = [this]() {
+            return now_ms_;
+          },
+      });
+
+      CorpusScanPlan plan;
+      plan.corpus_id = descriptor.corpus_id;
+      plan.root_uri = descriptor.source_uri;
+      plan.source_kind = descriptor.source_kind;
+      plan.include_globs = descriptor.include_globs;
+      plan.exclude_globs = descriptor.exclude_globs;
+      plan.allowed_formats = descriptor.allowed_formats;
+      plan.full_scan = true;
+
+      const auto delta = scanner.scan(plan);
+      assert_true(delta.has_consistent_values(),
+                  "multi-corpus refresh loop inventory rebuild should return a consistent scan delta");
+
+      auto& records = inventory[descriptor.corpus_id];
+      records.reserve(delta.added.size() + delta.updated.size());
+      records.insert(records.end(), delta.added.begin(), delta.added.end());
+      records.insert(records.end(), delta.updated.begin(), delta.updated.end());
+    }
+
+    return inventory;
+  }
+
+  TempDirectory temp_directory_;
+  std::filesystem::path adr_source_path_;
+  std::filesystem::path ssot_source_path_;
+  KnowledgeConfigSnapshot config_;
+  std::vector<CorpusDescriptor> descriptors_;
+  std::int64_t now_ms_ = 1713657600000LL;
+  std::map<std::string, std::vector<SourceRecord>, std::less<>> inventories_;
+  CorpusCatalog* corpus_catalog_ptr_ = nullptr;
+  IndexReader* index_reader_ptr_ = nullptr;
+  std::unique_ptr<VersionLedger> ledger_;
+  std::unique_ptr<SparseRetriever> sparse_retriever_;
+  std::unique_ptr<KnowledgeServiceFacade> service_;
+};
+
 void assert_refresh_accepted(const RefreshResult& result, std::string_view message) {
   assert_true(result.has_consistent_values(),
               "refresh result should preserve invariants");
@@ -466,7 +700,8 @@ void assert_refresh_accepted(const RefreshResult& result, std::string_view messa
               "accepted refresh should expose a non-empty refresh id");
 }
 
-void assert_refresh_reaches_terminal_status(KnowledgeRefreshLoopHarness& harness,
+template <typename Harness>
+void assert_refresh_reaches_terminal_status(Harness& harness,
                                             RefreshStatus expected_status,
                                             std::string_view message) {
   const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(2);
@@ -592,6 +827,58 @@ void test_refresh_loop_full_scan_refresh_picks_up_updated_content_without_change
               "full-scan fallback refresh should expose the updated token without changed_sources input");
 }
 
+  void test_refresh_loop_selective_refresh_only_updates_target_corpus() {
+    MultiCorpusKnowledgeRefreshLoopHarness harness;
+    harness.write_adr_document(
+      "# ADR Refresh\n\nrefreshstableanchor baseline ADR evidence should be searchable before update.\n");
+    harness.write_ssot_document(
+      "# Matrix\n\nrefreshssotbaselineanchor baseline SSOT evidence should remain active when that corpus is not refreshed.\n");
+
+    assert_refresh_accepted(harness.refresh(CorpusChangeSet{}),
+                "initial multi-corpus refresh should accept the baseline corpora");
+    assert_refresh_reaches_terminal_status(
+      harness,
+      RefreshStatus::Completed,
+      "initial multi-corpus refresh should complete before the selective update runs");
+    const auto baseline_snapshot_id = harness.current_snapshot_id();
+
+    harness.write_adr_document(
+      "# ADR Refresh\n\nrefreshupdatedanchor selective refresh should surface this updated ADR evidence.\n");
+    harness.write_ssot_document(
+      "# Matrix\n\nrefreshssotupdatedanchor SSOT evidence should remain stale when that source is excluded from the selective change set.\n");
+
+    CorpusChangeSet changes;
+    changes.updated_sources = {std::string(kDocumentSourceUri)};
+    assert_refresh_accepted(harness.refresh(changes),
+                "selective multi-corpus refresh should accept the targeted ADR source");
+    assert_refresh_reaches_terminal_status(
+      harness,
+      RefreshStatus::Completed,
+      "selective multi-corpus refresh should complete through the async worker");
+
+    const auto refreshed_snapshot_id = harness.current_snapshot_id();
+    assert_true(refreshed_snapshot_id != baseline_snapshot_id,
+          "selective multi-corpus refresh should still activate a new snapshot");
+
+    const auto adr_retrieve = harness.retrieve("req-knowledge-refresh-selective-adr",
+                         std::string(kUpdatedToken));
+    assert_true(adr_retrieve.ok && adr_retrieve.evidence.has_value() &&
+            evidence_contains_token(*adr_retrieve.evidence, kUpdatedToken),
+          "selective multi-corpus refresh should surface the updated ADR token");
+
+    const auto ssot_updated = harness.retrieve("req-knowledge-refresh-selective-ssot-updated",
+                         std::string(kSsotUpdatedToken));
+    assert_true(!ssot_updated.ok || !ssot_updated.evidence.has_value() ||
+            !evidence_contains_token(*ssot_updated.evidence, kSsotUpdatedToken),
+          "selective multi-corpus refresh should not update non-target corpora that were excluded from the change set");
+
+    const auto ssot_baseline = harness.retrieve("req-knowledge-refresh-selective-ssot-baseline",
+                          std::string(kSsotBaselineToken));
+    assert_true(ssot_baseline.ok && ssot_baseline.evidence.has_value() &&
+            evidence_contains_token(*ssot_baseline.evidence, kSsotBaselineToken),
+          "selective multi-corpus refresh should keep the baseline SSOT evidence active when that corpus is not refreshed");
+  }
+
 void test_refresh_loop_rolls_back_to_last_known_good_when_swap_activation_fails() {
   KnowledgeRefreshLoopHarness harness;
   harness.write_document("# ADR Refresh\n\nrefreshstableanchor baseline evidence remains searchable before update.\n");
@@ -637,6 +924,7 @@ int main() {
     test_refresh_loop_swaps_updated_snapshot_and_retrieve_observes_new_content();
     test_refresh_loop_rejects_busy_request_while_real_refresh_is_in_flight();
     test_refresh_loop_full_scan_refresh_picks_up_updated_content_without_changed_sources();
+    test_refresh_loop_selective_refresh_only_updates_target_corpus();
     test_refresh_loop_rolls_back_to_last_known_good_when_swap_activation_fails();
   } catch (const std::exception& exception) {
     std::cerr << exception.what() << '\n';
