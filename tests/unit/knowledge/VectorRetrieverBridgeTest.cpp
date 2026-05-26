@@ -47,6 +47,22 @@ class StaticQueryEncoder final : public IQueryEncoder {
   std::vector<float> embedding_;
 };
 
+class EmptyEmbeddingQueryEncoder final : public IQueryEncoder {
+ public:
+  [[nodiscard]] std::vector<float> encode(std::string_view query_text) const override {
+    last_query_text_ = std::string(query_text);
+    ++encode_calls_;
+    return {};
+  }
+
+  [[nodiscard]] bool available() const override {
+    return true;
+  }
+
+  mutable std::string last_query_text_;
+  mutable int encode_calls_ = 0;
+};
+
 class RecordingVectorStore final : public IVectorRecallStore {
  public:
   explicit RecordingVectorStore(DenseQueryInputMode mode)
@@ -167,12 +183,36 @@ void test_vector_retriever_bridge_builds_embedding_when_backend_requires_it() {
                "dense request should preserve the routed dense top-k budget");
 }
 
+void test_vector_retriever_bridge_reports_empty_encoder_output_as_unavailable() {
+  auto encoder = std::make_unique<EmptyEmbeddingQueryEncoder>();
+  auto* encoder_ptr = encoder.get();
+  auto store = std::make_unique<RecordingVectorStore>(DenseQueryInputMode::EmbeddingRequired);
+  VectorRetrieverBridge bridge(std::move(encoder), std::move(store));
+
+  const auto result = bridge.retrieve(make_request());
+  assert_true(!result.ok,
+              "embedding-required dense retrieval should fail when encoder returns an empty embedding");
+  assert_true(result.has_consistent_values(),
+              "empty-embedding failure should keep a consistent result shape");
+  assert_equal(1, encoder_ptr->encode_calls_,
+               "embedding-required dense retrieval should still call the encoder once before failing");
+  assert_equal(std::string("policy evidence"), encoder_ptr->last_query_text_,
+               "empty-embedding failure should still pass normalized query text to the encoder");
+  assert_true(result.failure_reason_codes.size() == 1U &&
+                  result.failure_reason_codes.front() == "vector_backend_unavailable",
+              "empty-embedding failure should keep the stable unavailable reason code");
+  assert_true(result.warnings.size() == 1U &&
+                  result.warnings.front() == "query_encoder_empty_embedding",
+              "empty-embedding failure should expose a diagnostic warning without changing the failure class");
+}
+
 }  // namespace
 
 int main() {
   try {
     test_vector_retriever_bridge_passes_text_only_request_without_encoder();
     test_vector_retriever_bridge_builds_embedding_when_backend_requires_it();
+    test_vector_retriever_bridge_reports_empty_encoder_output_as_unavailable();
   } catch (const std::exception& exception) {
     std::cerr << exception.what() << '\n';
     return 1;

@@ -161,6 +161,7 @@ compose_live_dependency_set(
               [](const dasall::knowledge::DenseStoreFactoryContext&) {
                 return std::make_unique<FakeRuntimeVectorRecallStore>();
               },
+          .create_query_encoder_override = {},
       });
 }
 

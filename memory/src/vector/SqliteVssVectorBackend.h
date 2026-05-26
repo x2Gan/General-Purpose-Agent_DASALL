@@ -45,6 +45,9 @@ class SqliteVssVectorBackend final : public VectorMemoryIndexAdapter {
   [[nodiscard]] std::vector<VectorHit> search(
       const std::string& query_text,
       int top_k) const override;
+  [[nodiscard]] std::vector<VectorHit> search_embedding(
+      const std::vector<float>& query_embedding,
+      int top_k) const;
   [[nodiscard]] VectorIndexHealth health() const override;
   [[nodiscard]] StoreResult rebuild_index() override;
 

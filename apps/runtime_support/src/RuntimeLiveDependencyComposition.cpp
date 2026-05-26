@@ -206,13 +206,12 @@ class RuntimeKnowledgeVectorRecallStore final : public knowledge::retrieve::IVec
       return false;
     }
 
-    auto adapter = memory::create_detached_vector_index_adapter(memory_config_,
-                                                                dense_database_path);
-    return adapter != nullptr && adapter->is_available();
+    return memory::detached_vector_index_backend_available(memory_config_,
+                                                           dense_database_path);
   }
 
   [[nodiscard]] knowledge::retrieve::DenseQueryInputMode query_input_mode() const override {
-    return knowledge::retrieve::DenseQueryInputMode::TextOnly;
+    return knowledge::retrieve::DenseQueryInputMode::EmbeddingRequired;
   }
 
   [[nodiscard]] std::vector<knowledge::retrieve::RecallHit> search(
@@ -233,14 +232,17 @@ class RuntimeKnowledgeVectorRecallStore final : public knowledge::retrieve::IVec
       return {};
     }
 
-    auto adapter = memory::create_detached_vector_index_adapter(memory_config_,
-                                                                dense_database_path);
-    if (adapter == nullptr || !adapter->is_available()) {
+    if (!memory::detached_vector_index_backend_available(memory_config_,
+                                                         dense_database_path)) {
       return {};
     }
 
     const auto search_limit = static_cast<int>(std::max<std::size_t>(request.top_k * 8U, 32U));
-    const auto vector_hits = adapter->search(request.query_text, search_limit);
+    const auto vector_hits = memory::search_detached_vector_index_by_embedding(
+        memory_config_,
+        dense_database_path,
+        request.query_embedding,
+        search_limit);
     if (vector_hits.empty()) {
       return {};
     }
@@ -1400,6 +1402,33 @@ class RuntimeControlPlaneHealthSignalProvider final
   return query;
 }
 
+[[nodiscard]] knowledge::KnowledgeQuery make_installed_knowledge_hybrid_canary_probe_query(
+    const std::vector<std::string>& allowed_corpora) {
+  knowledge::KnowledgeQuery query;
+  query.request_id = "runtime-support-installed-knowledge-hybrid-canary-probe";
+  query.query_text = "ContextOrchestrator PromptComposer";
+  query.preferred_mode = knowledge::RetrievalMode::Hybrid;
+  query.query_kind = knowledge::KnowledgeQueryKind::PolicyEvidence;
+  query.allowed_corpora = allowed_corpora;
+  query.top_k = 4U;
+  query.max_context_projection_items = 4U;
+  return query;
+}
+
+[[nodiscard]] bool installed_knowledge_hybrid_canary_ready(
+    const std::shared_ptr<knowledge::IKnowledgeService>& knowledge_service,
+    const std::vector<std::string>& allowed_corpora) {
+  if (knowledge_service == nullptr || allowed_corpora.empty()) {
+    return false;
+  }
+
+  const auto retrieve_result = knowledge_service->retrieve(
+      make_installed_knowledge_hybrid_canary_probe_query(allowed_corpora));
+  return retrieve_result.ok &&
+         retrieve_result.mode == knowledge::RetrievalMode::Hybrid &&
+         contains_string(retrieve_result.reason_codes, "runtime_canary_admitted");
+}
+
 [[nodiscard]] std::string validate_installed_knowledge_positive_probe(
     const std::shared_ptr<knowledge::IKnowledgeService>& knowledge_service) {
   if (knowledge_service == nullptr) {
@@ -2196,14 +2225,14 @@ RuntimeDependencyCompositionResult compose_minimal_live_dependency_set(
   const bool knowledge_vector_runtime_available =
       memory_config->vector.enabled &&
       memory_config->vector.backend_type == memory::VectorBackend::SqliteVss;
-    const bool knowledge_vector_runtime_overridden =
+  const bool knowledge_vector_runtime_overridden =
       static_cast<bool>(options.build_dense_snapshot_override) &&
       static_cast<bool>(options.create_vector_recall_store_override);
-    const bool knowledge_hybrid_runtime_configured =
+  const bool knowledge_hybrid_runtime_configured =
       knowledge_vector_runtime_available || knowledge_vector_runtime_overridden;
-    const auto knowledge_runtime_canary_allowlist =
+  const auto knowledge_runtime_canary_allowlist =
       derive_knowledge_hybrid_canary_allowlist(policy_snapshot->effective_profile_id(),
-                           knowledge_hybrid_runtime_configured);
+                                               knowledge_hybrid_runtime_configured);
 
   std::function<knowledge::index::DenseSnapshotBuildResult(
       const knowledge::index::DenseSnapshotBuildRequest& request)>
@@ -2211,14 +2240,16 @@ RuntimeDependencyCompositionResult compose_minimal_live_dependency_set(
   std::function<std::unique_ptr<knowledge::retrieve::IVectorRecallStore>(
       const knowledge::DenseStoreFactoryContext& context)>
       create_vector_recall_store = options.create_vector_recall_store_override;
-    if (!build_dense_snapshot && knowledge_vector_runtime_available) {
+  std::function<std::unique_ptr<knowledge::retrieve::IQueryEncoder>()>
+      create_query_encoder = options.create_query_encoder_override;
+  if (!build_dense_snapshot && knowledge_vector_runtime_available) {
     const auto vector_memory_config = *memory_config;
     build_dense_snapshot = [vector_memory_config](
                               const knowledge::index::DenseSnapshotBuildRequest& request) {
       return build_knowledge_dense_snapshot(vector_memory_config, request);
     };
-    }
-    if (!create_vector_recall_store && knowledge_vector_runtime_available) {
+  }
+  if (!create_vector_recall_store && knowledge_vector_runtime_available) {
     const auto vector_memory_config = *memory_config;
     create_vector_recall_store = [vector_memory_config](
                                    const knowledge::DenseStoreFactoryContext& context) {
@@ -2236,6 +2267,7 @@ RuntimeDependencyCompositionResult compose_minimal_live_dependency_set(
           .telemetry_sinks = make_knowledge_production_telemetry_sinks(observability),
           .build_dense_snapshot = build_dense_snapshot,
           .create_vector_recall_store = create_vector_recall_store,
+          .create_query_encoder = create_query_encoder,
           .runtime_canary_allowed_corpora = knowledge_runtime_canary_allowlist,
       });
   if (knowledge_result.ok()) {
@@ -2246,7 +2278,9 @@ RuntimeDependencyCompositionResult compose_minimal_live_dependency_set(
       dependency_set->external_evidence.push_back(
         std::string("runtime:") + std::string(composition_owner) +
         ":knowledge-installed-assets-ready");
-      if (!knowledge_runtime_canary_allowlist.empty()) {
+      if (!knowledge_runtime_canary_allowlist.empty() &&
+          installed_knowledge_hybrid_canary_ready(knowledge_result.service,
+                                                  knowledge_runtime_canary_allowlist)) {
         dependency_set->external_evidence.push_back(
           std::string("runtime:") + std::string(composition_owner) +
           ":knowledge-hybrid-canary-ready");

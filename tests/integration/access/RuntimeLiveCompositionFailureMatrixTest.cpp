@@ -14,6 +14,7 @@
 #include "KnowledgeTypes.h"
 #include "index/IndexWriter.h"
 #include "ProfileCatalog.h"
+#include "retrieve/IQueryEncoder.h"
 #include "retrieve/IVectorRecallStore.h"
 #include "RuntimeDependencySet.h"
 #include "RuntimeLiveDependencyComposition.h"
@@ -113,6 +114,34 @@ class FakeRuntimeVectorRecallStore final : public dasall::knowledge::retrieve::I
   [[nodiscard]] std::vector<dasall::knowledge::retrieve::RecallHit> search(
       const dasall::knowledge::retrieve::DenseQueryRequest&) const override {
     return {};
+  }
+};
+
+class EmbeddingRequiredRuntimeVectorRecallStore final
+    : public dasall::knowledge::retrieve::IVectorRecallStore {
+ public:
+  [[nodiscard]] bool available() const override {
+    return true;
+  }
+
+  [[nodiscard]] dasall::knowledge::retrieve::DenseQueryInputMode query_input_mode() const override {
+    return dasall::knowledge::retrieve::DenseQueryInputMode::EmbeddingRequired;
+  }
+
+  [[nodiscard]] std::vector<dasall::knowledge::retrieve::RecallHit> search(
+      const dasall::knowledge::retrieve::DenseQueryRequest&) const override {
+    return {};
+  }
+};
+
+class StaticQueryEncoder final : public dasall::knowledge::retrieve::IQueryEncoder {
+ public:
+  [[nodiscard]] std::vector<float> encode(std::string_view) const override {
+    return {0.2F, 0.3F, 0.5F};
+  }
+
+  [[nodiscard]] bool available() const override {
+    return true;
   }
 };
 
@@ -217,6 +246,7 @@ compose_live_dependency_set(
               [](const dasall::knowledge::DenseStoreFactoryContext&) {
                 return std::make_unique<FakeRuntimeVectorRecallStore>();
               },
+          .create_query_encoder_override = {},
       });
 }
 
@@ -254,8 +284,8 @@ void runtime_live_composition_keeps_ready_markers_stratified() {
                 "runtime live composition matrix should keep the ready knowledge marker for " +
                     spec.composition_owner);
     assert_true(contains_port(dependency_set->external_evidence, hybrid_canary_marker),
-          "runtime live composition matrix should expose the hybrid canary ready marker for " +
-            spec.composition_owner);
+        "runtime live composition matrix should expose the hybrid canary ready marker for " +
+        spec.composition_owner);
     assert_true(!contains_prefix(dependency_set->external_evidence, degraded_prefix),
                 "runtime live composition matrix should not mix degraded knowledge markers into the ready baseline for " +
                     spec.composition_owner);
@@ -272,6 +302,48 @@ void runtime_live_composition_keeps_ready_markers_stratified() {
                                                           spec,
                                                           state_root.path());
 
+  }
+}
+
+void runtime_live_composition_emits_hybrid_marker_when_encoder_is_ready() {
+  const auto policy_snapshot = load_runtime_policy_snapshot();
+  for (const auto& spec : owner_specs()) {
+    const TempStateRoot assets_root("dasall-runtime-live-matrix-assets-encoder-ready");
+    const TempStateRoot state_root("dasall-runtime-live-matrix-state-encoder-ready");
+    copy_installed_runtime_assets(assets_root.path());
+
+    const auto composition = dasall::apps::runtime_support::compose_minimal_live_dependency_set(
+        policy_snapshot,
+        spec.composition_owner,
+        dasall::apps::runtime_support::RuntimeLiveDependencyCompositionOptions{
+            .readonly_assets_root_override = assets_root.path(),
+            .runtime_library_root_override = {},
+            .state_root_override = state_root.path(),
+            .build_dense_snapshot_override = build_fake_dense_snapshot,
+            .create_vector_recall_store_override =
+                [](const dasall::knowledge::DenseStoreFactoryContext&) {
+                  return std::make_unique<EmbeddingRequiredRuntimeVectorRecallStore>();
+                },
+            .create_query_encoder_override = [] {
+              return std::make_unique<StaticQueryEncoder>();
+            },
+        });
+    assert_true(composition.ok(),
+                "runtime live composition matrix should compose an encoder-ready hybrid baseline for " +
+                    spec.composition_owner + ": " + composition.error);
+
+    const auto ready_marker =
+        std::string("runtime:") + spec.composition_owner +
+        ":knowledge-installed-assets-ready";
+    const auto hybrid_canary_marker =
+        std::string("runtime:") + spec.composition_owner +
+        ":knowledge-hybrid-canary-ready";
+    assert_true(contains_port(composition.dependency_set->external_evidence, ready_marker),
+                "runtime live composition matrix should keep installed ready marker on encoder-ready path for " +
+                    spec.composition_owner);
+    assert_true(contains_port(composition.dependency_set->external_evidence, hybrid_canary_marker),
+                "runtime live composition matrix should expose hybrid ready marker only when encoder-required path is ready for " +
+                    spec.composition_owner);
   }
 }
 
@@ -357,13 +429,55 @@ void runtime_live_composition_marks_degraded_runtime_when_knowledge_is_missing()
   }
 }
 
+void runtime_live_composition_omits_hybrid_marker_when_encoder_is_missing() {
+  const auto policy_snapshot = load_runtime_policy_snapshot();
+  for (const auto& spec : owner_specs()) {
+    const TempStateRoot assets_root("dasall-runtime-live-matrix-assets-encoder-missing");
+    const TempStateRoot state_root("dasall-runtime-live-matrix-state-encoder-missing");
+    copy_installed_runtime_assets(assets_root.path());
+
+    const auto composition = dasall::apps::runtime_support::compose_minimal_live_dependency_set(
+        policy_snapshot,
+        spec.composition_owner,
+        dasall::apps::runtime_support::RuntimeLiveDependencyCompositionOptions{
+            .readonly_assets_root_override = assets_root.path(),
+            .runtime_library_root_override = {},
+            .state_root_override = state_root.path(),
+            .build_dense_snapshot_override = build_fake_dense_snapshot,
+            .create_vector_recall_store_override =
+                [](const dasall::knowledge::DenseStoreFactoryContext&) {
+                  return std::make_unique<EmbeddingRequiredRuntimeVectorRecallStore>();
+                },
+            .create_query_encoder_override = {},
+        });
+    assert_true(composition.ok(),
+                "runtime live composition matrix should still compose when query encoder is missing for " +
+                    spec.composition_owner + ": " + composition.error);
+
+    const auto ready_marker =
+        std::string("runtime:") + spec.composition_owner +
+        ":knowledge-installed-assets-ready";
+    const auto hybrid_canary_marker =
+        std::string("runtime:") + spec.composition_owner +
+        ":knowledge-hybrid-canary-ready";
+    assert_true(contains_port(composition.dependency_set->external_evidence, ready_marker),
+                "runtime live composition matrix should keep installed ready marker even without query encoder for " +
+                    spec.composition_owner);
+    assert_true(!contains_port(composition.dependency_set->external_evidence, hybrid_canary_marker),
+                "runtime live composition matrix should omit hybrid ready marker when embedding-required store lacks a query encoder for " +
+                    spec.composition_owner);
+  }
+}
+
 }  // namespace
 
 int main() {
   try {
     runtime_live_composition_keeps_ready_markers_stratified();
+    runtime_live_composition_emits_hybrid_marker_when_encoder_is_ready();
     runtime_live_composition_fail_closes_when_required_ports_are_missing();
     runtime_live_composition_marks_degraded_runtime_when_knowledge_is_missing();
+    runtime_live_composition_omits_hybrid_marker_when_encoder_is_missing();
   } catch (const std::exception& ex) {
     std::cerr << "[RuntimeLiveCompositionFailureMatrixTest] FAILED: " << ex.what() << '\n';
     return 1;

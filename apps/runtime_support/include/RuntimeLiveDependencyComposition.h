@@ -31,6 +31,7 @@ struct DenseSnapshotBuildResult;
 
 namespace retrieve {
 
+class IQueryEncoder;
 class IVectorRecallStore;
 
 }  // namespace retrieve
@@ -58,6 +59,8 @@ struct RuntimeLiveDependencyCompositionOptions {
   std::function<std::unique_ptr<knowledge::retrieve::IVectorRecallStore>(
       const knowledge::DenseStoreFactoryContext& context)>
       create_vector_recall_store_override;
+    std::function<std::unique_ptr<knowledge::retrieve::IQueryEncoder>()>
+      create_query_encoder_override;
 };
 
 [[nodiscard]] RuntimeDependencyCompositionResult compose_minimal_live_dependency_set(

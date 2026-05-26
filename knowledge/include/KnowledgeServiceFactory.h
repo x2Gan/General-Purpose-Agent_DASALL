@@ -10,6 +10,7 @@
 #include "health/FreshnessController.h"
 #include "health/KnowledgeTelemetry.h"
 #include "index/IndexWriter.h"
+#include "retrieve/IQueryEncoder.h"
 #include "retrieve/IVectorRecallStore.h"
 
 namespace dasall::knowledge {
@@ -35,6 +36,7 @@ struct InstalledAssetKnowledgeServiceOptions {
   std::function<std::unique_ptr<retrieve::IVectorRecallStore>(
       const DenseStoreFactoryContext& context)>
       create_vector_recall_store;
+  std::function<std::unique_ptr<retrieve::IQueryEncoder>()> create_query_encoder;
   std::vector<std::string> runtime_canary_allowed_corpora;
 
   [[nodiscard]] bool has_consistent_values() const {

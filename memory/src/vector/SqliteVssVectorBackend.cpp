@@ -514,24 +514,37 @@ std::vector<VectorHit> SqliteVssVectorBackend::search(
     return {};
   }
 
+  return search_embedding(*query_embedding, top_k);
+}
+
+std::vector<VectorHit> SqliteVssVectorBackend::search_embedding(
+    const std::vector<float>& query_embedding,
+    int top_k) const {
+  if (!can_operate() || top_k <= 0 || query_embedding.empty()) {
+    return {};
+  }
+
   if (!initialized_) {
     const auto init_result =
-        const_cast<SqliteVssVectorBackend*>(this)->ensure_initialized(query_embedding->size());
+        const_cast<SqliteVssVectorBackend*>(this)->ensure_initialized(query_embedding.size());
     if (!init_result.ok) {
       return {};
     }
   }
 
   if (!embedding_dimension_.has_value() ||
-      query_embedding->size() != *embedding_dimension_) {
+      query_embedding.size() != *embedding_dimension_) {
     return {};
   }
 
   if (health_.indexed_doc_count <= 0) {
-    return {};
+    const_cast<SqliteVssVectorBackend*>(this)->refresh_indexed_doc_count();
+    if (health_.indexed_doc_count <= 0) {
+      return {};
+    }
   }
 
-  return driver_->search(db_, *query_embedding, top_k);
+  return driver_->search(db_, query_embedding, top_k);
 }
 
 VectorIndexHealth SqliteVssVectorBackend::health() const {

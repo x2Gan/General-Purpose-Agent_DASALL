@@ -1,3 +1,32 @@
+# 记录 #814
+
+- 日期：2026-05-26
+- 阶段：knowledge/production-grade query encoder seam
+- 任务：KNO-TODO-036 接入 production-grade embedding / query encoder seam
+- 状态：已完成（代码、focused validation、TODO 回写已落盘）
+
+### 改动
+
+1. 更新 `memory/include/vector/DetachedVectorIndexFactory.h`、`memory/src/vector/DetachedVectorIndexFactory.cpp`、`memory/src/vector/SqliteVssVectorBackend.h`、`memory/src/vector/SqliteVssVectorBackend.cpp` 与 `memory/src/vector/SimpleLocalEmbeddingAdapter.cpp`，新增 detached backend availability / embedding search helper，把 `SimpleLocalEmbeddingAdapter` 降为 `DASALL_DETACHED_VECTOR_LOCAL_FALLBACK` 显式 opt-in，并将 local hash 改为稳定 FNV-1a token hash。
+2. 更新 `knowledge/include/KnowledgeServiceFactory.h`、`knowledge/src/KnowledgeServiceFactory.cpp`、`knowledge/src/retrieve/VectorRetrieverBridge.cpp`、`apps/runtime_support/include/RuntimeLiveDependencyComposition.h` 与 `apps/runtime_support/src/RuntimeLiveDependencyComposition.cpp`，把 live dense path 收口为 `IQueryEncoder` + `EmbeddingRequired`：runtime detached dense store 现直接对 per-snapshot `dense.sqlite` 做 embedding search，encoder 缺失或空 embedding 时继续 lexical-only fail-safe。
+3. 扩展 `tests/unit/knowledge/VectorRetrieverBridgeTest.cpp`、`tests/integration/access/RuntimeLiveCompositionFailureMatrixTest.cpp`、`tests/integration/access/RuntimeKnowledgeHybridCanaryIntegrationTest.cpp`，新增 `tests/integration/access/RuntimeKnowledgeQueryEncoderIntegrationTest.cpp` 与 `tests/integration/access/CMakeLists.txt` 注册，锁定 encoder-ready / encoder-missing integration path、empty embedding negative path 和 runtime owner/canary marker 不回退。
+4. 顺带收口 runtime marker 判定：`knowledge-hybrid-canary-ready` 改为依赖真实 allowlisted hybrid canary probe，而不是间接 health 布尔值，避免 encoder seam 接通后出现 false negative marker。
+
+### 验证
+
+1. `Build_CMakeTools(buildTargets=["dasall_apps_runtime_support","dasall_vector_retriever_bridge_unit_test","dasall_access_runtime_live_composition_failure_matrix_integration_test","dasall_runtime_knowledge_query_encoder_integration_test","dasall_runtime_knowledge_hybrid_canary_integration_test"])`
+   - 结果：通过。
+2. `RunCtest_CMakeTools(...)`
+   - 结果：本切片仍命中仓库已知泛化 `生成失败`，因此按既定回退口径改用 direct binaries。
+3. `./build/vscode-linux-ninja/tests/unit/memory/dasall_memory_simple_local_embedding_adapter_unit_test && ./build/vscode-linux-ninja/tests/unit/knowledge/dasall_vector_retriever_bridge_unit_test && ./build/vscode-linux-ninja/tests/integration/access/dasall_access_runtime_live_composition_failure_matrix_integration_test && ./build/vscode-linux-ninja/tests/integration/access/dasall_runtime_knowledge_hybrid_canary_integration_test && ./build/vscode-linux-ninja/tests/integration/access/dasall_runtime_knowledge_query_encoder_integration_test`
+   - 结果：通过；无输出退出。
+
+### 结果
+
+1. live dense path 不再默认依赖 `SimpleLocalEmbeddingAdapter` 的 local hash 结果；production/query-time embedding 现由 runtime 注入的 `IQueryEncoder` seam 显式驱动。
+2. encoder/provider 缺失、empty embedding 或 detached backend 不可用时，显式 hybrid canary query 仍稳定 lexical-only fail-safe，035 的 runtime owner/canary 主控权没有回退。
+3. `KNO-TODO-036` 已完成；后继原子任务进入 `KNO-TODO-037` 的 hybrid / dense retrieval quality gate 扩面。
+
 # 记录 #813
 
 - 日期：2026-05-26

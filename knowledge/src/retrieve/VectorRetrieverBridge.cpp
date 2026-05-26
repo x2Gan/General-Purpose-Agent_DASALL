@@ -88,7 +88,8 @@ DenseRecallResult VectorRetrieverBridge::retrieve(const DenseRecallRequest& requ
 
   if (input_mode == DenseQueryInputMode::EmbeddingRequired &&
       dense_query.query_embedding.empty()) {
-    return make_failure({"vector_backend_unavailable"});
+    return make_failure({"vector_backend_unavailable"},
+                        {"query_encoder_empty_embedding"});
   }
 
   const auto hits = vector_store_->search(dense_query);

@@ -673,6 +673,35 @@ list(APPEND DASALL_ACCESS_INTEGRATION_TEST_EXECUTABLE_TARGETS
   dasall_runtime_knowledge_hybrid_canary_integration_test
 )
 
+add_executable(dasall_runtime_knowledge_query_encoder_integration_test
+  RuntimeKnowledgeQueryEncoderIntegrationTest.cpp
+)
+
+target_link_libraries(dasall_runtime_knowledge_query_encoder_integration_test
+  PRIVATE
+    dasall_test_support
+    dasall_apps_runtime_support
+    dasall_infra
+    dasall_knowledge
+    dasall_profiles
+    dasall_runtime
+)
+
+target_compile_definitions(dasall_runtime_knowledge_query_encoder_integration_test
+  PRIVATE
+    DASALL_SOURCE_ROOT="${CMAKE_SOURCE_DIR}"
+)
+
+dasall_apply_common_options(dasall_runtime_knowledge_query_encoder_integration_test)
+
+add_test(NAME RuntimeKnowledgeQueryEncoderIntegrationTest
+  COMMAND dasall_runtime_knowledge_query_encoder_integration_test)
+set_tests_properties(RuntimeKnowledgeQueryEncoderIntegrationTest PROPERTIES LABELS "integration;access;knowledge")
+
+list(APPEND DASALL_ACCESS_INTEGRATION_TEST_EXECUTABLE_TARGETS
+  dasall_runtime_knowledge_query_encoder_integration_test
+)
+
 add_executable(dasall_access_runtime_production_health_composition_integration_test
   RuntimeProductionHealthCompositionTest.cpp
 )

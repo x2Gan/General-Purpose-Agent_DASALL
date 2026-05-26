@@ -2,22 +2,35 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cstdint>
 #include <cmath>
-#include <functional>
 #include <string>
+#include <string_view>
 #include <utility>
 
 namespace dasall::memory {
 namespace {
 
+constexpr std::uint64_t kFnv1aOffsetBasis = 1469598103934665603ULL;
+constexpr std::uint64_t kFnv1aPrime = 1099511628211ULL;
+
+[[nodiscard]] std::uint64_t stable_token_hash(std::string_view token) {
+  std::uint64_t value = kFnv1aOffsetBasis;
+  for (const unsigned char ch : token) {
+    value ^= static_cast<std::uint64_t>(ch);
+    value *= kFnv1aPrime;
+  }
+
+  return value;
+}
+
 void flush_token(std::string& token,
-                 std::vector<float>& embedding,
-                 const std::hash<std::string>& hasher) {
+                 std::vector<float>& embedding) {
   if (token.empty() || embedding.empty()) {
     return;
   }
 
-  const std::size_t hash_value = hasher(token);
+  const std::uint64_t hash_value = stable_token_hash(token);
   const std::size_t bucket = hash_value % embedding.size();
   const float signed_weight = ((hash_value >> 8U) & 1U) == 0U ? 1.0F : -1.0F;
   embedding[bucket] += signed_weight;
@@ -35,7 +48,6 @@ std::vector<float> SimpleLocalEmbeddingAdapter::embed(const std::string& text) c
   }
 
   std::vector<float> embedding(static_cast<std::size_t>(dimension_), 0.0F);
-  const std::hash<std::string> hasher;
   std::string token;
   token.reserve(text.size());
 
@@ -45,9 +57,9 @@ std::vector<float> SimpleLocalEmbeddingAdapter::embed(const std::string& text) c
       continue;
     }
 
-    flush_token(token, embedding, hasher);
+    flush_token(token, embedding);
   }
-  flush_token(token, embedding, hasher);
+  flush_token(token, embedding);
 
   const bool all_zero = std::all_of(embedding.begin(), embedding.end(), [](float value) {
     return value == 0.0F;

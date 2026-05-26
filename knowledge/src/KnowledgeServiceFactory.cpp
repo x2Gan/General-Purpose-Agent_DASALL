@@ -484,8 +484,11 @@ KnowledgeServiceFactoryResult create_installed_asset_knowledge_service(
       };
       auto vector_store = options.create_vector_recall_store(dense_store_context);
       if (vector_store != nullptr) {
+        auto query_encoder = options.create_query_encoder
+                                 ? options.create_query_encoder()
+                                 : nullptr;
         dense_bridge = std::make_shared<retrieve::VectorRetrieverBridge>(
-            nullptr,
+            std::move(query_encoder),
             std::move(vector_store));
       }
     }
