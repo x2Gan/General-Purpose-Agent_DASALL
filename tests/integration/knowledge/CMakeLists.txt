@@ -92,6 +92,13 @@ dasall_add_knowledge_integration_test(
 )
 
 dasall_add_knowledge_integration_test(
+  dasall_knowledge_installed_asset_hybrid_probe_integration_test
+  KnowledgeInstalledAssetHybridProbeTest
+  KnowledgeInstalledAssetHybridProbeIntegrationTest.cpp
+  "integration;knowledge"
+)
+
+dasall_add_knowledge_integration_test(
   dasall_knowledge_installed_normative_corpus_integration_test
   KnowledgeInstalledNormativeCorpusTest
   KnowledgeInstalledNormativeCorpusTest.cpp

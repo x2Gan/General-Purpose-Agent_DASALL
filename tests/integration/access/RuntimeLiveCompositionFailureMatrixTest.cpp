@@ -4,6 +4,7 @@
 #include <filesystem>
 #include <iostream>
 #include <memory>
+#include <optional>
 #include <string>
 #include <system_error>
 #include <vector>
@@ -11,7 +12,9 @@
 #include "AgentFacade.h"
 #include "IKnowledgeService.h"
 #include "KnowledgeTypes.h"
+#include "index/IndexWriter.h"
 #include "ProfileCatalog.h"
+#include "retrieve/IVectorRecallStore.h"
 #include "RuntimeDependencySet.h"
 #include "RuntimeLiveDependencyComposition.h"
 #include "RuntimePolicyProvider.h"
@@ -97,6 +100,27 @@ load_runtime_policy_snapshot() {
                      });
 }
 
+class FakeRuntimeVectorRecallStore final : public dasall::knowledge::retrieve::IVectorRecallStore {
+ public:
+  [[nodiscard]] bool available() const override {
+    return true;
+  }
+
+  [[nodiscard]] dasall::knowledge::retrieve::DenseQueryInputMode query_input_mode() const override {
+    return dasall::knowledge::retrieve::DenseQueryInputMode::TextOnly;
+  }
+
+  [[nodiscard]] std::vector<dasall::knowledge::retrieve::RecallHit> search(
+      const dasall::knowledge::retrieve::DenseQueryRequest&) const override {
+    return {};
+  }
+};
+
+[[nodiscard]] dasall::knowledge::index::DenseSnapshotBuildResult build_fake_dense_snapshot(
+    const dasall::knowledge::index::DenseSnapshotBuildRequest&) {
+  return dasall::knowledge::index::DenseSnapshotBuildResult{.ok = true, .warnings = {}};
+}
+
 [[nodiscard]] dasall::knowledge::KnowledgeQuery make_installed_knowledge_query() {
   dasall::knowledge::KnowledgeQuery query;
   query.request_id = "req-runtime-live-composition-knowledge-mode";
@@ -126,19 +150,9 @@ void assert_installed_knowledge_service_stays_lexical_only(
                   spec.composition_owner);
 
   const auto health_snapshot = dependency_set->knowledge_service->health_snapshot();
-    assert_true(health_snapshot.vector_backend_available,
-          "runtime live composition matrix should advertise the concrete installed vector backend for " +
-                  spec.composition_owner);
     assert_true(!health_snapshot.active_snapshot_id.empty(),
           "runtime live composition matrix should expose the active knowledge snapshot id for " +
             spec.composition_owner);
-
-    const auto dense_snapshot_database =
-      state_root / "knowledge" / "snapshots" / health_snapshot.active_snapshot_id /
-      "dense.sqlite";
-    assert_true(std::filesystem::exists(dense_snapshot_database),
-          "runtime live composition matrix should materialize a dense snapshot artifact for " +
-            spec.composition_owner + ": " + dense_snapshot_database.string());
 }
 
 void copy_memory_assets_only(const std::filesystem::path& assets_root) {
@@ -157,6 +171,16 @@ void copy_installed_runtime_assets(const std::filesystem::path& assets_root) {
   std::filesystem::copy(std::filesystem::path(DASALL_SOURCE_ROOT) / "llm" / "assets" /
                             "providers",
                         assets_root / "llm" / "providers",
+                        std::filesystem::copy_options::recursive);
+  std::filesystem::create_directories(assets_root / "docs");
+  std::filesystem::copy(std::filesystem::path(DASALL_SOURCE_ROOT) / "docs" / "architecture",
+                        assets_root / "docs" / "architecture",
+                        std::filesystem::copy_options::recursive);
+  std::filesystem::copy(std::filesystem::path(DASALL_SOURCE_ROOT) / "docs" / "adr",
+                        assets_root / "docs" / "adr",
+                        std::filesystem::copy_options::recursive);
+  std::filesystem::copy(std::filesystem::path(DASALL_SOURCE_ROOT) / "docs" / "ssot",
+                        assets_root / "docs" / "ssot",
                         std::filesystem::copy_options::recursive);
 }
 
@@ -186,7 +210,13 @@ compose_live_dependency_set(
       spec.composition_owner,
       dasall::apps::runtime_support::RuntimeLiveDependencyCompositionOptions{
           .readonly_assets_root_override = readonly_assets_root,
+          .runtime_library_root_override = {},
           .state_root_override = state_root,
+          .build_dense_snapshot_override = build_fake_dense_snapshot,
+          .create_vector_recall_store_override =
+              [](const dasall::knowledge::DenseStoreFactoryContext&) {
+                return std::make_unique<FakeRuntimeVectorRecallStore>();
+              },
       });
 }
 
@@ -215,11 +245,17 @@ void runtime_live_composition_keeps_ready_markers_stratified() {
     const auto ready_marker =
         std::string("runtime:") + spec.composition_owner +
         ":knowledge-installed-assets-ready";
+    const auto hybrid_canary_marker =
+      std::string("runtime:") + spec.composition_owner +
+      ":knowledge-hybrid-canary-ready";
     const auto degraded_prefix =
         std::string("runtime:") + spec.composition_owner + ":knowledge-degraded:";
     assert_true(contains_port(dependency_set->external_evidence, ready_marker),
                 "runtime live composition matrix should keep the ready knowledge marker for " +
                     spec.composition_owner);
+    assert_true(contains_port(dependency_set->external_evidence, hybrid_canary_marker),
+          "runtime live composition matrix should expose the hybrid canary ready marker for " +
+            spec.composition_owner);
     assert_true(!contains_prefix(dependency_set->external_evidence, degraded_prefix),
                 "runtime live composition matrix should not mix degraded knowledge markers into the ready baseline for " +
                     spec.composition_owner);

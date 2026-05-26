@@ -4,6 +4,7 @@
 #include <functional>
 #include <memory>
 #include <string>
+#include <vector>
 
 #include "IKnowledgeService.h"
 #include "health/FreshnessController.h"
@@ -34,6 +35,7 @@ struct InstalledAssetKnowledgeServiceOptions {
   std::function<std::unique_ptr<retrieve::IVectorRecallStore>(
       const DenseStoreFactoryContext& context)>
       create_vector_recall_store;
+  std::vector<std::string> runtime_canary_allowed_corpora;
 
   [[nodiscard]] bool has_consistent_values() const {
     return readonly_assets_root.is_absolute() && state_root.is_absolute() &&

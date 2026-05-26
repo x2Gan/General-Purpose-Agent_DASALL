@@ -1,9 +1,43 @@
+# 记录 #813
+
+- 日期：2026-05-26
+- 阶段：knowledge/runtime-owned hybrid canary seam
+- 任务：KNO-TODO-035 收口 runtime-owned hybrid canary seam
+- 状态：已完成（代码、focused validation、TODO 回写已落盘；提交与推送待本轮 submission）
+
+### 改动
+
+1. 更新 `knowledge/include/KnowledgeServiceFactory.h` 与 `knowledge/src/KnowledgeServiceFactory.cpp`，把 runtime canary allowlist 收口到 installed knowledge factory：factory 只在 `dense_bridge->available()`、profile 已由 runtime 放行、且 query `allowed_corpora` 全命中 allowlist 时临时提升 explicit `preferred_mode=Hybrid` / `DenseOnly`；否则继续 `LexicalOnly`，并附加 `runtime_canary_not_admitted`、`runtime_canary_allowlist_miss`、`runtime_canary_backend_not_ready` 等 explain reason code。
+2. 更新 `apps/runtime_support/include/RuntimeLiveDependencyComposition.h` 与 `apps/runtime_support/src/RuntimeLiveDependencyComposition.cpp`，把 `desktop_full` / `cloud_full` / `edge_balanced` 的 runtime canary allowlist 和 `knowledge-hybrid-canary-ready` marker 固定到 runtime owner；同时增加默认关闭的 composition-local vector override seam，仅供 integration 稳定构造 vector-ready runtime path，不改变 production 默认路径。
+3. 扩展 `RuntimeLiveCompositionFailureMatrixTest`，新增 `RuntimeKnowledgeHybridCanaryIntegrationTest` 与 `KnowledgeInstalledAssetHybridProbeIntegrationTest`，分别锁定 ready marker、allowlisted hybrid positive path、corpus allowlist miss fallback 与 direct factory seam 正负例。
+
+### 验证
+
+1. `cmake --build build/vscode-linux-ninja --target dasall_access_runtime_live_composition_failure_matrix_integration_test dasall_runtime_knowledge_hybrid_canary_integration_test dasall_knowledge_installed_asset_hybrid_probe_integration_test -j2`
+   - 结果：通过。
+2. `ctest --test-dir build/vscode-linux-ninja -N | rg "RuntimeKnowledgeHybridCanaryIntegrationTest|KnowledgeInstalledAssetHybridProbeTest"`
+   - 结果：发现 `KnowledgeInstalledAssetHybridProbeTest` 与 `RuntimeKnowledgeHybridCanaryIntegrationTest`。
+3. `ctest --test-dir build/vscode-linux-ninja -R RuntimeLiveCompositionFailureMatrixTest --output-on-failure`
+   - 结果：通过。
+4. `ctest --test-dir build/vscode-linux-ninja -R RuntimeKnowledgeHybridCanaryIntegrationTest --output-on-failure`
+   - 结果：通过。
+5. `ctest --test-dir build/vscode-linux-ninja -R KnowledgeInstalledAssetHybridProbeTest --output-on-failure`
+   - 结果：通过。
+6. `./build/vscode-linux-ninja/tests/integration/access/dasall_access_runtime_live_composition_failure_matrix_integration_test && ./build/vscode-linux-ninja/tests/integration/access/dasall_runtime_knowledge_hybrid_canary_integration_test && ./build/vscode-linux-ninja/tests/integration/knowledge/dasall_knowledge_installed_asset_hybrid_probe_integration_test`
+   - 结果：通过；build-tree direct binaries 与 `ctest` 口径一致。
+
+### 结果
+
+1. runtime 现在拥有显式 hybrid canary 的最终准入权：只有 allowlisted corpus 的 explicit `preferred_mode=Hybrid` / `DenseOnly` 才会被 factory 接受，其余路径继续 `LexicalOnly` fail-safe。
+2. `desktop_full`、`cloud_full`、`edge_balanced` 已具备 runtime-owned canary seam；ready baseline 在 `knowledge-installed-assets-ready` 之外新增 `knowledge-hybrid-canary-ready` marker，可供组合根验证 owner 状态。
+3. `KNO-TODO-035` 已完成，Gate-J 可判定通过；后继原子任务可进入 036 / 037 / 038 的向量能力扩面，但不得回退 runtime owner 对 canary admission 的主控权。
+
 # 记录 #812
 
 - 日期：2026-05-26
 - 阶段：knowledge/request-scoped hybrid query surface
 - 任务：KNO-TODO-034 暴露 request-scoped hybrid query surface
-- 状态：已完成（代码、focused validation、TODO 回写已落盘；提交与推送待本轮 submission）
+- 状态：已完成（代码、focused validation、TODO 回写、提交与推送已完成）
 
 ### 改动
 

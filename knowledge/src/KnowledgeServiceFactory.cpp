@@ -53,6 +53,11 @@ using InstalledInventory =
   return path.lexically_normal().generic_string();
 }
 
+[[nodiscard]] bool contains_string(const std::vector<std::string>& values,
+                                   std::string_view value) {
+  return std::find(values.begin(), values.end(), value) != values.end();
+}
+
 void append_unique(std::vector<std::string>& values, std::string value) {
   if (value.empty()) {
     return;
@@ -60,6 +65,106 @@ void append_unique(std::vector<std::string>& values, std::string value) {
   if (std::find(values.begin(), values.end(), value) == values.end()) {
     values.push_back(std::move(value));
   }
+}
+
+void append_reason_code(std::vector<std::string>& reason_codes,
+                        std::string reason_code) {
+  if (reason_code.empty()) {
+    return;
+  }
+
+  if (!contains_string(reason_codes, reason_code)) {
+    reason_codes.push_back(std::move(reason_code));
+  }
+}
+
+[[nodiscard]] bool requests_runtime_canary(
+    const std::optional<RetrievalMode>& preferred_mode) {
+  return preferred_mode.has_value() &&
+         *preferred_mode != RetrievalMode::LexicalOnly;
+}
+
+[[nodiscard]] bool all_corpora_allowlisted(
+    const std::vector<std::string>& requested_corpora,
+    const std::vector<std::string>& allowed_corpora) {
+  return !requested_corpora.empty() &&
+         std::all_of(requested_corpora.begin(),
+                     requested_corpora.end(),
+                     [&](const std::string& corpus_id) {
+                       return contains_string(allowed_corpora, corpus_id);
+                     });
+}
+
+struct RuntimeCanaryDecision {
+  bool requested = false;
+  bool admitted = false;
+  std::vector<std::string> reason_codes;
+};
+
+[[nodiscard]] RuntimeCanaryDecision decide_runtime_canary(
+    const query::NormalizedQuery& query,
+    const KnowledgeConfigSnapshot& config,
+    const std::vector<std::string>& allowed_corpora,
+    bool vector_backend_ready) {
+  RuntimeCanaryDecision decision;
+  decision.requested = requests_runtime_canary(query.preferred_mode);
+  if (!decision.requested) {
+    return decision;
+  }
+
+  if (!config.vector_enabled) {
+    decision.reason_codes.push_back("runtime_canary_vector_unavailable");
+    return decision;
+  }
+
+  if (!vector_backend_ready) {
+    decision.reason_codes.push_back("runtime_canary_backend_not_ready");
+    return decision;
+  }
+
+  if (allowed_corpora.empty()) {
+    decision.reason_codes.push_back("runtime_canary_not_admitted");
+    return decision;
+  }
+
+  if (query.allowed_corpora.empty()) {
+    decision.reason_codes.push_back("runtime_canary_scope_required");
+    return decision;
+  }
+
+  if (!all_corpora_allowlisted(query.allowed_corpora, allowed_corpora)) {
+    decision.reason_codes.push_back("runtime_canary_allowlist_miss");
+    return decision;
+  }
+
+  decision.admitted = true;
+  decision.reason_codes.push_back("runtime_canary_admitted");
+  return decision;
+}
+
+void append_runtime_canary_reason_codes(query::RoutePlanResult& result,
+                                        const RuntimeCanaryDecision& decision) {
+  if (!decision.requested) {
+    return;
+  }
+
+  for (const auto& reason_code : decision.reason_codes) {
+    append_reason_code(result.route_reason_codes, reason_code);
+  }
+
+  if (result.plan.has_value()) {
+    result.plan->route_reason_codes = result.route_reason_codes;
+  }
+}
+
+[[nodiscard]] std::vector<std::string> normalize_runtime_canary_allowlist(
+    const std::vector<std::string>& corpora) {
+  std::vector<std::string> normalized;
+  normalized.reserve(corpora.size());
+  for (const auto& corpus_id : corpora) {
+    append_unique(normalized, corpus_id);
+  }
+  return normalized;
 }
 
   [[nodiscard]] CorpusDescriptor make_descriptor(
@@ -333,6 +438,8 @@ KnowledgeServiceFactoryResult create_installed_asset_knowledge_service(
     auto config_state = std::make_shared<KnowledgeConfigSnapshot>(config);
     auto telemetry = std::make_shared<KnowledgeTelemetry>(options.telemetry_sinks);
     auto inventory_state = std::make_shared<InstalledInventory>();
+    const auto runtime_canary_allowed_corpora =
+      normalize_runtime_canary_allowlist(options.runtime_canary_allowed_corpora);
 
     facade::KnowledgeServiceDeps deps;
     deps.query_normalizer =
@@ -352,6 +459,7 @@ KnowledgeServiceFactoryResult create_installed_asset_knowledge_service(
     auto* catalog = deps.corpus_catalog.get();
     auto* reader = deps.index_reader.get();
     auto* freshness_controller = deps.freshness_controller.get();
+    auto* router = deps.corpus_router.get();
     auto ledger = std::make_shared<index::VersionLedger>(index::VersionLedgerDeps{
         .read_snapshot_checksum = [snapshots_root](std::string_view snapshot_id) {
           return index::IndexWriter::read_persisted_snapshot_checksum(snapshots_root,
@@ -486,6 +594,30 @@ KnowledgeServiceFactoryResult create_installed_asset_knowledge_service(
           return std::vector<std::string>{};
         },
     });
+
+    deps.build_plan = [router, runtime_canary_allowed_corpora, dense_bridge](
+                          const query::NormalizedQuery& query,
+                          const KnowledgeConfigSnapshot& config,
+                          const index::CorpusCatalogSnapshot& catalog,
+                          const FreshnessSnapshot& freshness) {
+      auto effective_config = config;
+      const bool vector_backend_ready =
+          dense_bridge != nullptr && dense_bridge->available();
+      const auto canary_decision = decide_runtime_canary(query,
+                                                         config,
+                                                         runtime_canary_allowed_corpora,
+                                                         vector_backend_ready);
+      if (canary_decision.admitted && query.preferred_mode.has_value()) {
+        effective_config.retrieval_mode_default = *query.preferred_mode;
+      }
+
+      auto route_result = router->build_plan(query,
+                                             effective_config,
+                                             catalog,
+                                             freshness);
+      append_runtime_canary_reason_codes(route_result, canary_decision);
+      return route_result;
+    };
 
     auto service = std::make_shared<facade::KnowledgeServiceFacade>(std::move(deps));
     if (!service->init(config)) {

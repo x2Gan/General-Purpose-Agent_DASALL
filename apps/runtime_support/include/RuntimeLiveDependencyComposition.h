@@ -1,6 +1,7 @@
 #pragma once
 
 #include <filesystem>
+#include <functional>
 #include <memory>
 #include <string>
 #include <string_view>
@@ -17,6 +18,25 @@ class RuntimeDependencySet;
 
 }  // namespace dasall::runtime
 
+namespace dasall::knowledge {
+
+struct DenseStoreFactoryContext;
+
+namespace index {
+
+struct DenseSnapshotBuildRequest;
+struct DenseSnapshotBuildResult;
+
+}  // namespace index
+
+namespace retrieve {
+
+class IVectorRecallStore;
+
+}  // namespace retrieve
+
+}  // namespace dasall::knowledge
+
 namespace dasall::apps::runtime_support {
 
 struct RuntimeDependencyCompositionResult {
@@ -32,6 +52,12 @@ struct RuntimeLiveDependencyCompositionOptions {
   std::filesystem::path readonly_assets_root_override;
   std::filesystem::path runtime_library_root_override;
   std::filesystem::path state_root_override;
+  std::function<knowledge::index::DenseSnapshotBuildResult(
+      const knowledge::index::DenseSnapshotBuildRequest& request)>
+      build_dense_snapshot_override;
+  std::function<std::unique_ptr<knowledge::retrieve::IVectorRecallStore>(
+      const knowledge::DenseStoreFactoryContext& context)>
+      create_vector_recall_store_override;
 };
 
 [[nodiscard]] RuntimeDependencyCompositionResult compose_minimal_live_dependency_set(
