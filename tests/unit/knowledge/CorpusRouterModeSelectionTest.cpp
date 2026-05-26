@@ -73,19 +73,22 @@ using dasall::tests::support::assert_true;
 }
 
 [[nodiscard]] NormalizedQuery make_query() {
-  return NormalizedQuery{
-      .request_id = "req-corpus-router-mode",
-      .normalized_text = "runtime degradation signals",
-      .lexical_terms = {"runtime", "degradation", "signals"},
-      .domain_tags = {"runtime"},
-      .allowed_corpora = {},
-      .query_kind = KnowledgeQueryKind::DiagnosticContext,
-      .top_k = 12U,
-      .max_context_projection_items = 8U,
-      .prefer_exact_match = false,
-      .allow_stale = false,
-      .warnings = {},
-  };
+  NormalizedQuery query;
+  query.request_id = "req-corpus-router-mode";
+  query.normalized_text = "runtime degradation signals";
+  query.lexical_terms = {"runtime", "degradation", "signals"};
+  query.preferred_mode = {};
+  query.domain_tags = {"runtime"};
+  query.allowed_corpora = {};
+  query.required_tags = {};
+  query.required_language = {};
+  query.query_kind = KnowledgeQueryKind::DiagnosticContext;
+  query.top_k = 12U;
+  query.max_context_projection_items = 8U;
+  query.prefer_exact_match = false;
+  query.allow_stale = false;
+  query.warnings = {};
+  return query;
 }
 
 [[nodiscard]] FreshnessSnapshot make_fresh_snapshot() {
@@ -121,11 +124,11 @@ void test_corpus_router_selects_dense_only_for_diagnostic_queries_when_all_corpo
   assert_reason_present(result.route_reason_codes, "mode_dense_only");
 }
 
-void test_corpus_router_degrades_to_lexical_when_any_candidate_lacks_dense_support() {
+void test_corpus_router_degrades_to_lexical_when_no_candidate_supports_dense() {
   CorpusRouter router;
   auto catalog = make_catalog({
       make_descriptor("runtime-lexical", {RetrievalMode::LexicalOnly}),
-      make_descriptor("runtime-hybrid", {RetrievalMode::LexicalOnly, RetrievalMode::Hybrid}),
+      make_descriptor("runtime-reference", {RetrievalMode::LexicalOnly}),
   });
 
   const auto result = router.build_plan(make_query(),
@@ -137,7 +140,7 @@ void test_corpus_router_degrades_to_lexical_when_any_candidate_lacks_dense_suppo
               "lexical fallback route should stay internally consistent");
   assert_true(result.ok, "router should degrade to lexical instead of failing when dense support is incomplete");
   assert_true(result.plan->mode == RetrievalMode::LexicalOnly,
-              "mixed dense capability should degrade diagnostic queries to lexical-only");
+              "diagnostic query should degrade to lexical-only when no dense-capable corpus exists");
   assert_reason_present(result.route_reason_codes, "mode_lexical_only");
   assert_reason_present(result.route_reason_codes, "corpus_mode_capability_downgraded");
 }
@@ -147,7 +150,7 @@ void test_corpus_router_degrades_to_lexical_when_any_candidate_lacks_dense_suppo
 int main() {
   try {
     test_corpus_router_selects_dense_only_for_diagnostic_queries_when_all_corpora_are_dense_capable();
-    test_corpus_router_degrades_to_lexical_when_any_candidate_lacks_dense_support();
+    test_corpus_router_degrades_to_lexical_when_no_candidate_supports_dense();
   } catch (const std::exception& exception) {
     std::cerr << exception.what() << '\n';
     return 1;

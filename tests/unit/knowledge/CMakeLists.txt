@@ -344,6 +344,12 @@ dasall_add_knowledge_unit_test(
 )
 
 dasall_add_knowledge_unit_test(
+	dasall_corpus_router_mixed_capability_unit_test
+	CorpusRouterMixedCapabilityTest.cpp
+	CorpusRouterMixedCapabilityTest
+)
+
+dasall_add_knowledge_unit_test(
 	dasall_sparse_retriever_unit_test
 	SparseRetrieverTest.cpp
 	SparseRetrieverTest

@@ -406,6 +406,30 @@
 3. 2026-05-26 已通过 `Build_CMakeTools(buildTargets=["dasall_knowledge_retrieval_quality_regression_integration_test"])`；`RunCtest_CMakeTools(tests=["RetrievalQualityRegressionTest"])` 仍命中仓库已知泛化 `生成失败`，因此按回退口径直接执行 `./build/vscode-linux-ninja/tests/integration/knowledge/dasall_knowledge_retrieval_quality_regression_integration_test && echo PASS`，结果 `PASS`。
 4. 2026-05-26 已通过 `Build_CMakeTools(buildTargets=["dasall_recall_coordinator_dense_bridge_unit_test","dasall_vector_retriever_bridge_unit_test"])`，并直接执行 `./build/vscode-linux-ninja/tests/unit/knowledge/dasall_recall_coordinator_dense_bridge_unit_test && ./build/vscode-linux-ninja/tests/unit/knowledge/dasall_vector_retriever_bridge_unit_test && echo PASS`，结果 `PASS`。
 
+### 6.12 mixed-corpus hybrid routing 双轨任务包
+
+说明：`KNO-TODO-038` 承接 `KNO-TODO-037-B`，负责把 mixed catalog / mixed `allowed_corpora` 下的 hybrid route 语义从“all-or-nothing dense capability”收口到“route-appropriate subset narrowing”。本节按 `-D + -B` 双轨模板细化该任务；`KNO-TODO-038-D` 的设计交付已落盘到 `docs/todos/knowledge/deliverables/KNO-TODO-038-mixed-corpus-hybrid-routing双轨任务包.md`，`KNO-TODO-038-B` 只在不扩 `contracts/`、不放松 runtime canary owner allowlist、不断言 production default hybrid rollout 的前提下推进。
+
+#### 6.12.1 Design->Build 拆分总表
+
+| 主任务 | Design 子任务（文档交付） | Build 子任务（代码交付） | 输入依据 | 代码目标 | 测试目标 | 验收命令 |
+|---|---|---|---|---|---|---|
+| KNO-TODO-038 | KNO-TODO-038-D：收敛 mixed-corpus subset routing / canary narrowing 设计与 D Gate | KNO-TODO-038-B：落地 `CorpusRouter` subset routing、`KnowledgeServiceFactory` mixed-scope narrowing 与 focused regressions | `KNO-TODO-037-B`；详设 6.10、6.13.1、6.13.2；035 runtime canary seam；Azure Hybrid Search | `knowledge/src/query/CorpusRouter.cpp`；`knowledge/src/KnowledgeServiceFactory.cpp`；`tests/unit/knowledge/CorpusRouterModeSelectionTest.cpp`；`tests/unit/knowledge/CorpusRouterMixedCapabilityTest.cpp`；`tests/integration/knowledge/KnowledgeMixedCorpusHybridRoutingIntegrationTest.cpp` | `CorpusRouterModeSelectionTest`；`CorpusRouterMixedCapabilityTest`；`KnowledgeMixedCorpusHybridRoutingIntegrationTest`；`KnowledgeInstalledAssetHybridProbeTest`；`RuntimeKnowledgeHybridCanaryIntegrationTest` | `Build_CMakeTools(buildTargets=["dasall_corpus_router_mode_selection_unit_test","dasall_corpus_router_mixed_capability_unit_test","dasall_knowledge_mixed_corpus_hybrid_routing_integration_test","dasall_knowledge_installed_asset_hybrid_probe_integration_test","dasall_runtime_knowledge_hybrid_canary_integration_test"])`；若 `RunCtest_CMakeTools` 继续命中仓库已知泛化 `生成失败`，回退直接执行 `./build/vscode-linux-ninja/tests/unit/knowledge/dasall_corpus_router_mode_selection_unit_test && ./build/vscode-linux-ninja/tests/unit/knowledge/dasall_corpus_router_mixed_capability_unit_test && ./build/vscode-linux-ninja/tests/integration/knowledge/dasall_knowledge_mixed_corpus_hybrid_routing_integration_test && ./build/vscode-linux-ninja/tests/integration/knowledge/dasall_knowledge_installed_asset_hybrid_probe_integration_test && ./build/vscode-linux-ninja/tests/integration/access/dasall_runtime_knowledge_hybrid_canary_integration_test` |
+
+#### 6.12.2 原子任务状态清单（按子任务）
+
+| 子任务 ID | 状态 | 任务描述 | 交付物 | 完成判定 |
+|---|---|---|---|---|
+| KNO-TODO-038-D | Done | 收敛 mixed-corpus subset routing、explicit canary mixed-scope narrowing 与 Design->Build 映射 | `docs/todos/knowledge/deliverables/KNO-TODO-038-mixed-corpus-hybrid-routing双轨任务包.md` | 已补齐本地证据、外部实践、Build 三件套、风险回退与 D Gate；明确 038 不放松 runtime allowlist owner 权限，也不推进 production default hybrid rollout（2026-05-26） |
+| KNO-TODO-038-B | Done | 落地 `CorpusRouter` dense-capable subset routing、`KnowledgeServiceFactory` allowlisted scope narrowing 与 mixed-corpus focused regressions | `knowledge/src/query/CorpusRouter.cpp`；`knowledge/src/KnowledgeServiceFactory.cpp`；`tests/unit/knowledge/CorpusRouterModeSelectionTest.cpp`；`tests/unit/knowledge/CorpusRouterMixedCapabilityTest.cpp`；`tests/integration/knowledge/KnowledgeMixedCorpusHybridRoutingIntegrationTest.cpp` | generic mixed catalog query 已可保留 `Hybrid` / `DenseOnly` 到 dense-capable subset；explicit runtime canary mixed scope 在存在 allowlisted subset 时会追加 `runtime_canary_scope_narrowed` 并继续 `Hybrid`；既有 installed/runtime allowlist probe 保持绿色（2026-05-26） |
+
+#### 6.12.3 Build 完成证据（2026-05-26）
+
+1. `knowledge/src/query/CorpusRouter.cpp` 已从“全体 dense-capable 才能 non-lexical”收口为“基于 route-appropriate subset 选路”：`Hybrid` 现保留同时支持 lexical+dense 的 subset，`DenseOnly` 保留 dense-capable subset；当 subset 小于原候选集时追加 `dense_capable_subset_selected` reason code。
+2. `knowledge/src/KnowledgeServiceFactory.cpp` 已在 explicit runtime canary path 上把 mixed `allowed_corpora` 收口为 allowlisted subset：当 subset 非空时追加 `runtime_canary_scope_narrowed` 与 `runtime_canary_admitted`，并把 narrowed scope 传给 router；当 subset 为空时仍保持 `runtime_canary_allowlist_miss`。
+3. 已新增 `tests/unit/knowledge/CorpusRouterMixedCapabilityTest.cpp` 与 `tests/integration/knowledge/KnowledgeMixedCorpusHybridRoutingIntegrationTest.cpp`，并更新 `tests/unit/knowledge/CorpusRouterModeSelectionTest.cpp`；新的 focused regression 现同时覆盖 generic mixed catalog、explicit mixed scope canary 与既有 allowlist 回归。
+4. 2026-05-26 已通过 `Build_CMakeTools(buildTargets=["dasall_corpus_router_mode_selection_unit_test","dasall_corpus_router_mixed_capability_unit_test","dasall_knowledge_mixed_corpus_hybrid_routing_integration_test","dasall_knowledge_installed_asset_hybrid_probe_integration_test","dasall_runtime_knowledge_hybrid_canary_integration_test"])`；随后直接执行 `./build/vscode-linux-ninja/tests/unit/knowledge/dasall_corpus_router_mode_selection_unit_test && ./build/vscode-linux-ninja/tests/unit/knowledge/dasall_corpus_router_mixed_capability_unit_test && ./build/vscode-linux-ninja/tests/integration/knowledge/dasall_knowledge_mixed_corpus_hybrid_routing_integration_test && ./build/vscode-linux-ninja/tests/integration/knowledge/dasall_knowledge_installed_asset_hybrid_probe_integration_test && ./build/vscode-linux-ninja/tests/integration/access/dasall_runtime_knowledge_hybrid_canary_integration_test && echo PASS`，结果 `PASS`。
+
 ---
 
 ## 7. 执行顺序建议

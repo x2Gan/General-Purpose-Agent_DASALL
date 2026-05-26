@@ -99,6 +99,13 @@ dasall_add_knowledge_integration_test(
 )
 
 dasall_add_knowledge_integration_test(
+  dasall_knowledge_mixed_corpus_hybrid_routing_integration_test
+  KnowledgeMixedCorpusHybridRoutingIntegrationTest
+  KnowledgeMixedCorpusHybridRoutingIntegrationTest.cpp
+  "integration;knowledge"
+)
+
+dasall_add_knowledge_integration_test(
   dasall_knowledge_installed_normative_corpus_integration_test
   KnowledgeInstalledNormativeCorpusTest
   KnowledgeInstalledNormativeCorpusTest.cpp
@@ -194,6 +201,12 @@ target_link_libraries(dasall_knowledge_refresh_loop_integration_test
 )
 
 target_link_libraries(dasall_knowledge_installed_asset_probe_integration_test
+  PRIVATE
+    dasall_profiles
+    dasall_sqlite3
+)
+
+target_link_libraries(dasall_knowledge_mixed_corpus_hybrid_routing_integration_test
   PRIVATE
     dasall_profiles
     dasall_sqlite3

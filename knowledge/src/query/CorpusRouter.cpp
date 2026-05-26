@@ -30,6 +30,10 @@ void append_reason_code(std::vector<std::string>& reason_codes, std::string reas
                    RetrievalMode::Hybrid) != descriptor.supported_modes.end();
 }
 
+[[nodiscard]] bool supports_hybrid_route(const CorpusDescriptor& descriptor) {
+  return supports_lexical(descriptor) && supports_dense(descriptor);
+}
+
 [[nodiscard]] bool matches_allowed_corpora(const NormalizedQuery& query,
                                            const CorpusDescriptor& descriptor) {
   return query.allowed_corpora.empty() ||
@@ -60,11 +64,18 @@ void append_reason_code(std::vector<std::string>& reason_codes, std::string reas
   return static_cast<int>(descriptor.authority_level) <= static_cast<int>(minimum_authority);
 }
 
-[[nodiscard]] bool all_dense_capable(const std::vector<CorpusDescriptor>& candidates) {
-  return !candidates.empty() &&
-         std::all_of(candidates.begin(), candidates.end(), [](const CorpusDescriptor& descriptor) {
-           return supports_dense(descriptor);
-         });
+template <typename CapabilityPredicate>
+[[nodiscard]] std::vector<CorpusDescriptor> collect_capable_candidates(
+    const std::vector<CorpusDescriptor>& candidates,
+    CapabilityPredicate&& predicate) {
+  std::vector<CorpusDescriptor> capable_candidates;
+  capable_candidates.reserve(candidates.size());
+  for (const auto& descriptor : candidates) {
+    if (predicate(descriptor)) {
+      capable_candidates.push_back(descriptor);
+    }
+  }
+  return capable_candidates;
 }
 
 [[nodiscard]] bool all_lexical_capable(const std::vector<CorpusDescriptor>& candidates) {
@@ -230,17 +241,34 @@ RoutePlanResult CorpusRouter::build_plan(const NormalizedQuery& query,
                               std::move(route_reason_codes));
   }
 
-  const auto dense_capable = all_dense_capable(candidates);
-  const auto lexical_capable = all_lexical_capable(candidates);
+  const auto dense_capable_candidates =
+      collect_capable_candidates(candidates, [](const CorpusDescriptor& descriptor) {
+        return supports_dense(descriptor);
+      });
+  const auto hybrid_capable_candidates =
+      collect_capable_candidates(candidates, [](const CorpusDescriptor& descriptor) {
+        return supports_hybrid_route(descriptor);
+      });
+  const auto dense_route_available = !dense_capable_candidates.empty();
+  const auto hybrid_route_available = !hybrid_capable_candidates.empty();
   const auto mode = select_mode(query, config, candidates);
+  const auto routed_candidates =
+      mode == RetrievalMode::DenseOnly
+          ? dense_capable_candidates
+          : (mode == RetrievalMode::Hybrid ? hybrid_capable_candidates : candidates);
+  const auto lexical_capable = all_lexical_capable(routed_candidates);
 
   switch (mode) {
     case RetrievalMode::LexicalOnly:
       append_reason_code(route_reason_codes, "mode_lexical_only");
       if (!config.vector_enabled) {
         append_reason_code(route_reason_codes, "vector_disabled_lexical_fallback");
-      } else if ((prefers_dense_only(query.query_kind) || prefers_hybrid(query.query_kind)) &&
-                 !dense_capable) {
+      } else if ((prefers_dense_only(query.query_kind) && !dense_route_available) ||
+                 (prefers_hybrid(query.query_kind) && !hybrid_route_available) ||
+                 (config.retrieval_mode_default == RetrievalMode::DenseOnly &&
+                  !dense_route_available) ||
+                 (config.retrieval_mode_default == RetrievalMode::Hybrid &&
+                  !hybrid_route_available)) {
         append_reason_code(route_reason_codes, "corpus_mode_capability_downgraded");
       } else if (config.retrieval_mode_default == RetrievalMode::LexicalOnly) {
         append_reason_code(route_reason_codes, "profile_forced_lexical_only");
@@ -248,9 +276,15 @@ RoutePlanResult CorpusRouter::build_plan(const NormalizedQuery& query,
       break;
     case RetrievalMode::DenseOnly:
       append_reason_code(route_reason_codes, "mode_dense_only");
+      if (routed_candidates.size() != candidates.size()) {
+        append_reason_code(route_reason_codes, "dense_capable_subset_selected");
+      }
       break;
     case RetrievalMode::Hybrid:
       append_reason_code(route_reason_codes, "mode_hybrid");
+      if (routed_candidates.size() != candidates.size()) {
+        append_reason_code(route_reason_codes, "dense_capable_subset_selected");
+      }
       break;
   }
 
@@ -259,7 +293,7 @@ RoutePlanResult CorpusRouter::build_plan(const NormalizedQuery& query,
   result.route_reason_codes = route_reason_codes;
   result.plan = RetrievalPlan{
       .mode = mode,
-      .corpus_ids = collect_corpus_ids(candidates),
+      .corpus_ids = collect_corpus_ids(routed_candidates),
       .sparse_top_k = mode == RetrievalMode::DenseOnly ? 0U : query.top_k,
       .dense_top_k = mode == RetrievalMode::LexicalOnly ? 0U : query.top_k,
       .allow_partial_results = mode == RetrievalMode::Hybrid && config.allow_budget_degrade,
@@ -273,7 +307,7 @@ RoutePlanResult CorpusRouter::build_plan(const NormalizedQuery& query,
     result.plan->route_reason_codes = result.route_reason_codes;
   }
 
-  if (mode == RetrievalMode::DenseOnly && !dense_capable) {
+  if (mode == RetrievalMode::DenseOnly && !dense_route_available) {
     return make_route_error(KnowledgeErrorCode::NoCorpusAvailable,
                             "dense-only route selected without any dense-capable corpus",
                             {"dense_route_unavailable"});
@@ -295,22 +329,28 @@ RetrievalMode CorpusRouter::select_mode(const NormalizedQuery& query,
     return RetrievalMode::LexicalOnly;
   }
 
-  const auto dense_capable = all_dense_capable(candidates);
-  const auto lexical_capable = all_lexical_capable(candidates);
+  const auto dense_route_available =
+      std::any_of(candidates.begin(), candidates.end(), [](const CorpusDescriptor& descriptor) {
+        return supports_dense(descriptor);
+      });
+  const auto hybrid_route_available =
+      std::any_of(candidates.begin(), candidates.end(), [](const CorpusDescriptor& descriptor) {
+        return supports_hybrid_route(descriptor);
+      });
 
-  if (prefers_dense_only(query.query_kind) && dense_capable) {
+  if (prefers_dense_only(query.query_kind) && dense_route_available) {
     return RetrievalMode::DenseOnly;
   }
 
-  if (prefers_hybrid(query.query_kind) && dense_capable && lexical_capable) {
+  if (prefers_hybrid(query.query_kind) && hybrid_route_available) {
     return RetrievalMode::Hybrid;
   }
 
-  if (config.retrieval_mode_default == RetrievalMode::DenseOnly && dense_capable) {
+  if (config.retrieval_mode_default == RetrievalMode::DenseOnly && dense_route_available) {
     return RetrievalMode::DenseOnly;
   }
 
-  if (config.retrieval_mode_default == RetrievalMode::Hybrid && dense_capable && lexical_capable) {
+  if (config.retrieval_mode_default == RetrievalMode::Hybrid && hybrid_route_available) {
     return RetrievalMode::Hybrid;
   }
 

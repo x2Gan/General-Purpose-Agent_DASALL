@@ -84,20 +84,23 @@ void append_reason_code(std::vector<std::string>& reason_codes,
          *preferred_mode != RetrievalMode::LexicalOnly;
 }
 
-[[nodiscard]] bool all_corpora_allowlisted(
+[[nodiscard]] std::vector<std::string> collect_allowlisted_corpora(
     const std::vector<std::string>& requested_corpora,
     const std::vector<std::string>& allowed_corpora) {
-  return !requested_corpora.empty() &&
-         std::all_of(requested_corpora.begin(),
-                     requested_corpora.end(),
-                     [&](const std::string& corpus_id) {
-                       return contains_string(allowed_corpora, corpus_id);
-                     });
+  std::vector<std::string> allowlisted_corpora;
+  allowlisted_corpora.reserve(requested_corpora.size());
+  for (const auto& corpus_id : requested_corpora) {
+    if (contains_string(allowed_corpora, corpus_id)) {
+      append_unique(allowlisted_corpora, corpus_id);
+    }
+  }
+  return allowlisted_corpora;
 }
 
 struct RuntimeCanaryDecision {
   bool requested = false;
   bool admitted = false;
+  std::vector<std::string> effective_allowed_corpora;
   std::vector<std::string> reason_codes;
 };
 
@@ -132,9 +135,15 @@ struct RuntimeCanaryDecision {
     return decision;
   }
 
-  if (!all_corpora_allowlisted(query.allowed_corpora, allowed_corpora)) {
+  decision.effective_allowed_corpora =
+      collect_allowlisted_corpora(query.allowed_corpora, allowed_corpora);
+  if (decision.effective_allowed_corpora.empty()) {
     decision.reason_codes.push_back("runtime_canary_allowlist_miss");
     return decision;
+  }
+
+  if (decision.effective_allowed_corpora.size() != query.allowed_corpora.size()) {
+    decision.reason_codes.push_back("runtime_canary_scope_narrowed");
   }
 
   decision.admitted = true;
@@ -604,6 +613,7 @@ KnowledgeServiceFactoryResult create_installed_asset_knowledge_service(
                           const index::CorpusCatalogSnapshot& catalog,
                           const FreshnessSnapshot& freshness) {
       auto effective_config = config;
+      auto effective_query = query;
       const bool vector_backend_ready =
           dense_bridge != nullptr && dense_bridge->available();
       const auto canary_decision = decide_runtime_canary(query,
@@ -612,9 +622,10 @@ KnowledgeServiceFactoryResult create_installed_asset_knowledge_service(
                                                          vector_backend_ready);
       if (canary_decision.admitted && query.preferred_mode.has_value()) {
         effective_config.retrieval_mode_default = *query.preferred_mode;
+        effective_query.allowed_corpora = canary_decision.effective_allowed_corpora;
       }
 
-      auto route_result = router->build_plan(query,
+      auto route_result = router->build_plan(effective_query,
                                              effective_config,
                                              catalog,
                                              freshness);

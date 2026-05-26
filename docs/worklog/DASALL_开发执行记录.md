@@ -1,3 +1,33 @@
+# 记录 #816
+
+- 日期：2026-05-26
+- 阶段：knowledge/mixed-corpus hybrid routing semantics
+- 任务：KNO-TODO-038 优化 mixed-corpus hybrid 路由语义
+- 状态：已完成（代码、focused validation、TODO 回写已落盘）
+
+### 改动
+
+1. 更新 `knowledge/src/query/CorpusRouter.cpp`，把 mixed-corpus non-lexical 路由从 “all dense-capable or fallback” 收口为 route-appropriate subset narrowing：`Hybrid` 现保留同时支持 lexical+dense 的 subset，`DenseOnly` 保留 dense-capable subset；当 subset 小于原候选集时会追加 `dense_capable_subset_selected`。
+2. 更新 `knowledge/src/KnowledgeServiceFactory.cpp`，把 explicit runtime canary mixed `allowed_corpora` 的 owner-safe 语义从“全量 allowlisted 才 admitted”改为“allowlisted subset 非空即可 narrowed + admitted”；当发生收窄时会追加 `runtime_canary_scope_narrowed`，当收窄结果为空时继续 `runtime_canary_allowlist_miss` fail-safe。
+3. 新增 `tests/unit/knowledge/CorpusRouterMixedCapabilityTest.cpp` 与 `tests/integration/knowledge/KnowledgeMixedCorpusHybridRoutingIntegrationTest.cpp`，更新 `tests/unit/knowledge/CorpusRouterModeSelectionTest.cpp` 以及 unit/integration `CMakeLists.txt`；随后新增 `docs/todos/knowledge/deliverables/KNO-TODO-038-mixed-corpus-hybrid-routing双轨任务包.md`，并同步回写 knowledge TODO、跨子系统总账与本记录。
+
+### 验证
+
+1. `Build_CMakeTools(buildTargets=["dasall_knowledge_mixed_corpus_hybrid_routing_integration_test"])`
+   - 结果：首次失败，定位到新 integration test 误用了 `EvidenceSlice.corpus_id`；修复为基于 `citation_ref` 断言并显式初始化 `create_query_encoder` 后重建通过。
+2. `./build/vscode-linux-ninja/tests/integration/knowledge/dasall_knowledge_mixed_corpus_hybrid_routing_integration_test && echo PASS`
+   - 结果：`PASS`。
+3. `Build_CMakeTools(buildTargets=["dasall_corpus_router_mode_selection_unit_test","dasall_corpus_router_mixed_capability_unit_test","dasall_knowledge_mixed_corpus_hybrid_routing_integration_test","dasall_knowledge_installed_asset_hybrid_probe_integration_test","dasall_runtime_knowledge_hybrid_canary_integration_test"])`
+   - 结果：通过。
+4. `./build/vscode-linux-ninja/tests/unit/knowledge/dasall_corpus_router_mode_selection_unit_test && ./build/vscode-linux-ninja/tests/unit/knowledge/dasall_corpus_router_mixed_capability_unit_test && ./build/vscode-linux-ninja/tests/integration/knowledge/dasall_knowledge_mixed_corpus_hybrid_routing_integration_test && ./build/vscode-linux-ninja/tests/integration/knowledge/dasall_knowledge_installed_asset_hybrid_probe_integration_test && ./build/vscode-linux-ninja/tests/integration/access/dasall_runtime_knowledge_hybrid_canary_integration_test && echo PASS`
+   - 结果：`PASS`。
+
+### 结果
+
+1. mixed catalog 下的 generic hybrid / dense query 不再因 lexical-only corpus 混入候选集而被全局压回 `LexicalOnly`；`CorpusRouter` 现能在不修改 descriptor owner 的前提下把 route plan 收窄到 dense-capable subset。
+2. explicit runtime canary mixed scope 在存在 allowlisted subset 时会被 narrowed 并保持 `Hybrid`；当 allowlisted subset 为空时仍稳定回到 `runtime_canary_allowlist_miss`，没有放松 runtime owner 边界。
+3. `KNO-TODO-038` 已完成；按用户原始串行目标，knowledge 查漏补缺专项的 036、037、038 现已全部闭环，可进入本轮提交与推送。
+
 # 记录 #815
 
 - 日期：2026-05-26
