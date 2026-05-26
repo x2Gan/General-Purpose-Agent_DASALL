@@ -12,6 +12,37 @@ baseline_metrics:
   ndcg_at_10: 0.93
   recall_at_5: 0.91
   recall_at_10: 0.94
+mode_gates:
+  Hybrid:
+    min_mrr_at_10: 0.95
+    min_ndcg_at_10: 0.95
+    min_recall_at_5: 0.95
+    min_recall_at_10: 0.95
+    max_regression_pct: 5
+    baseline_mrr_at_10: 1.0
+    baseline_ndcg_at_10: 1.0
+    baseline_recall_at_5: 1.0
+    baseline_recall_at_10: 1.0
+    min_cases: 3
+    min_hard_fail_cases: 1
+    min_architecture_reference_cases: 1
+    min_adr_normative_cases: 1
+    min_ssot_normative_cases: 1
+  DenseOnly:
+    min_mrr_at_10: 0.95
+    min_ndcg_at_10: 0.95
+    min_recall_at_5: 0.95
+    min_recall_at_10: 0.95
+    max_regression_pct: 5
+    baseline_mrr_at_10: 1.0
+    baseline_ndcg_at_10: 1.0
+    baseline_recall_at_5: 1.0
+    baseline_recall_at_10: 1.0
+    min_cases: 3
+    min_hard_fail_cases: 1
+    min_architecture_reference_cases: 1
+    min_adr_normative_cases: 1
+    min_ssot_normative_cases: 1
 coverage:
   min_total_cases: 30
   min_fact_lookup_cases: 10
@@ -445,6 +476,90 @@ cases:
       - profiles/quality/PROFILE-QUALITY-08.yaml
     expected_chunk_refs:
       - profiles/quality/PROFILE-QUALITY-08.yaml#diag-profile-03
+    required_top_k: 5
+    hard_fail: false
+    min_recall_at_5: 1.0
+    min_mrr_at_10: 1.0
+  fact_arch_hybrid_01:
+    query_kind: FactLookup
+    query_text: quality architecture hybrid fact alpha atlas boundary
+    primary_corpus_id: architecture_reference
+    allowed_modes:
+      - Hybrid
+    expected_source_uris:
+      - docs/architecture/ARCH-QUALITY-01.md
+    expected_chunk_refs:
+      - docs/architecture/ARCH-QUALITY-01.md#fact-arch-hybrid-01
+    required_top_k: 3
+    hard_fail: true
+    min_recall_at_5: 1.0
+    min_mrr_at_10: 1.0
+  proc_adr_hybrid_01:
+    query_kind: ProcedureLookup
+    query_text: quality adr hybrid procedure juliet fail closed sequence
+    primary_corpus_id: adr_normative
+    allowed_modes:
+      - Hybrid
+    expected_source_uris:
+      - docs/adr/ADR-QUALITY-04.md
+    expected_chunk_refs:
+      - docs/adr/ADR-QUALITY-04.md#proc-adr-hybrid-01
+    required_top_k: 5
+    hard_fail: false
+    min_recall_at_5: 1.0
+    min_mrr_at_10: 1.0
+  proc_ssot_hybrid_01:
+    query_kind: ProcedureLookup
+    query_text: quality ssot hybrid procedure quebec quarantine flow
+    primary_corpus_id: ssot_normative
+    allowed_modes:
+      - Hybrid
+    expected_source_uris:
+      - docs/ssot/SSOT-QUALITY-03.md
+    expected_chunk_refs:
+      - docs/ssot/SSOT-QUALITY-03.md#proc-ssot-hybrid-01
+    required_top_k: 3
+    hard_fail: false
+    min_recall_at_5: 1.0
+    min_mrr_at_10: 1.0
+  diag_arch_dense_01:
+    query_kind: DiagnosticContext
+    query_text: quality architecture dense diagnostic echo mismatch probe
+    primary_corpus_id: architecture_reference
+    allowed_modes:
+      - DenseOnly
+    expected_source_uris:
+      - docs/architecture/ARCH-QUALITY-05.md
+    expected_chunk_refs:
+      - docs/architecture/ARCH-QUALITY-05.md#diag-arch-dense-01
+    required_top_k: 3
+    hard_fail: false
+    min_recall_at_5: 1.0
+    min_mrr_at_10: 1.0
+  diag_adr_dense_01:
+    query_kind: DiagnosticContext
+    query_text: quality adr dense diagnostic mike regression symptom
+    primary_corpus_id: adr_normative
+    allowed_modes:
+      - DenseOnly
+    expected_source_uris:
+      - docs/adr/ADR-QUALITY-07.md
+    expected_chunk_refs:
+      - docs/adr/ADR-QUALITY-07.md#diag-adr-dense-01
+    required_top_k: 5
+    hard_fail: true
+    min_recall_at_5: 1.0
+    min_mrr_at_10: 1.0
+  diag_ssot_dense_01:
+    query_kind: DiagnosticContext
+    query_text: quality ssot dense diagnostic victor fallback trace
+    primary_corpus_id: ssot_normative
+    allowed_modes:
+      - DenseOnly
+    expected_source_uris:
+      - docs/ssot/SSOT-QUALITY-08.md
+    expected_chunk_refs:
+      - docs/ssot/SSOT-QUALITY-08.md#diag-ssot-dense-01
     required_top_k: 5
     hard_fail: false
     min_recall_at_5: 1.0

@@ -382,6 +382,30 @@
 3. `tests/integration/access/RuntimeLiveCompositionFailureMatrixTest.cpp` 与 `tests/integration/access/RuntimeKnowledgeHybridCanaryIntegrationTest.cpp` 已随 036 收口 marker probe 语义，`knowledge-hybrid-canary-ready` 现依赖真实 allowlisted hybrid canary probe，而不是间接 health 布尔值；新增 `tests/integration/access/RuntimeKnowledgeQueryEncoderIntegrationTest.cpp` 锁定 encoder-ready / encoder-missing integration path。
 4. 2026-05-26 已通过 `Build_CMakeTools(buildTargets=["dasall_apps_runtime_support","dasall_vector_retriever_bridge_unit_test","dasall_access_runtime_live_composition_failure_matrix_integration_test","dasall_runtime_knowledge_query_encoder_integration_test","dasall_runtime_knowledge_hybrid_canary_integration_test"])`；`RunCtest_CMakeTools` 对本切片仍命中仓库已知泛化 `生成失败`，因此按回退口径直接执行 `./build/vscode-linux-ninja/tests/unit/memory/dasall_memory_simple_local_embedding_adapter_unit_test && ./build/vscode-linux-ninja/tests/unit/knowledge/dasall_vector_retriever_bridge_unit_test && ./build/vscode-linux-ninja/tests/integration/access/dasall_access_runtime_live_composition_failure_matrix_integration_test && ./build/vscode-linux-ninja/tests/integration/access/dasall_runtime_knowledge_hybrid_canary_integration_test && ./build/vscode-linux-ninja/tests/integration/access/dasall_runtime_knowledge_query_encoder_integration_test`，退出码均为 `0`。
 
+### 6.11 hybrid / dense retrieval quality gate 双轨任务包
+
+说明：`KNO-TODO-037` 承接 `KNO-TODO-036-B`，负责把 retrieval quality regression 从“只验证 lexical baseline”扩展到“对 architecture / ADR / SSOT 语料执行 hybrid / dense mode gate”。本节按 `-D + -B` 双轨模板细化该任务；`KNO-TODO-037-D` 的设计交付已落盘到 `docs/todos/knowledge/deliverables/KNO-TODO-037-hybrid-dense-retrieval-quality-gate双轨任务包.md`，`KNO-TODO-037-B` 只在不扩 `contracts/`、不改变 production default `LexicalOnly`、不提前吸收 038 mixed-corpus 路由问题的前提下推进。
+
+#### 6.11.1 Design->Build 拆分总表
+
+| 主任务 | Design 子任务（文档交付） | Build 子任务（代码交付） | 输入依据 | 代码目标 | 测试目标 | 验收命令 |
+|---|---|---|---|---|---|---|
+| KNO-TODO-037 | KNO-TODO-037-D：收敛 hybrid / dense retrieval quality gate 设计与 D Gate | KNO-TODO-037-B：落地 mode-specific gate、deterministic dense fixture 与 hybrid / dense regression | `KNO-TODO-036-B`；`knowledge-quality-baseline-004`；详设 6.10、6.13.1、6.13.2；Azure Hybrid Search；Pinecone offline IR evaluation | `tests/integration/knowledge/RetrievalQualityRegressionTest.cpp`；`tests/integration/knowledge/golden/retrieval_quality_v1.yaml` | `RetrievalQualityRegressionTest`；`RecallCoordinatorDenseBridgeTest`；`VectorRetrieverBridgeTest` | `Build_CMakeTools(buildTargets=["dasall_knowledge_retrieval_quality_regression_integration_test","dasall_recall_coordinator_dense_bridge_unit_test","dasall_vector_retriever_bridge_unit_test"])`；若 `RunCtest_CMakeTools` 继续命中仓库已知泛化 `生成失败`，回退直接执行 `./build/vscode-linux-ninja/tests/integration/knowledge/dasall_knowledge_retrieval_quality_regression_integration_test && ./build/vscode-linux-ninja/tests/unit/knowledge/dasall_recall_coordinator_dense_bridge_unit_test && ./build/vscode-linux-ninja/tests/unit/knowledge/dasall_vector_retriever_bridge_unit_test` |
+
+#### 6.11.2 原子任务状态清单（按子任务）
+
+| 子任务 ID | 状态 | 任务描述 | 交付物 | 完成判定 |
+|---|---|---|---|---|
+| KNO-TODO-037-D | Done | 收敛 hybrid / dense mode gate schema、deterministic dense fixture 与 Design->Build 映射 | `docs/todos/knowledge/deliverables/KNO-TODO-037-hybrid-dense-retrieval-quality-gate双轨任务包.md` | 已补齐本地证据、外部实践、Build 三件套、风险回退与 D Gate；明确 037 不修改 production runtime wiring，也不提前处理 038 mixed-corpus 路由问题（2026-05-26） |
+| KNO-TODO-037-B | Done | 扩展 active-mode quality harness、`mode_gates.Hybrid` / `mode_gates.DenseOnly`、hybrid / dense case coverage 与 dense hard-fail regression | `tests/integration/knowledge/RetrievalQualityRegressionTest.cpp`；`tests/integration/knowledge/golden/retrieval_quality_v1.yaml` | `RetrievalQualityRegressionTest` 已能对 `LexicalOnly`、`Hybrid`、`DenseOnly` 分别执行 gate；architecture / ADR / SSOT 均具 hybrid / dense case、独立阈值与 hard-fail 规则；lane-level backstop 保持绿色（2026-05-26） |
+
+#### 6.11.3 Build 完成证据（2026-05-26）
+
+1. `tests/integration/knowledge/RetrievalQualityRegressionTest.cpp` 已扩展为 active-mode aware harness：新增 `mode_gates` 解析、`evaluate_mode_gate(...)`、deterministic dense fixture materialization，以及 hybrid / dense positive gate 与 dense hard-fail negative gate；dense-capable descriptor 只对 architecture / ADR / SSOT 开放，profile corpus 仍保持 lexical-only。
+2. `tests/integration/knowledge/golden/retrieval_quality_v1.yaml` 已新增 `mode_gates.Hybrid` / `mode_gates.DenseOnly`，并补 architecture / ADR / SSOT 的 6 条 hybrid / dense case；每个 mode 具 aggregate threshold、baseline metrics、最小 case 数、hard-fail 数与 corpus coverage 下限。
+3. 2026-05-26 已通过 `Build_CMakeTools(buildTargets=["dasall_knowledge_retrieval_quality_regression_integration_test"])`；`RunCtest_CMakeTools(tests=["RetrievalQualityRegressionTest"])` 仍命中仓库已知泛化 `生成失败`，因此按回退口径直接执行 `./build/vscode-linux-ninja/tests/integration/knowledge/dasall_knowledge_retrieval_quality_regression_integration_test && echo PASS`，结果 `PASS`。
+4. 2026-05-26 已通过 `Build_CMakeTools(buildTargets=["dasall_recall_coordinator_dense_bridge_unit_test","dasall_vector_retriever_bridge_unit_test"])`，并直接执行 `./build/vscode-linux-ninja/tests/unit/knowledge/dasall_recall_coordinator_dense_bridge_unit_test && ./build/vscode-linux-ninja/tests/unit/knowledge/dasall_vector_retriever_bridge_unit_test && echo PASS`，结果 `PASS`。
+
 ---
 
 ## 7. 执行顺序建议

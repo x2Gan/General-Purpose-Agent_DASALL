@@ -1,3 +1,35 @@
+# 记录 #815
+
+- 日期：2026-05-26
+- 阶段：knowledge/hybrid-dense retrieval quality gate
+- 任务：KNO-TODO-037 扩展 hybrid / dense retrieval quality gate
+- 状态：已完成（代码、focused validation、TODO 回写已落盘）
+
+### 改动
+
+1. 更新 `tests/integration/knowledge/RetrievalQualityRegressionTest.cpp`，把 quality harness 从 lexical-only 固定夹具提升为 active-mode aware regression harness：新增 `mode_gates` 解析、`evaluate_mode_gate(...)`、mode-scoped case counting、deterministic dense fixture materialization，以及 hybrid / dense positive gate 与 dense hard-fail negative gate。
+2. 更新 `tests/integration/knowledge/golden/retrieval_quality_v1.yaml`，新增 `mode_gates.Hybrid` / `mode_gates.DenseOnly`，并为 architecture / ADR / SSOT 语料补 3 条 hybrid case 与 3 条 dense-only case；每个 mode 现具 aggregate threshold、baseline metrics、最小 case 数、hard-fail 数与 corpus coverage 下限。
+3. 新增 `docs/todos/knowledge/deliverables/KNO-TODO-037-hybrid-dense-retrieval-quality-gate双轨任务包.md`，并同步回写 `docs/todos/knowledge/DASALL_knowledge子系统专项TODO.md`、`docs/todos/DASALL_子系统查漏补缺专项记录.md`，把 037 的 Design->Build 映射、focused validation 与完成判定固化到 knowledge TODO 和总账。
+
+### 验证
+
+1. `Build_CMakeTools(buildTargets=["dasall_knowledge_retrieval_quality_regression_integration_test"])`
+   - 结果：通过。
+2. `RunCtest_CMakeTools(tests=["RetrievalQualityRegressionTest"])`
+   - 结果：仍命中仓库已知泛化 `生成失败`，因此按既定回退口径改用 direct binary。
+3. `./build/vscode-linux-ninja/tests/integration/knowledge/dasall_knowledge_retrieval_quality_regression_integration_test && echo PASS`
+   - 结果：`PASS`。
+4. `Build_CMakeTools(buildTargets=["dasall_recall_coordinator_dense_bridge_unit_test","dasall_vector_retriever_bridge_unit_test"])`
+   - 结果：通过。
+5. `./build/vscode-linux-ninja/tests/unit/knowledge/dasall_recall_coordinator_dense_bridge_unit_test && ./build/vscode-linux-ninja/tests/unit/knowledge/dasall_vector_retriever_bridge_unit_test && echo PASS`
+   - 结果：`PASS`。
+
+### 结果
+
+1. retrieval quality regression 现已能对 `LexicalOnly`、`Hybrid`、`DenseOnly` 分别执行 gate，不再仅凭 lexical-only manifest 证明质量基线。
+2. architecture / ADR / SSOT 三类 dense-capable 语料已具 hybrid / dense case、独立阈值和 hard-fail 规则；任一关键 case 回归时，gate 会在集成测试中显式失败。
+3. `KNO-TODO-037` 已完成；后继原子任务进入 `KNO-TODO-038` 的 mixed-corpus hybrid 路由语义收口。
+
 # 记录 #814
 
 - 日期：2026-05-26

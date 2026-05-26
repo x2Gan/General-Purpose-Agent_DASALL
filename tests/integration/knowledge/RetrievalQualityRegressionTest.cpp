@@ -93,6 +93,17 @@ struct AggregateThresholds {
   double max_regression_pct = 0.0;
 };
 
+struct ModeQualityGate {
+  bool enabled = false;
+  AggregateThresholds thresholds;
+  QualityMetricBundle baseline_metrics;
+  int min_cases = 0;
+  int min_hard_fail_cases = 0;
+  int min_architecture_reference_cases = 0;
+  int min_adr_normative_cases = 0;
+  int min_ssot_normative_cases = 0;
+};
+
 struct CoverageRequirements {
   int min_total_cases = 0;
   int min_fact_lookup_cases = 0;
@@ -125,6 +136,7 @@ struct QualityManifest {
   std::size_t retrieval_top_k = 10U;
   AggregateThresholds thresholds;
   QualityMetricBundle baseline_metrics;
+  std::map<RetrievalMode, ModeQualityGate> mode_gates;
   CoverageRequirements coverage;
   bool context_metrics_enabled = false;
   std::vector<std::string> context_metric_fields;
@@ -277,6 +289,52 @@ struct QualityEvaluationReport {
   return iterator->second;
 }
 
+[[nodiscard]] bool has_scalar(const ParsedYamlDocument& parsed, const std::string& key) {
+  return parsed.scalar_values.find(key) != parsed.scalar_values.end();
+}
+
+[[nodiscard]] std::string retrieval_mode_name(RetrievalMode mode) {
+  switch (mode) {
+    case RetrievalMode::LexicalOnly:
+      return "LexicalOnly";
+    case RetrievalMode::DenseOnly:
+      return "DenseOnly";
+    case RetrievalMode::Hybrid:
+      return "Hybrid";
+  }
+
+  throw std::runtime_error("retrieval quality manifest invalid retrieval mode enum");
+}
+
+void load_optional_mode_gate(const ParsedYamlDocument& parsed,
+                             RetrievalMode mode,
+                             QualityManifest& manifest) {
+  const auto prefix = std::string("mode_gates.") + retrieval_mode_name(mode) + ".";
+  if (!has_scalar(parsed, prefix + "min_mrr_at_10")) {
+    return;
+  }
+
+  auto& gate = manifest.mode_gates[mode];
+  gate.enabled = true;
+    gate.thresholds.min_mrr_at_10 = std::stod(require_scalar(parsed, prefix + "min_mrr_at_10"));
+    gate.thresholds.min_ndcg_at_10 = std::stod(require_scalar(parsed, prefix + "min_ndcg_at_10"));
+    gate.thresholds.min_recall_at_5 = std::stod(require_scalar(parsed, prefix + "min_recall_at_5"));
+    gate.thresholds.min_recall_at_10 = std::stod(require_scalar(parsed, prefix + "min_recall_at_10"));
+    gate.thresholds.max_regression_pct = std::stod(require_scalar(parsed, prefix + "max_regression_pct"));
+    gate.baseline_metrics.mrr_at_10 = std::stod(require_scalar(parsed, prefix + "baseline_mrr_at_10"));
+    gate.baseline_metrics.ndcg_at_10 = std::stod(require_scalar(parsed, prefix + "baseline_ndcg_at_10"));
+    gate.baseline_metrics.recall_at_5 = std::stod(require_scalar(parsed, prefix + "baseline_recall_at_5"));
+    gate.baseline_metrics.recall_at_10 = std::stod(require_scalar(parsed, prefix + "baseline_recall_at_10"));
+    gate.min_cases = std::stoi(require_scalar(parsed, prefix + "min_cases"));
+    gate.min_hard_fail_cases = std::stoi(require_scalar(parsed, prefix + "min_hard_fail_cases"));
+    gate.min_architecture_reference_cases =
+      std::stoi(require_scalar(parsed, prefix + "min_architecture_reference_cases"));
+    gate.min_adr_normative_cases =
+      std::stoi(require_scalar(parsed, prefix + "min_adr_normative_cases"));
+    gate.min_ssot_normative_cases =
+      std::stoi(require_scalar(parsed, prefix + "min_ssot_normative_cases"));
+}
+
 [[nodiscard]] int parse_int(const std::string& value) {
   return std::stoi(value);
 }
@@ -379,6 +437,9 @@ struct QualityEvaluationReport {
   manifest.baseline_metrics.ndcg_at_10 = parse_double(require_scalar(parsed, "baseline_metrics.ndcg_at_10"));
   manifest.baseline_metrics.recall_at_5 = parse_double(require_scalar(parsed, "baseline_metrics.recall_at_5"));
   manifest.baseline_metrics.recall_at_10 = parse_double(require_scalar(parsed, "baseline_metrics.recall_at_10"));
+
+  load_optional_mode_gate(parsed, RetrievalMode::Hybrid, manifest);
+  load_optional_mode_gate(parsed, RetrievalMode::DenseOnly, manifest);
 
   manifest.coverage.min_total_cases = parse_int(require_scalar(parsed, "coverage.min_total_cases"));
   manifest.coverage.min_fact_lookup_cases = parse_int(require_scalar(parsed, "coverage.min_fact_lookup_cases"));
@@ -730,6 +791,139 @@ template <typename RetrievalRunner>
   return report;
 }
 
+template <typename RetrievalRunner>
+[[nodiscard]] QualityEvaluationReport evaluate_mode_gate(const QualityManifest& manifest,
+                                                         RetrievalMode active_mode,
+                                                         RetrievalRunner&& runner) {
+  QualityEvaluationReport report;
+  const auto gate_iterator = manifest.mode_gates.find(active_mode);
+  if (gate_iterator == manifest.mode_gates.end() || !gate_iterator->second.enabled) {
+    report.failures.push_back("mode gate missing: " + retrieval_mode_name(active_mode));
+    return report;
+  }
+
+  const auto& gate = gate_iterator->second;
+  int hard_fail_cases = 0;
+  int architecture_cases = 0;
+  int adr_cases = 0;
+  int ssot_cases = 0;
+
+  double mrr_sum = 0.0;
+  double ndcg_sum = 0.0;
+  double recall_at_5_sum = 0.0;
+  double recall_at_10_sum = 0.0;
+
+  for (const auto& spec : manifest.cases) {
+    if (!mode_allowed(active_mode, spec.allowed_modes)) {
+      ++report.skipped_cases;
+      continue;
+    }
+
+    const auto retrieved_sources = dedupe_preserve_order(runner(spec));
+    const auto metrics = compute_case_metrics(spec, retrieved_sources);
+    const auto first_expected = spec.expected_source_uris.front();
+    const auto hard_fail_limit = std::min<std::size_t>(static_cast<std::size_t>(spec.required_top_k),
+                                                       retrieved_sources.size());
+    const bool hard_fail_satisfied =
+        std::find(retrieved_sources.begin(),
+                  retrieved_sources.begin() + static_cast<std::ptrdiff_t>(hard_fail_limit),
+                  first_expected) !=
+        retrieved_sources.begin() + static_cast<std::ptrdiff_t>(hard_fail_limit);
+
+    if (spec.hard_fail && !hard_fail_satisfied) {
+      report.failures.push_back("hard_fail miss: " + spec.case_id);
+    }
+    if (metrics.recall_at_5 + 1e-6 < spec.min_recall_at_5) {
+      report.failures.push_back("recall@5 below case floor: " + spec.case_id);
+    }
+    if (metrics.mrr_at_10 + 1e-6 < spec.min_mrr_at_10) {
+      report.failures.push_back("mrr@10 below case floor: " + spec.case_id);
+    }
+
+    ++report.executed_cases;
+    mrr_sum += metrics.mrr_at_10;
+    ndcg_sum += metrics.ndcg_at_10;
+    recall_at_5_sum += metrics.recall_at_5;
+    recall_at_10_sum += metrics.recall_at_10;
+
+    if (spec.hard_fail) {
+      ++hard_fail_cases;
+    }
+    if (spec.primary_corpus_id == "architecture_reference") {
+      ++architecture_cases;
+    } else if (spec.primary_corpus_id == "adr_normative") {
+      ++adr_cases;
+    } else if (spec.primary_corpus_id == "ssot_normative") {
+      ++ssot_cases;
+    }
+  }
+
+  if (report.executed_cases == 0) {
+    report.failures.push_back("no executable regression cases for active mode");
+    return report;
+  }
+
+  report.aggregate_metrics = QualityMetricBundle{
+      .mrr_at_10 = mrr_sum / static_cast<double>(report.executed_cases),
+      .ndcg_at_10 = ndcg_sum / static_cast<double>(report.executed_cases),
+      .recall_at_5 = recall_at_5_sum / static_cast<double>(report.executed_cases),
+      .recall_at_10 = recall_at_10_sum / static_cast<double>(report.executed_cases),
+  };
+
+  if (report.executed_cases < gate.min_cases) {
+    report.failures.push_back("coverage miss: mode cases");
+  }
+  if (hard_fail_cases < gate.min_hard_fail_cases) {
+    report.failures.push_back("coverage miss: mode hard fail cases");
+  }
+  if (architecture_cases < gate.min_architecture_reference_cases) {
+    report.failures.push_back("coverage miss: mode architecture cases");
+  }
+  if (adr_cases < gate.min_adr_normative_cases) {
+    report.failures.push_back("coverage miss: mode adr cases");
+  }
+  if (ssot_cases < gate.min_ssot_normative_cases) {
+    report.failures.push_back("coverage miss: mode ssot cases");
+  }
+
+  const auto mrr_threshold = effective_threshold(gate.thresholds.min_mrr_at_10,
+                                                 gate.baseline_metrics.mrr_at_10,
+                                                 gate.thresholds.max_regression_pct);
+  const auto ndcg_threshold = effective_threshold(gate.thresholds.min_ndcg_at_10,
+                                                  gate.baseline_metrics.ndcg_at_10,
+                                                  gate.thresholds.max_regression_pct);
+  const auto recall_at_5_threshold = effective_threshold(gate.thresholds.min_recall_at_5,
+                                                         gate.baseline_metrics.recall_at_5,
+                                                         gate.thresholds.max_regression_pct);
+  const auto recall_at_10_threshold = effective_threshold(gate.thresholds.min_recall_at_10,
+                                                          gate.baseline_metrics.recall_at_10,
+                                                          gate.thresholds.max_regression_pct);
+
+  if (report.aggregate_metrics.mrr_at_10 + 1e-6 < mrr_threshold) {
+    report.failures.push_back("aggregate miss: mrr@10");
+  }
+  if (report.aggregate_metrics.ndcg_at_10 + 1e-6 < ndcg_threshold) {
+    report.failures.push_back("aggregate miss: ndcg@10");
+  }
+  if (report.aggregate_metrics.recall_at_5 + 1e-6 < recall_at_5_threshold) {
+    report.failures.push_back("aggregate miss: recall@5");
+  }
+  if (report.aggregate_metrics.recall_at_10 + 1e-6 < recall_at_10_threshold) {
+    report.failures.push_back("aggregate miss: recall@10");
+  }
+
+  report.passed = report.failures.empty();
+  return report;
+}
+
+[[nodiscard]] int count_cases_for_mode(const QualityManifest& manifest, RetrievalMode active_mode) {
+  return static_cast<int>(std::count_if(manifest.cases.begin(),
+                                        manifest.cases.end(),
+                                        [active_mode](const QualityCaseSpec& spec) {
+                                          return mode_allowed(active_mode, spec.allowed_modes);
+                                        }));
+}
+
 void execute_sql(sqlite3* connection, const std::string& sql) {
   char* error_message = nullptr;
   const int sqlite_status =
@@ -960,11 +1154,11 @@ class SqliteLexicalIndexFixture {
   return policy;
 }
 
-[[nodiscard]] KnowledgeConfigSnapshot make_config() {
+[[nodiscard]] KnowledgeConfigSnapshot make_config(RetrievalMode active_mode) {
   KnowledgeConfigSnapshot config;
   config.knowledge_enabled = true;
-  config.vector_enabled = false;
-  config.retrieval_mode_default = RetrievalMode::LexicalOnly;
+  config.vector_enabled = active_mode != RetrievalMode::LexicalOnly;
+  config.retrieval_mode_default = active_mode;
   config.evidence_budget_tokens = 4096U;
   config.max_context_projection_items = 10U;
   config.catalog_refresh_interval_ms = 30000;
@@ -973,7 +1167,7 @@ class SqliteLexicalIndexFixture {
   config.failure_backoff_ms = 1000;
   config.request_deadline_ms = 1500;
   config.allow_budget_degrade = false;
-  config.max_parallel_recall = 1U;
+  config.max_parallel_recall = active_mode == RetrievalMode::Hybrid ? 2U : 1U;
   config.sparse_recall_timeout_ms = 450;
   config.dense_recall_timeout_ms = 450;
   config.ingest_timeout_ms = 2000;
@@ -1059,7 +1253,11 @@ class SqliteLexicalIndexFixture {
                                  ? std::vector<std::string>{"*.yaml"}
                                  : std::vector<std::string>{"*.md"};
   descriptor.exclude_globs = {};
-  descriptor.supported_modes = {RetrievalMode::LexicalOnly};
+  descriptor.supported_modes = corpus_id == "profile_policy_normative"
+                                 ? std::vector<RetrievalMode>{RetrievalMode::LexicalOnly}
+                                 : std::vector<RetrievalMode>{RetrievalMode::LexicalOnly,
+                                                              RetrievalMode::Hybrid,
+                                                              RetrievalMode::DenseOnly};
   descriptor.active_snapshot_id = "snapshot-retrieval-quality-v1";
   descriptor.last_updated_ms = 1713744000000;
   descriptor.tags = corpus_tags(corpus_id);
@@ -1080,8 +1278,9 @@ class SqliteLexicalIndexFixture {
 
 class RetrievalQualityHarness {
  public:
-  explicit RetrievalQualityHarness(const QualityManifest& manifest)
+  RetrievalQualityHarness(const QualityManifest& manifest, RetrievalMode active_mode)
       : manifest_(manifest),
+        active_mode_(active_mode),
         sparse_retriever_(nullptr) {
     populate_sqlite_fixture();
 
@@ -1109,10 +1308,10 @@ class RetrievalQualityHarness {
       return sparse_retriever_->retrieve(request);
     };
     recall_deps.dense_lane = [](const DenseRecallRequest&) {
-      DenseRecallResult result;
-      result.ok = false;
-      result.failure_reason_codes = {"dense_lane_disabled"};
-      return result;
+      return DenseRecallResult{};
+    };
+    recall_deps.dense_lane = [this](const DenseRecallRequest& request) {
+      return dense_retrieve(request);
     };
 
     KnowledgeServiceDeps deps;
@@ -1133,7 +1332,7 @@ class RetrievalQualityHarness {
     deps.now_ms = [this] { return now_ms_; };
 
     knowledge_service_ = std::make_unique<KnowledgeServiceFacade>(std::move(deps));
-    assert_true(knowledge_service_->init(make_config()),
+    assert_true(knowledge_service_->init(make_config(active_mode_)),
                 "retrieval quality harness should initialize the knowledge service");
   }
 
@@ -1142,6 +1341,7 @@ class RetrievalQualityHarness {
     query.request_id = "req-" + spec.case_id;
     query.query_text = spec.query_text;
     query.query_kind = spec.query_kind;
+    query.preferred_mode = active_mode_;
     query.allowed_corpora = {spec.primary_corpus_id};
     query.top_k = manifest_.retrieval_top_k;
     query.max_context_projection_items = manifest_.retrieval_top_k;
@@ -1153,8 +1353,9 @@ class RetrievalQualityHarness {
     assert_true(result.has_consistent_values(),
                 "retrieval quality harness should keep public result invariants for " +
                     spec.case_id);
-    assert_true(result.mode == RetrievalMode::LexicalOnly,
-                "retrieval quality harness should stay on lexical-only mode for " + spec.case_id);
+    assert_true(result.mode == active_mode_,
+          "retrieval quality harness should stay on the requested mode for " +
+            spec.case_id);
     assert_true(result.evidence.has_value(),
                 "retrieval quality harness should return evidence for " + spec.case_id);
     assert_true(!result.evidence->degraded,
@@ -1169,6 +1370,46 @@ class RetrievalQualityHarness {
   }
 
  private:
+  [[nodiscard]] const QualityCaseSpec* find_case_spec(std::string_view query_text) const {
+    const auto iterator = std::find_if(manifest_.cases.begin(),
+                                       manifest_.cases.end(),
+                                       [query_text](const QualityCaseSpec& spec) {
+                                         return spec.query_text == query_text;
+                                       });
+    return iterator == manifest_.cases.end() ? nullptr : &(*iterator);
+  }
+
+  [[nodiscard]] DenseRecallResult dense_retrieve(const DenseRecallRequest& request) const {
+    DenseRecallResult result;
+    const auto* spec = find_case_spec(request.normalized_query.normalized_text);
+    if (spec == nullptr) {
+      result.ok = false;
+      result.failure_reason_codes = {"dense_fixture_missing"};
+      return result;
+    }
+
+    if (spec->primary_corpus_id == "profile_policy_normative") {
+      result.ok = false;
+      result.failure_reason_codes = {"dense_fixture_missing"};
+      return result;
+    }
+
+    dasall::knowledge::retrieve::RecallHit hit;
+    hit.corpus_id = spec->primary_corpus_id;
+    hit.document_id = spec->case_id;
+    hit.chunk_id = spec->case_id + "#dense";
+    hit.score = 0.97F;
+    hit.raw_snippet = build_chunk_text(*spec);
+    hit.citation_ref = spec->expected_chunk_refs.front();
+    hit.updated_at = 1713744000600;
+    hit.authority_level = corpus_authority_level(spec->primary_corpus_id);
+    hit.tags = corpus_tags(spec->primary_corpus_id);
+
+    result.ok = true;
+    result.hits.push_back(std::move(hit));
+    return result;
+  }
+
   [[nodiscard]] std::shared_ptr<const IndexSnapshot> make_snapshot() const {
     auto snapshot = std::make_shared<IndexSnapshot>();
     snapshot->manifest = IndexManifest{
@@ -1180,7 +1421,7 @@ class RetrievalQualityHarness {
         .effective_at = 1713744001000,
         .document_count = manifest_.cases.size(),
         .chunk_count = manifest_.cases.size(),
-        .vector_enabled = false,
+        .vector_enabled = active_mode_ != RetrievalMode::LexicalOnly,
     };
     snapshot->checksum = "checksum-retrieval-quality-v1";
     snapshot->search = [this](const SparseIndexSearchRequest& request) {
@@ -1204,6 +1445,7 @@ class RetrievalQualityHarness {
   }
 
   QualityManifest manifest_;
+  RetrievalMode active_mode_ = RetrievalMode::LexicalOnly;
   SqliteLexicalIndexFixture sqlite_index_;
   std::int64_t now_ms_ = 1713744002000;
   std::unique_ptr<SparseRetriever> sparse_retriever_;
@@ -1212,7 +1454,7 @@ class RetrievalQualityHarness {
 
 void test_retrieval_quality_regression_passes_curated_manifest() {
   const auto manifest = load_quality_manifest();
-  RetrievalQualityHarness harness(manifest);
+  RetrievalQualityHarness harness(manifest, RetrievalMode::LexicalOnly);
 
   const auto report = evaluate_manifest(
       manifest,
@@ -1221,10 +1463,12 @@ void test_retrieval_quality_regression_passes_curated_manifest() {
 
   assert_true(report.passed,
               "retrieval quality curated manifest should satisfy aggregate and hard-fail gates");
-  assert_equal(30, report.executed_cases,
-               "retrieval quality curated manifest should execute all 30 cases");
-  assert_equal(0, report.skipped_cases,
-               "retrieval quality curated manifest should not skip lexical-only cases");
+  assert_equal(count_cases_for_mode(manifest, RetrievalMode::LexicalOnly),
+               report.executed_cases,
+               "retrieval quality curated manifest should execute all lexical-only cases");
+  assert_equal(static_cast<int>(manifest.cases.size()) - report.executed_cases,
+               report.skipped_cases,
+               "retrieval quality curated manifest should skip only non-lexical mode cases");
   assert_metric_equal(1.0, report.aggregate_metrics.mrr_at_10,
                       "retrieval quality curated manifest should keep perfect MRR@10");
   assert_metric_equal(1.0, report.aggregate_metrics.ndcg_at_10,
@@ -1237,7 +1481,7 @@ void test_retrieval_quality_regression_passes_curated_manifest() {
 
 void test_retrieval_quality_regression_rejects_hard_fail_regression() {
   const auto manifest = load_quality_manifest();
-  RetrievalQualityHarness harness(manifest);
+  RetrievalQualityHarness harness(manifest, RetrievalMode::LexicalOnly);
 
   const auto report = evaluate_manifest(
       manifest,
@@ -1257,12 +1501,77 @@ void test_retrieval_quality_regression_rejects_hard_fail_regression() {
               "retrieval quality gate should surface the hard-fail case id in its failure summary");
 }
 
+void test_retrieval_quality_regression_passes_hybrid_mode_gate() {
+  const auto manifest = load_quality_manifest();
+  RetrievalQualityHarness harness(manifest, RetrievalMode::Hybrid);
+
+  const auto report = evaluate_mode_gate(
+      manifest,
+      RetrievalMode::Hybrid,
+      [&harness](const QualityCaseSpec& spec) { return harness.retrieve_sources(spec); });
+
+  assert_true(report.passed,
+              "retrieval quality hybrid mode gate should satisfy aggregate and hard-fail requirements");
+  assert_equal(count_cases_for_mode(manifest, RetrievalMode::Hybrid),
+               report.executed_cases,
+               "retrieval quality hybrid mode gate should execute all hybrid cases");
+  assert_metric_equal(1.0, report.aggregate_metrics.mrr_at_10,
+                      "retrieval quality hybrid mode gate should keep perfect MRR@10");
+  assert_metric_equal(1.0, report.aggregate_metrics.ndcg_at_10,
+                      "retrieval quality hybrid mode gate should keep perfect NDCG@10");
+}
+
+void test_retrieval_quality_regression_passes_dense_only_mode_gate() {
+  const auto manifest = load_quality_manifest();
+  RetrievalQualityHarness harness(manifest, RetrievalMode::DenseOnly);
+
+  const auto report = evaluate_mode_gate(
+      manifest,
+      RetrievalMode::DenseOnly,
+      [&harness](const QualityCaseSpec& spec) { return harness.retrieve_sources(spec); });
+
+  assert_true(report.passed,
+              "retrieval quality dense-only mode gate should satisfy aggregate and hard-fail requirements");
+  assert_equal(count_cases_for_mode(manifest, RetrievalMode::DenseOnly),
+               report.executed_cases,
+               "retrieval quality dense-only mode gate should execute all dense-only cases");
+  assert_metric_equal(1.0, report.aggregate_metrics.recall_at_5,
+                      "retrieval quality dense-only mode gate should keep perfect Recall@5");
+  assert_metric_equal(1.0, report.aggregate_metrics.recall_at_10,
+                      "retrieval quality dense-only mode gate should keep perfect Recall@10");
+}
+
+void test_retrieval_quality_regression_rejects_dense_only_hard_fail_regression() {
+  const auto manifest = load_quality_manifest();
+  RetrievalQualityHarness harness(manifest, RetrievalMode::DenseOnly);
+
+  const auto report = evaluate_mode_gate(
+      manifest,
+      RetrievalMode::DenseOnly,
+      [&harness](const QualityCaseSpec& spec) {
+        if (spec.case_id == "diag_adr_dense_01") {
+          return std::vector<std::string>{"docs/adr/ADR-QUALITY-08.md"};
+        }
+        return harness.retrieve_sources(spec);
+      });
+
+  assert_true(!report.passed,
+              "retrieval quality dense-only gate should fail when a dense hard-fail case loses its expected source");
+  assert_true(std::find(report.failures.begin(),
+                        report.failures.end(),
+                        std::string("hard_fail miss: diag_adr_dense_01")) != report.failures.end(),
+              "retrieval quality dense-only gate should surface the failing case id in its failure summary");
+}
+
 }  // namespace
 
 int main() {
   try {
     test_retrieval_quality_regression_passes_curated_manifest();
     test_retrieval_quality_regression_rejects_hard_fail_regression();
+    test_retrieval_quality_regression_passes_hybrid_mode_gate();
+    test_retrieval_quality_regression_passes_dense_only_mode_gate();
+    test_retrieval_quality_regression_rejects_dense_only_hard_fail_regression();
   } catch (const std::exception& exception) {
     std::cerr << exception.what() << '\n';
     return 1;
