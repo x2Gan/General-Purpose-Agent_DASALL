@@ -883,7 +883,15 @@ struct DaemonKnowledgePayload {
   payload += ",\"degraded\":" + bool_json(degraded);
   payload += ",\"reason_codes\":" + json_array(retrieve_result.reason_codes);
   payload += ",\"warning_count\":" + std::to_string(retrieve_result.warning_count);
+  payload += ",\"warning_summary\":" + json_array(retrieve_result.warning_summary);
   payload += ",\"corpus_summary\":" + json_array(retrieve_result.corpus_summary);
+  payload += ",\"selected_corpora\":" + json_array(retrieve_result.corpus_summary);
+  payload += ",\"vector_backend_ready\":" +
+             bool_json(retrieve_result.vector_backend_ready);
+  payload += ",\"sparse_hit_count\":" +
+             std::to_string(retrieve_result.sparse_hit_count);
+  payload += ",\"dense_hit_count\":" +
+             std::to_string(retrieve_result.dense_hit_count);
   payload += ",\"slice_count\":" + std::to_string(slice_count);
   payload += ",\"first_citation\":" + json_string(first_citation);
   payload += ",\"first_snippet\":" + json_string(first_snippet);

@@ -65,6 +65,17 @@ dasall_add_access_unit_test(
 )
 
 dasall_add_access_unit_test(
+  dasall_access_knowledge_retrieve_payload_unit_test
+  AccessKnowledgeRetrievePayloadTest
+  AccessKnowledgeRetrievePayloadTest.cpp
+)
+
+target_include_directories(dasall_access_knowledge_retrieve_payload_unit_test
+  PRIVATE
+    ${CMAKE_SOURCE_DIR}/knowledge/include
+)
+
+dasall_add_access_unit_test(
   dasall_access_async_task_receipt_unit_test
   AsyncTaskReceiptTypesTest
   AsyncTaskReceiptTypesTest.cpp

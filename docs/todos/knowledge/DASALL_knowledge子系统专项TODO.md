@@ -430,6 +430,30 @@
 3. 已新增 `tests/unit/knowledge/CorpusRouterMixedCapabilityTest.cpp` 与 `tests/integration/knowledge/KnowledgeMixedCorpusHybridRoutingIntegrationTest.cpp`，并更新 `tests/unit/knowledge/CorpusRouterModeSelectionTest.cpp`；新的 focused regression 现同时覆盖 generic mixed catalog、explicit mixed scope canary 与既有 allowlist 回归。
 4. 2026-05-26 已通过 `Build_CMakeTools(buildTargets=["dasall_corpus_router_mode_selection_unit_test","dasall_corpus_router_mixed_capability_unit_test","dasall_knowledge_mixed_corpus_hybrid_routing_integration_test","dasall_knowledge_installed_asset_hybrid_probe_integration_test","dasall_runtime_knowledge_hybrid_canary_integration_test"])`；随后直接执行 `./build/vscode-linux-ninja/tests/unit/knowledge/dasall_corpus_router_mode_selection_unit_test && ./build/vscode-linux-ninja/tests/unit/knowledge/dasall_corpus_router_mixed_capability_unit_test && ./build/vscode-linux-ninja/tests/integration/knowledge/dasall_knowledge_mixed_corpus_hybrid_routing_integration_test && ./build/vscode-linux-ninja/tests/integration/knowledge/dasall_knowledge_installed_asset_hybrid_probe_integration_test && ./build/vscode-linux-ninja/tests/integration/access/dasall_runtime_knowledge_hybrid_canary_integration_test && echo PASS`，结果 `PASS`。
 
+### 6.13 vector observability / explain surface 双轨任务包
+
+说明：`KNO-TODO-039` 承接 `KNO-TODO-038-B`，负责把 runtime-owned hybrid canary 与 mixed-corpus 路由已经收口出的 vector lane 事实补齐到 module-local retrieve result、production telemetry sink 与 daemon/access additive payload。本节按 `-D + -B` 双轨模板细化该任务；`KNO-TODO-039-D` 的设计交付已落盘到 `docs/todos/knowledge/deliverables/KNO-TODO-039-vector-observability-explain-surface双轨任务包.md`，`KNO-TODO-039-B` 只在不扩 `contracts/`、不回退 ADR-006 / ADR-007 / ADR-008 owner boundary、不中断 metrics cardinality 基线的前提下推进。
+
+#### 6.13.1 Design->Build 拆分总表
+
+| 主任务 | Design 子任务（文档交付） | Build 子任务（代码交付） | 输入依据 | 代码目标 | 测试目标 | 验收命令 |
+|---|---|---|---|---|---|---|
+| KNO-TODO-039 | KNO-TODO-039-D：收敛 vector observability / explain surface 设计与 D Gate | KNO-TODO-039-B：落地 lane hit、warning summary、selected corpora 与 backend ready 的 result / telemetry / payload explain surface | `KNO-TODO-038-B`；详设 `KnowledgeTelemetry` / KNO-D06；Azure Hybrid Search；OpenSearch hybrid explain | `knowledge/include/KnowledgeTypes.h`；`knowledge/include/health/KnowledgeTelemetry.h`；`knowledge/src/observability/KnowledgeTelemetry.cpp`；`knowledge/src/facade/KnowledgeService.cpp`；`apps/runtime_support/src/RuntimeLiveDependencyComposition.cpp`；`access/src/AccessGatewayFactory.cpp`；`tests/unit/knowledge/KnowledgeRetrieveTelemetryFieldsTest.cpp`；`tests/integration/knowledge/KnowledgeProductionTelemetryIntegrationTest.cpp`；`tests/unit/access/AccessKnowledgeRetrievePayloadTest.cpp` | `dasall_knowledge_retrieve_telemetry_fields_unit_test`；`KnowledgeProductionTelemetryIntegrationTest`；`AccessKnowledgeRetrievePayloadTest` | `cmake --build build/vscode-linux-ninja --target dasall_knowledge_retrieve_telemetry_fields_unit_test dasall_knowledge_production_telemetry_integration_test dasall_access_knowledge_retrieve_payload_unit_test -j2`；若 `RunCtest_CMakeTools` 继续命中仓库已知泛化 `生成失败`，回退直接执行 `./build/vscode-linux-ninja/tests/unit/knowledge/dasall_knowledge_retrieve_telemetry_fields_unit_test && ./build/vscode-linux-ninja/tests/integration/knowledge/dasall_knowledge_production_telemetry_integration_test && ./build/vscode-linux-ninja/tests/unit/access/dasall_access_knowledge_retrieve_payload_unit_test && echo PASS` |
+
+#### 6.13.2 原子任务状态清单（按子任务）
+
+| 子任务 ID | 状态 | 任务描述 | 交付物 | 完成判定 |
+|---|---|---|---|---|
+| KNO-TODO-039-D | Done | 收敛 vector explain supporting shape、production telemetry surface 与 additive payload 设计 | `docs/todos/knowledge/deliverables/KNO-TODO-039-vector-observability-explain-surface双轨任务包.md` | 已补齐本地证据、外部实践、Build 三件套、风险回退与 D Gate；明确 039 只补 observability / explain surface，不推进 installed proof 或 refresh automation（2026-05-26） |
+| KNO-TODO-039-B | Done | 落地 retrieve result / telemetry event explain 字段、Runtime production sinks 与 Access focused payload gate | `knowledge/include/KnowledgeTypes.h`；`knowledge/include/health/KnowledgeTelemetry.h`；`knowledge/src/observability/KnowledgeTelemetry.cpp`；`knowledge/src/facade/KnowledgeService.cpp`；`apps/runtime_support/src/RuntimeLiveDependencyComposition.cpp`；`access/src/AccessGatewayFactory.cpp`；`tests/unit/knowledge/KnowledgeRetrieveTelemetryFieldsTest.cpp`；`tests/integration/knowledge/KnowledgeProductionTelemetryIntegrationTest.cpp`；`tests/unit/access/AccessKnowledgeRetrievePayloadTest.cpp`；`tests/unit/access/CMakeLists.txt` | production-composed telemetry 与 daemon/access payload 现可稳定暴露 `vector_backend_ready`、`warning_summary`、`selected_corpora`、`sparse_hit_count`、`dense_hit_count`，且未新增 `contracts/` 或高基数 metrics label（2026-05-26） |
+
+#### 6.13.3 Build 完成证据（2026-05-26）
+
+1. `knowledge/include/KnowledgeTypes.h`、`knowledge/include/health/KnowledgeTelemetry.h`、`knowledge/src/observability/KnowledgeTelemetry.cpp` 与 `knowledge/src/facade/KnowledgeService.cpp` 已把 vector explain supporting shape 收口到 module-local result / telemetry：retrieve success path 现稳定聚合 `warning_summary`、`vector_backend_ready`、`sparse_hit_count`、`dense_hit_count`，并在一致性校验中保证 `warning_summary` 去重与 `warning_count` 下界关系。
+2. `apps/runtime_support/src/RuntimeLiveDependencyComposition.cpp` 与 `tests/integration/knowledge/KnowledgeProductionTelemetryIntegrationTest.cpp` 已把 production telemetry explain surface 扩展到 log / trace / audit：调用方现可直接读到 `selected_corpora`、`warning_summary`、`vector_backend_ready`、`sparse_hit_count`、`dense_hit_count`，同时保持 metrics labels 不引入高基数新维度。
+3. `access/src/AccessGatewayFactory.cpp`、`tests/unit/access/AccessKnowledgeRetrievePayloadTest.cpp` 与 `tests/unit/access/CMakeLists.txt` 已为 daemon/access retrieve payload 追加 `selected_corpora`、`warning_summary`、`vector_backend_ready`、`sparse_hit_count`、`dense_hit_count` additive 字段，并保持 034 已发布的 `mode/degraded/reason_codes/warning_count/corpus_summary/slice_count` 向后兼容。
+4. 2026-05-26 已通过 `cmake --build build/vscode-linux-ninja --target dasall_knowledge_retrieve_telemetry_fields_unit_test dasall_knowledge_production_telemetry_integration_test dasall_access_knowledge_retrieve_payload_unit_test -j2`；随后直接执行 `./build/vscode-linux-ninja/tests/unit/knowledge/dasall_knowledge_retrieve_telemetry_fields_unit_test && ./build/vscode-linux-ninja/tests/integration/knowledge/dasall_knowledge_production_telemetry_integration_test && ./build/vscode-linux-ninja/tests/unit/access/dasall_access_knowledge_retrieve_payload_unit_test && echo PASS`，结果 `PASS`。
+
 ---
 
 ## 7. 执行顺序建议
@@ -447,6 +471,7 @@
 | G 质量门与证据收口 | KNO-TODO-030、033、031 | 030 依赖 004、027、028；**033 在 020/024/032 后验证 refresh 闭环**；031 最后收口 | 把 golden set、refresh 闭环与证据回写收口到 Gate |
 | H request-scoped hybrid canary surface | KNO-TODO-034-D、034-B | 034-D 已完成；034-B 串行执行 | 先暴露 request-scoped control surface 与 daemon explain payload，再进入 035 的 runtime-owned canary seam；若 034-B 未通过，不得推进 035 / 038 / 039 |
 | I runtime-owned hybrid canary seam | KNO-TODO-035-D、035-B | 035-D 已完成；035-B 串行执行 | 只允许 runtime owner 放行 allowlisted explicit hybrid query；若 035-B 未通过，不得推进 036 / 037 / 038 的向量能力扩面 |
+| J vector observability / explain surface | KNO-TODO-039-D、039-B | 039-D / 039-B 已完成 | 039 已把 selected corpora、warning summary、lane hit 与 backend ready explain 收口到 production telemetry + daemon/access payload；040 才进入 installed local hybrid canary / soak 证据固化 |
 
 ### 7.2 必过门禁表
 
@@ -464,6 +489,7 @@
 | Gate-H：evidence 回写 | TODO / worklog / deliverables 证据齐全 | KNO-TODO-031 | 禁止收尾宣称完成 |
 | Gate-I：query surface ready | `knowledge retrieve` 已支持 request-scoped `preferred_mode` / corpus / tag / language 控制，且 JSON payload 回传 `mode`、`degraded`、reason codes、warning count 与 corpus summary | KNO-TODO-034-B | 禁止推进 035 的 runtime canary seam、038 的 mixed-corpus 路由收口与 039 的 production explain surface |
 | Gate-J：runtime canary seam ready | vector-ready runtime path 仅对 allowlisted corpus 的 explicit hybrid canary query 放行 `Hybrid` / `DenseOnly`，其余路径保持 `LexicalOnly`，并暴露 `knowledge-hybrid-canary-ready` marker | KNO-TODO-035-B | 禁止推进 036 / 037 / 038 的向量能力扩面与 production rollout 结论 |
+| Gate-K：vector explain surface ready | production-composed telemetry 与 daemon/access payload 已稳定暴露 `vector_backend_ready`、`warning_summary`、`selected_corpora`、`sparse_hit_count`、`dense_hit_count`，且 metrics label 无新增高基数扩散 | KNO-TODO-039-B | 禁止推进 040 的 installed local hybrid canary / soak 证据固化 |
 
 ---
 

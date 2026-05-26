@@ -224,7 +224,11 @@ struct KnowledgeRetrieveResult {
 	std::vector<dasall::contracts::RetrievalEvidenceRef> retrieval_evidence_refs;
 	std::vector<std::string> reason_codes;
 	std::size_t warning_count = 0U;
+	std::vector<std::string> warning_summary;
 	std::vector<std::string> corpus_summary;
+	bool vector_backend_ready = false;
+	std::size_t sparse_hit_count = 0U;
+	std::size_t dense_hit_count = 0U;
 	std::optional<dasall::contracts::ErrorInfo> error;
 
 	[[nodiscard]] bool has_consistent_values() const {
@@ -239,6 +243,8 @@ struct KnowledgeRetrieveResult {
 
 		return (!evidence.has_value() || evidence->has_consistent_values()) &&
 					 detail::has_unique_values(reason_codes) &&
+					 detail::has_unique_values(warning_summary) &&
+					 warning_count >= warning_summary.size() &&
 					 detail::has_unique_values(corpus_summary) &&
 					 std::all_of(retrieval_evidence_refs.begin(),
 								retrieval_evidence_refs.end(),

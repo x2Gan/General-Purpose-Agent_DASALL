@@ -186,8 +186,13 @@ void knowledge_production_telemetry_routes_runtime_live_retrieve_events_to_share
               "knowledge production telemetry integration should append a failed retrieve audit event");
   assert_true(export_contains_token(audit_export, "profile_id=desktop_full") &&
                   export_contains_token(audit_export, "retrieval_mode=lexical_only") &&
-                  export_contains_token(audit_export, "query_kind=fact_lookup"),
-              "knowledge production telemetry integration should persist profile and retrieval fields into the shared audit sink");
+            export_contains_token(audit_export, "query_kind=fact_lookup") &&
+            export_contains_token(audit_export, "vector_backend_ready=") &&
+            export_contains_token(audit_export, "selected_corpora=") &&
+            export_contains_token(audit_export, "sparse_hit_count=") &&
+            export_contains_token(audit_export, "dense_hit_count=") &&
+            export_contains_token(audit_export, "warning_count="),
+          "knowledge production telemetry integration should persist vector explain facts into the shared audit sink");
   assert_true(metrics_facade->record_attempt_count() > baseline_metric_attempts,
               "knowledge production telemetry integration should emit metrics samples for retrieve telemetry");
   assert_true(tracer_provider->export_success_total() > baseline_trace_exports,

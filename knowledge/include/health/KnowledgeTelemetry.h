@@ -25,6 +25,11 @@ struct KnowledgeTelemetryEvent {
   std::string profile_id;
   std::optional<KnowledgeQueryKind> query_kind;
   std::optional<RetrievalMode> retrieval_mode;
+  std::size_t warning_count = 0U;
+  std::vector<std::string> warning_summary;
+  bool vector_backend_ready = false;
+  std::size_t sparse_hit_count = 0U;
+  std::size_t dense_hit_count = 0U;
   std::size_t corpus_count = 0U;
   std::size_t result_count = 0U;
   std::string error_category = "none";

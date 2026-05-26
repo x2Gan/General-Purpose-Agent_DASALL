@@ -1743,7 +1743,7 @@ public:
 
 ##### KnowledgeTelemetry
 
-1. **职责**：统一承接 Knowledge 子系统的结构化日志、指标、追踪和审计事件输出，覆盖 `retrieve`、`ingest`、`snapshot_swap`、`stale_read`、`degraded_return` 五类关键事件；保证跨组件事件字段、reason code 和结果语义一致。
+1. **职责**：统一承接 Knowledge 子系统的结构化日志、指标、追踪和审计事件输出，覆盖 `retrieve`、`ingest`、`snapshot_swap`、`stale_read`、`degraded_return` 五类关键事件；保证跨组件事件字段、reason code、selected corpora 与 vector explain 结果语义一致。
 2. **非职责边界**：不做健康聚合；不执行告警策略；不决定采样后的恢复动作；不持有索引、catalog 或 backend 句柄；不为了打点而改变主链路返回值。
 3. **核心数据定义**：
 
@@ -1758,6 +1758,17 @@ struct KnowledgeTelemetryEvent {
   std::int64_t latency_ms = 0;
   std::vector<std::string> reason_codes;
   std::vector<std::string> corpus_ids;
+  std::string profile_id;
+  std::string query_kind;
+  std::string retrieval_mode;
+  std::size_t corpus_count = 0U;
+  std::size_t result_count = 0U;
+  std::string error_category;
+  std::size_t warning_count = 0U;
+  std::vector<std::string> warning_summary;
+  bool vector_backend_ready = false;
+  std::size_t sparse_hit_count = 0U;
+  std::size_t dense_hit_count = 0U;
 };
 ```
 
@@ -1777,14 +1788,14 @@ public:
 
 5. **关键执行流**：
    1. 由 `KnowledgeServiceFacade`、`IngestionCoordinator`、`IndexWriter`、`KnowledgeHealthProbe` 构建基础事件。
-   2. telemetry 统一补齐 `component`、`snapshot_id`、`result`、`reason_codes` 和 latency 字段。
+  2. telemetry 统一补齐 `component`、`snapshot_id`、`result`、`reason_codes`、`warning_summary`、`vector_backend_ready`、lane hit 统计和 latency 字段。
    3. 按 sink 能力分别写入 logger、metrics registry 和 trace bridge。
    4. 对高频 debug 事件应用 rate limit，但不得丢弃 error/degraded/audit 事件。
 6. **失败与回退语义**：
    - 任一 sink 写入失败不得阻断业务主路径，只允许记录 drop counter 和最小 fallback log。
    - 审计必需字段缺失时，事件必须标记 `result=invalid_telemetry_payload`，而不是静默吞掉。
    - 不允许在 telemetry 内部触发重试风暴或反向调用业务组件补数据。
-7. **测试与验收出口**：推荐单测 `KnowledgeTelemetryTest.cpp`、`KnowledgeTelemetryFieldSetTest.cpp`、`KnowledgeTelemetryDegradeEventTest.cpp`；验收命令 `ctest --test-dir build-ci -R "KnowledgeTelemetry.*Test" --output-on-failure`。
+7. **测试与验收出口**：推荐单测 `KnowledgeTelemetryTest.cpp`、`KnowledgeTelemetryFieldSetTest.cpp`、`KnowledgeTelemetryDegradeEventTest.cpp`、`KnowledgeRetrieveTelemetryFieldsTest.cpp`，并以 `KnowledgeProductionTelemetryIntegrationTest.cpp` 覆盖 production-composed sink；验收命令 `ctest --test-dir build-ci -R "Knowledge(Telemetry|RetrieveTelemetryFields|ProductionTelemetry).*Test" --output-on-failure`。
 
 ##### KnowledgeHealthProbe
 

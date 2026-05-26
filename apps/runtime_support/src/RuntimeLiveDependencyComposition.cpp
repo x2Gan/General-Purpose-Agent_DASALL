@@ -686,6 +686,16 @@ struct RuntimeObservabilityBundle {
   attrs.emplace("knowledge.retrieval_mode",
                 knowledge_retrieval_mode_name(event.retrieval_mode));
   attrs.emplace("knowledge.outcome", knowledge_event_outcome(event));
+  attrs.emplace("knowledge.vector_backend_ready",
+                static_cast<std::int64_t>(event.vector_backend_ready ? 1 : 0));
+  attrs.emplace("knowledge.warning_count", static_cast<std::int64_t>(event.warning_count));
+  attrs.emplace("knowledge.sparse_hit_count",
+                static_cast<std::int64_t>(event.sparse_hit_count));
+  attrs.emplace("knowledge.dense_hit_count",
+                static_cast<std::int64_t>(event.dense_hit_count));
+  attrs.emplace("knowledge.selected_corpora", join_values(event.corpus_ids));
+  attrs.emplace("knowledge.reason_codes", join_values(event.reason_codes));
+  attrs.emplace("knowledge.warning_summary", join_values(event.warning_summary));
   attrs.emplace("knowledge.corpus_count", static_cast<std::int64_t>(event.corpus_count));
   attrs.emplace("knowledge.result_count", static_cast<std::int64_t>(event.result_count));
   return attrs;
@@ -694,7 +704,7 @@ struct RuntimeObservabilityBundle {
 [[nodiscard]] std::vector<std::string> make_knowledge_audit_side_effects(
     const knowledge::KnowledgeTelemetryEvent& event) {
   std::vector<std::string> side_effects;
-  side_effects.reserve(9U);
+  side_effects.reserve(15U);
   side_effects.push_back("component=" + telemetry_value_or(event.component, "unknown"));
   side_effects.push_back("snapshot_id=" + telemetry_value_or(event.snapshot_id, "unknown"));
   side_effects.push_back("profile_id=" + telemetry_value_or(event.profile_id, "unknown"));
@@ -702,6 +712,13 @@ struct RuntimeObservabilityBundle {
   side_effects.push_back("retrieval_mode=" +
                          knowledge_retrieval_mode_name(event.retrieval_mode));
   side_effects.push_back("outcome=" + knowledge_event_outcome(event));
+  side_effects.push_back("vector_backend_ready=" +
+                         std::string(event.vector_backend_ready ? "true" : "false"));
+  side_effects.push_back("warning_count=" + std::to_string(event.warning_count));
+  side_effects.push_back("warning_summary=" + join_values(event.warning_summary));
+  side_effects.push_back("selected_corpora=" + join_values(event.corpus_ids));
+  side_effects.push_back("sparse_hit_count=" + std::to_string(event.sparse_hit_count));
+  side_effects.push_back("dense_hit_count=" + std::to_string(event.dense_hit_count));
   side_effects.push_back("corpus_count=" + std::to_string(event.corpus_count));
   side_effects.push_back("result_count=" + std::to_string(event.result_count));
   side_effects.push_back("error_category=" +
@@ -739,6 +756,13 @@ struct RuntimeObservabilityBundle {
       {"query_kind", knowledge_query_kind_name(event.query_kind)},
       {"retrieval_mode", knowledge_retrieval_mode_name(event.retrieval_mode)},
       {"outcome", knowledge_event_outcome(event)},
+      {"vector_backend_ready", event.vector_backend_ready ? "true" : "false"},
+      {"warning_count", std::to_string(event.warning_count)},
+      {"warning_summary", join_values(event.warning_summary)},
+      {"selected_corpora", join_values(event.corpus_ids)},
+      {"sparse_hit_count", std::to_string(event.sparse_hit_count)},
+      {"dense_hit_count", std::to_string(event.dense_hit_count)},
+      {"reason_codes", join_values(event.reason_codes)},
       {"error_category", telemetry_value_or(event.error_category, "none")},
       {"telemetry_path", fallback ? "fallback" : "primary"},
   };

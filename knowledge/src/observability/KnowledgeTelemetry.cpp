@@ -28,6 +28,7 @@ void append_reason_code(std::vector<std::string>& reason_codes, std::string reas
 bool KnowledgeTelemetryEvent::has_consistent_values() const {
   return !event_name.empty() && !component.empty() && !snapshot_id.empty() && !result.empty() &&
          latency_ms >= 0 && has_unique_values(reason_codes) && has_unique_values(corpus_ids) &&
+         has_unique_values(warning_summary) && warning_count >= warning_summary.size() &&
          corpus_count == corpus_ids.size() && !error_category.empty();
 }
 

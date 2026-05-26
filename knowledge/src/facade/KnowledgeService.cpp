@@ -11,6 +11,27 @@ namespace dasall::knowledge::facade {
 
 namespace {
 
+void append_unique_value(std::vector<std::string>& values, std::string value) {
+  if (std::find(values.begin(), values.end(), value) == values.end()) {
+    values.push_back(std::move(value));
+  }
+}
+
+void append_unique_values(std::vector<std::string>& values,
+                          const std::vector<std::string>& extra_values) {
+  for (const auto& value : extra_values) {
+    append_unique_value(values, value);
+  }
+}
+
+[[nodiscard]] std::vector<std::string> build_warning_summary(
+    const query::NormalizedQuery& normalized_query,
+    const retrieve::RecallCandidateSet& candidates) {
+  std::vector<std::string> warnings = normalized_query.warnings;
+  append_unique_values(warnings, candidates.warnings);
+  return warnings;
+}
+
 [[nodiscard]] std::string resolve_profile_id_for_telemetry(
     const KnowledgeQuery& query,
     const KnowledgeConfigSnapshot& config) {
@@ -444,9 +465,16 @@ KnowledgeRetrieveResult KnowledgeServiceFacade::retrieve(const KnowledgeQuery& q
   result.mode = route_result.plan->mode;
   result.evidence = std::move(evidence);
   result.reason_codes = route_result.route_reason_codes;
+  result.warning_summary = build_warning_summary(*normalize_result.normalized_query,
+                                                recall_result.candidates);
   result.warning_count = normalize_result.normalized_query->warnings.size() +
                          recall_result.candidates.warnings.size();
   result.corpus_summary = route_result.plan->corpus_ids;
+  result.vector_backend_ready = deps_.collect_health_snapshot != nullptr
+                                    ? deps_.collect_health_snapshot().vector_backend_available
+                                    : false;
+  result.sparse_hit_count = recall_result.candidates.sparse_hits.size();
+  result.dense_hit_count = recall_result.candidates.dense_hits.size();
   result.retrieval_evidence_refs = build_retrieval_evidence_refs(
       ranked_hits,
       *result.evidence,
@@ -467,6 +495,11 @@ KnowledgeRetrieveResult KnowledgeServiceFacade::retrieve(const KnowledgeQuery& q
     event.profile_id = resolve_profile_id_for_telemetry(query, config_);
     event.query_kind = query.query_kind;
     event.retrieval_mode = route_result.plan->mode;
+    event.warning_count = result.warning_count;
+    event.warning_summary = result.warning_summary;
+    event.vector_backend_ready = result.vector_backend_ready;
+    event.sparse_hit_count = result.sparse_hit_count;
+    event.dense_hit_count = result.dense_hit_count;
     event.corpus_count = route_result.plan->corpus_ids.size();
     event.result_count = result.evidence->slices.size();
     event.error_category = "none";

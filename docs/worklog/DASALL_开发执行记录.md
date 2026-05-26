@@ -1,3 +1,29 @@
+# 记录 #817
+
+- 日期：2026-05-26
+- 阶段：knowledge/vector observability explain surface
+- 任务：KNO-TODO-039 接入 vector observability / explain surface
+- 状态：已完成（代码、focused validation、TODO 回写已落盘）
+
+### 改动
+
+1. 更新 `knowledge/include/KnowledgeTypes.h`、`knowledge/include/health/KnowledgeTelemetry.h`、`knowledge/src/observability/KnowledgeTelemetry.cpp` 与 `knowledge/src/facade/KnowledgeService.cpp`，把 `warning_summary`、`vector_backend_ready`、`sparse_hit_count`、`dense_hit_count` 收口到 module-local retrieve result / telemetry event，并在 facade success path 上复用现有 health snapshot、route plan 与 recall warnings 聚合 explain 摘要。
+2. 更新 `apps/runtime_support/src/RuntimeLiveDependencyComposition.cpp` 与 `access/src/AccessGatewayFactory.cpp`，让 production-composed log / trace / audit 以及 daemon/access JSON payload 统一暴露 `selected_corpora`、`warning_summary`、`vector_backend_ready`、`sparse_hit_count`、`dense_hit_count`；同时新增 `tests/unit/access/AccessKnowledgeRetrievePayloadTest.cpp` 并更新 `tests/unit/access/CMakeLists.txt`，锁定 additive payload 回归，保持 metrics labels 不新增高基数扩散。
+3. 新增并回填 `docs/todos/knowledge/deliverables/KNO-TODO-039-vector-observability-explain-surface双轨任务包.md` 的 Build 完成证据，同时同步回写 `docs/todos/knowledge/DASALL_knowledge子系统专项TODO.md`、`docs/todos/DASALL_子系统查漏补缺专项记录.md`、`docs/architecture/DASALL_knowledge子系统详细设计.md` 与本记录，固化 039 的 Design->Build 映射和详细设计回链。
+
+### 验证
+
+1. `cmake --build build/vscode-linux-ninja --target dasall_knowledge_retrieve_telemetry_fields_unit_test dasall_knowledge_production_telemetry_integration_test dasall_access_knowledge_retrieve_payload_unit_test -j2`
+   - 结果：通过。
+2. `./build/vscode-linux-ninja/tests/unit/knowledge/dasall_knowledge_retrieve_telemetry_fields_unit_test && ./build/vscode-linux-ninja/tests/integration/knowledge/dasall_knowledge_production_telemetry_integration_test && ./build/vscode-linux-ninja/tests/unit/access/dasall_access_knowledge_retrieve_payload_unit_test && echo PASS`
+   - 结果：`PASS`。
+
+### 结果
+
+1. production-composed retrieve telemetry 现可直接暴露 selected corpora、warning summary、vector backend ready 与 sparse/dense lane hit，而不需要调用方再去读内部 debug 日志解释 hybrid 行为。
+2. daemon/access retrieve payload 现可在保留 034 旧字段兼容的前提下，直接返回 vector-specific explain 摘要，CLI / control-plane 可稳定判断本次请求的 lane 参与情况和 warning 明细。
+3. `KNO-TODO-039` 已完成；按用户要求的串行推进顺序，下一原子任务进入 `KNO-TODO-040`。
+
 # 记录 #816
 
 - 日期：2026-05-26

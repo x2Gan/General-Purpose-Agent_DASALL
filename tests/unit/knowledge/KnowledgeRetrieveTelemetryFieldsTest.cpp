@@ -38,7 +38,7 @@ using dasall::tests::support::assert_true;
 [[nodiscard]] KnowledgeConfigSnapshot make_config(std::string profile_id) {
   KnowledgeConfigSnapshot config;
   config.knowledge_enabled = true;
-  config.vector_enabled = false;
+  config.vector_enabled = true;
   config.retrieval_mode_default = RetrievalMode::LexicalOnly;
   config.profile_id = std::move(profile_id);
   config.evidence_budget_tokens = 256U;
@@ -82,6 +82,7 @@ using dasall::tests::support::assert_true;
     normalized_query.top_k = query.top_k;
     normalized_query.max_context_projection_items = query.max_context_projection_items;
     normalized_query.prefer_exact_match = true;
+    normalized_query.warnings = {"query_text_trimmed"};
     result.ok = true;
     result.normalized_query = std::move(normalized_query);
     return result;
@@ -128,6 +129,7 @@ using dasall::tests::support::assert_true;
     RecallCoordinatorResult result;
     result.ok = true;
     result.candidates.sparse_succeeded = true;
+    result.candidates.warnings = {"dense_lane_skipped_default_lexical"};
     result.candidates.sparse_hits = {RecallHit{
         .corpus_id = "adr_normative",
         .document_id = "adr-001",
@@ -168,6 +170,7 @@ using dasall::tests::support::assert_true;
     snapshot.state = HealthState::Healthy;
     snapshot.active_snapshot_id = "snapshot-telemetry-fields";
     snapshot.freshness_state = FreshnessState::Fresh;
+    snapshot.vector_backend_available = true;
     snapshot.last_known_good_available = true;
     return snapshot;
   };
@@ -193,6 +196,18 @@ void test_retrieve_telemetry_prefers_query_profile_id_when_present() {
                "telemetry fields test should emit exactly one retrieve event");
   assert_equal(std::string("edge_balanced"), telemetry_events.front().profile_id,
                "retrieve telemetry should prefer the explicit query profile_id");
+  assert_true(telemetry_events.front().vector_backend_ready,
+              "retrieve telemetry should surface vector backend readiness");
+  assert_equal(1, static_cast<int>(telemetry_events.front().sparse_hit_count),
+               "retrieve telemetry should surface sparse lane hit count");
+  assert_equal(0, static_cast<int>(telemetry_events.front().dense_hit_count),
+               "retrieve telemetry should surface dense lane hit count even when zero");
+  assert_equal(2, static_cast<int>(telemetry_events.front().warning_count),
+               "retrieve telemetry should preserve the total warning count");
+  assert_true(telemetry_events.front().warning_summary ==
+                  std::vector<std::string>{"query_text_trimmed",
+                                           "dense_lane_skipped_default_lexical"},
+              "retrieve telemetry should aggregate warning summary from normalize and recall stages");
 }
 
 void test_retrieve_telemetry_falls_back_to_config_profile_id() {
@@ -209,6 +224,8 @@ void test_retrieve_telemetry_falls_back_to_config_profile_id() {
                "telemetry fields test should emit exactly one retrieve event");
   assert_equal(std::string("desktop_full"), telemetry_events.front().profile_id,
                "retrieve telemetry should fall back to the initialized config profile_id");
+  assert_true(telemetry_events.front().vector_backend_ready,
+              "retrieve telemetry should keep vector backend readiness when falling back to config profile_id");
 }
 
 }  // namespace
