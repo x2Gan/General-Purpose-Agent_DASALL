@@ -371,6 +371,24 @@ class RuntimeKnowledgeVectorRecallStore final : public knowledge::retrieve::IVec
   knowledge::DenseStoreFactoryContext context_;
 };
 
+class RuntimeDetachedVectorQueryEncoder final : public knowledge::retrieve::IQueryEncoder {
+ public:
+  explicit RuntimeDetachedVectorQueryEncoder(memory::MemoryConfig memory_config)
+      : memory_config_(std::move(memory_config)) {}
+
+  [[nodiscard]] std::vector<float> encode(std::string_view query_text) const override {
+    return memory::encode_detached_vector_query_for_local_fallback(memory_config_,
+                                                                   query_text);
+  }
+
+  [[nodiscard]] bool available() const override {
+    return memory::detached_vector_local_query_encoder_available(memory_config_);
+  }
+
+ private:
+  memory::MemoryConfig memory_config_;
+};
+
 [[nodiscard]] knowledge::index::DenseSnapshotBuildResult build_knowledge_dense_snapshot(
     const memory::MemoryConfig& memory_config,
     const knowledge::index::DenseSnapshotBuildRequest& request) {
@@ -1458,10 +1476,10 @@ struct KnowledgeAutoRefreshArmResult {
     std::string& error) {
   const profiles::ProfileCatalog catalog(profiles_root);
   const profiles::BuildProfileResolver resolver(catalog);
-  const auto manifest_result = resolver.resolve_build_manifest(
-      profiles::BuildProfileResolveRequest{
-          .profile_id = policy_snapshot.effective_profile_id(),
-      });
+    profiles::BuildProfileResolveRequest resolve_request;
+    resolve_request.profile_id = policy_snapshot.effective_profile_id();
+    resolve_request.expected_target_platform = std::nullopt;
+    const auto manifest_result = resolver.resolve_build_manifest(resolve_request);
   if (!manifest_result.ok()) {
     error = std::string("build manifest unavailable for profile ") +
             policy_snapshot.effective_profile_id();
@@ -2409,6 +2427,12 @@ RuntimeDependencyCompositionResult compose_minimal_live_dependency_set(
                                    const knowledge::DenseStoreFactoryContext& context) {
       return std::make_unique<RuntimeKnowledgeVectorRecallStore>(vector_memory_config,
                                                                  context);
+    };
+  }
+  if (!create_query_encoder && knowledge_hybrid_runtime_configured) {
+    const auto vector_memory_config = *memory_config;
+    create_query_encoder = [vector_memory_config]() {
+      return std::make_unique<RuntimeDetachedVectorQueryEncoder>(vector_memory_config);
     };
   }
 

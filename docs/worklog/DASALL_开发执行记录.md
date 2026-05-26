@@ -1,3 +1,33 @@
+# 记录 #820
+
+- 日期：2026-05-26
+- 阶段：knowledge/vector capability post-eval remediation
+- 任务：向量能力三阶段评估整改：默认 query encoder 接线与 strict hybrid evidence gate
+- 状态：已完成（代码、脚本、SSOT / TODO 回写与 focused validation 已落盘）
+
+### 改动
+
+1. 更新 `memory/include/vector/DetachedVectorIndexFactory.h` 与 `memory/src/vector/DetachedVectorIndexFactory.cpp`，新增 env-gated local query embedding helper；`DASALL_DETACHED_VECTOR_LOCAL_FALLBACK=1` 开启时可复用 memory-owned local embedding fallback 生成 query embedding，否则返回不可用 / 空 embedding。
+2. 更新 `apps/runtime_support/src/RuntimeLiveDependencyComposition.cpp`，新增 `RuntimeDetachedVectorQueryEncoder`，并在 vector runtime configured 且无显式 `create_query_encoder_override` 时注入默认 query encoder；默认 Agent 主链仍保持 `LexicalOnly`，只有 allowlisted explicit hybrid canary 请求会走 Hybrid admission。
+3. 扩展 `tests/integration/access/RuntimeKnowledgeQueryEncoderIntegrationTest.cpp`，新增 scoped env helper 与 env-enabled default local fallback positive path，覆盖“无 override + local fallback env 开启 -> embedding-required vector store 收到 query embedding -> Hybrid admitted”。
+4. 更新 `scripts/packaging/knowledge_local_installed_proof.sh` 与 `scripts/packaging/knowledge_refresh_retrieve_soak.sh`，把 `--hybrid-canary` 从 fallback-friendly 记录升级为 strict positive gate：必须 `mode=hybrid`、包含 `runtime_canary_admitted`、`vector_backend_ready=true` 且 `dense_hit_count>0`。
+5. 回写 `docs/ssot/BusinessChainIntegrationMatrix.md`、`docs/todos/DASALL_子系统查漏补缺专项记录.md`、`docs/todos/knowledge/DASALL_knowledge子系统专项TODO.md` 与 `docs/todos/knowledge/deliverables/KNO-TODO-040-installed-local-hybrid-canary-soak-evidence双轨任务包.md`，统一说明历史 lexical fallback artifact 仅作为问题发现证据，不再作为 Gate-L / installed hybrid evidence 通过依据。
+
+### 验证
+
+1. `Build_CMakeTools(buildTargets=["dasall_memory","dasall_apps_runtime_support","dasall_runtime_knowledge_query_encoder_integration_test"])`
+   - 结果：通过。
+2. `cmake --build build/vscode-linux-ninja --target dasall_runtime_knowledge_query_encoder_integration_test && ./build/vscode-linux-ninja/tests/integration/access/dasall_runtime_knowledge_query_encoder_integration_test && printf '%s\n' PASS`
+   - 结果：`PASS`。
+3. `bash -n scripts/packaging/knowledge_local_installed_proof.sh scripts/packaging/knowledge_refresh_retrieve_soak.sh`
+   - 结果：通过，无输出。
+
+### 结果
+
+1. 原评估发现的核心 High 缺口已收口：installed/local hybrid canary 的 systemd fallback env 现在有对应 runtime query encoder，可形成真正 query embedding，而不是只让 dense snapshot builder 可用。
+2. installed proof / soak 不再把 `mode=lexical_only`、`runtime_canary_backend_not_ready`、`dense_hit_count=0` 记录为通过；strict gate 会直接失败并暴露问题。
+3. 业务链口径已分层：显式 CLI/daemon canary 链路进入 strict gate；默认 AgentOrchestrator 主链继续 lexical-only fail-safe；本轮未执行重构包后的 real installed strict proof / soak，需由后续 package/release 环境复核。
+
 # 记录 #819
 
 - 日期：2026-05-26
@@ -58,7 +88,7 @@
 ### 结果
 
 1. local proof / soak 现已把 hybrid canary request、mode、reason_codes、selected_corpora、vector_backend_ready 与 dense artifact presence 固化为 authoritative local evidence；当前主机即使只返回 lexical fallback，也不会再把“无混合证据”静默吞掉。
-2. release-runner local knowledge proof / soak 现默认走 `--hybrid-canary`，owner README 和双轨任务包也已同步到 fallback-friendly contract，不再把 `Hybrid` / `runtime_canary_admitted` 误当成本机 hard gate。
+2. release-runner local knowledge proof / soak 现默认走 `--hybrid-canary`，owner README 和双轨任务包也已同步到 artifact contract；该 fallback-friendly 口径已在记录 #820 的 post-eval 整改中升级为 strict positive gate。
 3. `KNO-TODO-040` 已完成；按用户要求的串行推进顺序，下一原子任务进入 `KNO-TODO-041`。
 
 # 记录 #817

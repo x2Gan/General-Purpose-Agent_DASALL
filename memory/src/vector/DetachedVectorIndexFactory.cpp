@@ -5,6 +5,7 @@
 #include <cstdlib>
 #include <memory>
 #include <string>
+#include <string_view>
 
 #include "vector/SimpleLocalEmbeddingAdapter.h"
 #include "vector/SqliteVssVectorBackend.h"
@@ -220,6 +221,26 @@ bool detached_vector_index_backend_available(
 
   const SqliteVssVectorBackend backend(config.vector, database, nullptr);
   return backend.is_available();
+}
+
+bool detached_vector_local_query_encoder_available(
+    const MemoryConfig&) {
+  return local_embedding_fallback_enabled();
+}
+
+std::vector<float> encode_detached_vector_query_for_local_fallback(
+    const MemoryConfig&,
+    std::string_view query_text) {
+  if (query_text.empty()) {
+    return {};
+  }
+
+  if (!local_embedding_fallback_enabled()) {
+    return {};
+  }
+
+  const SimpleLocalEmbeddingAdapter embedding_adapter;
+  return embedding_adapter.embed(std::string(query_text));
 }
 
 std::vector<VectorHit> search_detached_vector_index_by_embedding(

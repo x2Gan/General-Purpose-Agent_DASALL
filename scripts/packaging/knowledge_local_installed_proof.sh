@@ -338,6 +338,14 @@ if hybrid_canary_enabled:
         }
     )
     data['hybrid_canary_has_dense_artifact'] = data['hybrid_canary_dense_hit_count'] > 0
+    if data['hybrid_canary_mode'] != 'hybrid':
+      raise SystemExit('hybrid canary did not use hybrid mode')
+    if 'runtime_canary_admitted' not in data['hybrid_canary_reason_codes']:
+      raise SystemExit('hybrid canary was not admitted by runtime canary gate')
+    if not data['hybrid_canary_vector_backend_ready']:
+      raise SystemExit('hybrid canary vector backend was not ready')
+    if data['hybrid_canary_dense_hit_count'] <= 0:
+      raise SystemExit('hybrid canary did not record a dense artifact hit')
 
 (artifact_dir / 'knowledge-proof.json').write_text(
     json.dumps(data, indent=2) + '\n',
@@ -428,11 +436,13 @@ if [ "$HYBRID_CANARY" -eq 1 ]; then
   assert_json_contains "$KNOWLEDGE_RETRIEVE_HYBRID_CANARY_JSON" '"disposition":"completed"' 'knowledge hybrid canary retrieve smoke'
   assert_json_contains "$KNOWLEDGE_RETRIEVE_HYBRID_CANARY_JSON" '\"operation\":\"retrieve\"' 'knowledge hybrid canary payload'
   assert_json_contains "$KNOWLEDGE_RETRIEVE_HYBRID_CANARY_JSON" '\"ok\":true' 'knowledge hybrid canary ok'
+  assert_json_contains "$KNOWLEDGE_RETRIEVE_HYBRID_CANARY_JSON" '\"mode\":\"hybrid\"' 'knowledge hybrid canary mode'
+  assert_json_contains "$KNOWLEDGE_RETRIEVE_HYBRID_CANARY_JSON" 'runtime_canary_admitted' 'knowledge hybrid canary admitted'
+  assert_json_contains "$KNOWLEDGE_RETRIEVE_HYBRID_CANARY_JSON" '\"vector_backend_ready\":true' 'knowledge hybrid canary vector backend ready'
   assert_json_matches "$KNOWLEDGE_RETRIEVE_HYBRID_CANARY_JSON" '\\"slice_count\\":[1-9][0-9]*' 'knowledge hybrid canary slice count'
   assert_json_matches "$KNOWLEDGE_RETRIEVE_HYBRID_CANARY_JSON" 'selected_corpora|corpus_summary' 'knowledge hybrid canary corpus summary'
-  assert_json_matches "$KNOWLEDGE_RETRIEVE_HYBRID_CANARY_JSON" '\\"vector_backend_ready\\":(true|false)' 'knowledge hybrid canary vector backend marker'
   assert_json_matches "$KNOWLEDGE_RETRIEVE_HYBRID_CANARY_JSON" '\\"sparse_hit_count\\":[0-9]+' 'knowledge hybrid canary sparse hit count'
-  assert_json_matches "$KNOWLEDGE_RETRIEVE_HYBRID_CANARY_JSON" '\\"dense_hit_count\\":[0-9]+' 'knowledge hybrid canary dense hit count'
+  assert_json_matches "$KNOWLEDGE_RETRIEVE_HYBRID_CANARY_JSON" '\\"dense_hit_count\\":[1-9][0-9]*' 'knowledge hybrid canary dense hit count'
 fi
 
 KNOWLEDGE_HEALTH_FINAL_JSON=$(run_root dasall-cli knowledge health --json --timeout-ms "$TIMEOUT_MS")

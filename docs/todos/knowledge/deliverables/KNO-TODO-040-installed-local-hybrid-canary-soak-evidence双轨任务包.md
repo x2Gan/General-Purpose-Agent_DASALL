@@ -93,12 +93,12 @@
    - 代码目标：`scripts/packaging/knowledge_local_installed_proof.sh`
    - 测试目标：脚本语法检查；fresh-install local proof artifact contract
    - 验收命令：`sh -n scripts/packaging/knowledge_local_installed_proof.sh`；`dpkg-buildpackage -us -uc -b`；`bash scripts/packaging/knowledge_local_installed_proof.sh --artifact-dir /tmp/dasall-kno-todo-040-proof --hybrid-canary`
-   - 风险与回退：若 release runner secrets / encoder 不可用，artifact 仍需记录 mode / degraded / reason / dense artifact presence，不得把“无混合证据”静默吞掉
+   - 风险与回退：若 release runner secrets / encoder 不可用，artifact 可作为问题证据归档，但 strict gate 必须失败，不得把 lexical fallback 当作通过
 2. B2：扩展 soak 脚本
    - 代码目标：`scripts/packaging/knowledge_refresh_retrieve_soak.sh`
    - 测试目标：脚本语法检查；10 轮 refresh + hybrid canary artifact contract
    - 验收命令：`sh -n scripts/packaging/knowledge_refresh_retrieve_soak.sh`；`bash scripts/packaging/knowledge_refresh_retrieve_soak.sh --artifact-dir /tmp/dasall-kno-todo-040-soak --iterations 10 --hybrid-canary`
-   - 风险与回退：若某轮 hybrid canary 只能 lexical fallback，也必须把 mode / reason / dense artifact presence 写入 summary，不得让 soak 摘要只剩 provider baseline 成功
+   - 风险与回退：若某轮 hybrid canary 只能 lexical fallback，soak summary 可用于定位问题，但 strict gate 必须失败，不得让 provider baseline 成功掩盖 hybrid 未命中
 3. B3：固定 release workflow / smoke 接线
    - 代码目标：`.github/workflows/release-package-gate.yml`；可选 `debian/tests/pkg-smoke-local-control-plane`
    - 测试目标：workflow wiring review；必要时 package smoke 轻断言
@@ -117,15 +117,15 @@
 
 `KNO-TODO-040-B` 仅当以下条件同时满足时完成：
 
-1. local installed proof 已固定 hybrid canary request，并把 mode、degraded、reason_codes、warning_summary、selected_corpora、vector_backend_ready、sparse/dense hit 摘要写入 artifact。
-2. soak summary 已能覆盖 hybrid canary repeatability，不再只有 provider baseline success 结论。
+1. local installed proof 已固定 hybrid canary request，并要求 `mode=hybrid`、`runtime_canary_admitted`、`vector_backend_ready=true`、`dense_hit_count>0` 同时成立。
+2. soak summary 已能覆盖 hybrid canary repeatability，且每轮都必须满足 strict hybrid positive 条件，不再只有 provider baseline success 结论。
 3. release workflow 已默认执行 `--hybrid-canary` 的 local proof / soak，并归档新增 hybrid artifact。
 4. 验收命令 `dpkg-buildpackage -us -uc -b`、`bash scripts/packaging/knowledge_local_installed_proof.sh --artifact-dir /tmp/dasall-kno-todo-040-proof --hybrid-canary`、`bash scripts/packaging/knowledge_refresh_retrieve_soak.sh --artifact-dir /tmp/dasall-kno-todo-040-soak --iterations 10 --hybrid-canary` 能形成 authoritative local evidence。
 5. 未把 qemu / autopkgtest 变成 040 的完成前提，且未回退 039 的 explain surface owner 边界。
 
 ## 10. Build 完成证据
 
-1. `scripts/packaging/knowledge_local_installed_proof.sh` 已新增 `--hybrid-canary` additive path、临时 `DASALL_DETACHED_VECTOR_LOCAL_FALLBACK=1` systemd drop-in、`knowledge-retrieve-hybrid-canary.json` raw artifact 与 `knowledge-proof.json` 的 `hybrid_canary_*` 摘要；同时修正 summary 对 escaped JSON array 的解析与 corpus summary 断言，避免 valid fallback artifact 被误判为失败。
-2. `scripts/packaging/knowledge_refresh_retrieve_soak.sh` 已为每轮新增 `iteration-XX-retrieve-hybrid-canary.json`，并把 `hybrid_mode_values`、`all_hybrid_iterations_have_selected_corpora`、`all_hybrid_iterations_record_dense_artifact_presence`、`any_hybrid_iteration_has_dense_artifact`、`min_hybrid_dense_hit_count` 与 `hybrid_reason_code_union` 固化到 `knowledge-soak-summary.json`；末尾 summary 不再错误强制 `Hybrid` / `runtime_canary_admitted`，而是按 040 D 包要求记录 fallback 事实。
-3. `.github/workflows/release-package-gate.yml` 与 `scripts/packaging/README.md` 已同步到新的 owner contract：release-runner local proof / soak 步骤默认追加 `--hybrid-canary`，归档与文档说明现在都把 raw hybrid artifact、summary 统计与 fallback-friendly evidence 当作 knowledge local authoritative owner 的一部分。
-4. 2026-05-26 已在本机 real installed-package 环境通过 `dpkg-buildpackage -us -uc -b`、`bash scripts/packaging/knowledge_local_installed_proof.sh --artifact-dir /tmp/dasall-kno-todo-040-proof-pass2 --hybrid-canary` 与 `bash scripts/packaging/knowledge_refresh_retrieve_soak.sh --artifact-dir /tmp/dasall-kno-todo-040-soak-pass2 --iterations 10 --hybrid-canary`；`knowledge-proof.json` 记录 `hybrid_canary_mode=lexical_only`、`hybrid_canary_reason_codes` 含 `runtime_canary_backend_not_ready`、`hybrid_canary_selected_corpora=["adr_normative"]`、`hybrid_canary_vector_backend_ready=false`、`hybrid_canary_dense_hit_count=0`，`knowledge-soak-summary.json` 记录 `iterations_completed=10`、`hybrid_mode_values=["lexical_only"]`、`all_hybrid_iterations_have_selected_corpora=true`、`all_hybrid_iterations_record_dense_artifact_presence=true`、`any_hybrid_iteration_has_dense_artifact=false`、`min_hybrid_dense_hit_count=0`，并保留 `runtime_canary_backend_not_ready` 在 `hybrid_reason_code_union` 中；final health 全程保持 `state=degraded`、`freshness_state=fresh` 与 `reason_codes=["vector_backend_disabled"]`，说明当前主机 fallback 事实已被完整落盘，而不是被静默吞掉。
+1. `scripts/packaging/knowledge_local_installed_proof.sh` 已新增 `--hybrid-canary` additive path、临时 `DASALL_DETACHED_VECTOR_LOCAL_FALLBACK=1` systemd drop-in、`knowledge-retrieve-hybrid-canary.json` raw artifact 与 `knowledge-proof.json` 的 `hybrid_canary_*` 摘要；post-eval 整改后，shell assert 与 summary Python 都会 hard-fail 非 `hybrid`、缺少 `runtime_canary_admitted`、`vector_backend_ready=false` 或 `dense_hit_count=0` 的结果。
+2. `scripts/packaging/knowledge_refresh_retrieve_soak.sh` 已为每轮新增 `iteration-XX-retrieve-hybrid-canary.json`，并把 `hybrid_mode_values`、`all_hybrid_iterations_have_selected_corpora`、`all_hybrid_iterations_record_dense_artifact_presence`、`any_hybrid_iteration_has_dense_artifact`、`min_hybrid_dense_hit_count` 与 `hybrid_reason_code_union` 固化到 `knowledge-soak-summary.json`；post-eval 整改后，任一轮非 `hybrid`、未 admitted、backend 未 ready 或 dense hit 为 0 都会 hard-fail。
+3. `.github/workflows/release-package-gate.yml` 与 `scripts/packaging/README.md` 已同步到新的 owner contract：release-runner local proof / soak 步骤默认追加 `--hybrid-canary`，归档与文档说明现在都把 raw hybrid artifact、summary 统计与 strict positive evidence 当作 knowledge local authoritative owner 的一部分。
+4. 2026-05-26 post-eval 整改已把历史 installed `mode=lexical_only` / `runtime_canary_backend_not_ready` / `dense_hit_count=0` artifact 重新归类为问题发现证据；新的完成判定必须在重构包后通过 strict proof / soak，并生成 `mode=hybrid`、`runtime_canary_admitted`、`vector_backend_ready=true`、`dense_hit_count>0` 的当轮 artifact。本轮已通过 focused query encoder 集成测试与 `bash -n` 脚本语法门禁，real installed strict rerun 归入后续 package/release 环境复核。

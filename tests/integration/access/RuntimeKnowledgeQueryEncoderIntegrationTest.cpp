@@ -1,5 +1,6 @@
 #include <algorithm>
 #include <chrono>
+#include <cstdlib>
 #include <exception>
 #include <filesystem>
 #include <iostream>
@@ -50,6 +51,35 @@ class TempStateRoot {
 
  private:
   fs::path path_;
+};
+
+class ScopedEnvironmentVariable {
+ public:
+  ScopedEnvironmentVariable(std::string name, std::optional<std::string> value)
+      : name_(std::move(name)) {
+    const char* existing_value = std::getenv(name_.c_str());
+    if (existing_value != nullptr) {
+      previous_value_ = existing_value;
+    }
+
+    if (value.has_value()) {
+      setenv(name_.c_str(), value->c_str(), 1);
+    } else {
+      unsetenv(name_.c_str());
+    }
+  }
+
+  ~ScopedEnvironmentVariable() {
+    if (previous_value_.has_value()) {
+      setenv(name_.c_str(), previous_value_->c_str(), 1);
+    } else {
+      unsetenv(name_.c_str());
+    }
+  }
+
+ private:
+  std::string name_;
+  std::optional<std::string> previous_value_;
 };
 
 [[nodiscard]] std::shared_ptr<const dasall::profiles::RuntimePolicySnapshot>
@@ -194,26 +224,32 @@ struct ComposedKnowledgeRuntime {
   auto owned_store =
       std::make_shared<std::unique_ptr<RecordingEmbeddingRequiredVectorRecallStore>>(
           std::move(vector_store));
-  auto owned_encoder =
-      std::make_shared<std::unique_ptr<StaticQueryEncoder>>(std::move(query_encoder));
+  dasall::apps::runtime_support::RuntimeLiveDependencyCompositionOptions options{
+      .readonly_assets_root_override = readonly_assets_root,
+      .runtime_library_root_override = fs::path{},
+      .state_root_override = state_root,
+      .build_dense_snapshot_override = build_fake_dense_snapshot,
+      .create_vector_recall_store_override =
+          [owned_store](const dasall::knowledge::DenseStoreFactoryContext&) mutable {
+            return std::move(*owned_store);
+          },
+      .create_query_encoder_override = {},
+      .knowledge_refresh_timer = nullptr,
+  };
+
+  if (with_query_encoder) {
+    auto owned_encoder =
+        std::make_shared<std::unique_ptr<StaticQueryEncoder>>(std::move(query_encoder));
+    options.create_query_encoder_override =
+        [owned_encoder]() mutable -> std::unique_ptr<dasall::knowledge::retrieve::IQueryEncoder> {
+          return std::move(*owned_encoder);
+        };
+  }
 
   const auto composition = dasall::apps::runtime_support::compose_minimal_live_dependency_set(
       policy_snapshot,
       kCompositionOwner,
-      dasall::apps::runtime_support::RuntimeLiveDependencyCompositionOptions{
-          .readonly_assets_root_override = readonly_assets_root,
-          .runtime_library_root_override = {},
-          .state_root_override = state_root,
-          .build_dense_snapshot_override = build_fake_dense_snapshot,
-          .create_vector_recall_store_override =
-              [owned_store](const dasall::knowledge::DenseStoreFactoryContext&) mutable {
-                return std::move(*owned_store);
-              },
-          .create_query_encoder_override =
-              [owned_encoder]() mutable -> std::unique_ptr<dasall::knowledge::retrieve::IQueryEncoder> {
-                return std::move(*owned_encoder);
-              },
-      });
+      options);
   assert_true(composition.ok(),
               "runtime query encoder integration should compose dependencies: " +
                   composition.error);
@@ -264,6 +300,9 @@ void runtime_query_encoder_integration_allows_hybrid_when_encoder_is_ready() {
 }
 
 void runtime_query_encoder_integration_falls_back_when_encoder_is_missing() {
+  const ScopedEnvironmentVariable local_fallback_disabled(
+      "DASALL_DETACHED_VECTOR_LOCAL_FALLBACK",
+      std::nullopt);
   const auto policy_snapshot = load_runtime_policy_snapshot("desktop_full");
   const TempStateRoot assets_root("dasall-runtime-query-encoder-assets-fallback");
   const TempStateRoot state_root("dasall-runtime-query-encoder-state-fallback");
@@ -286,12 +325,44 @@ void runtime_query_encoder_integration_falls_back_when_encoder_is_missing() {
               "runtime query encoder integration should not call the embedding-required vector store when encoder is missing");
 }
 
+void runtime_query_encoder_integration_uses_local_fallback_encoder_when_enabled() {
+  const ScopedEnvironmentVariable local_fallback_enabled(
+      "DASALL_DETACHED_VECTOR_LOCAL_FALLBACK",
+      std::string("1"));
+  const auto policy_snapshot = load_runtime_policy_snapshot("desktop_full");
+  const TempStateRoot assets_root("dasall-runtime-query-encoder-assets-local-fallback");
+  const TempStateRoot state_root("dasall-runtime-query-encoder-state-local-fallback");
+  copy_installed_runtime_assets(assets_root.path());
+
+  auto composed = compose_runtime(policy_snapshot,
+                                  assets_root.path(),
+                                  state_root.path(),
+                                  false);
+  if (composed.vector_store != nullptr) {
+    composed.vector_store->last_request_.reset();
+  }
+  const auto result = composed.knowledge_service->retrieve(
+      make_allowlisted_hybrid_query("local-fallback"));
+
+  assert_true(result.ok,
+              "runtime query encoder integration should keep local fallback encoder canary successful");
+  assert_true(result.mode == dasall::knowledge::RetrievalMode::Hybrid,
+              "runtime query encoder integration should admit hybrid when local fallback encoder is explicitly enabled");
+  assert_true(contains_reason_code(result.reason_codes, "runtime_canary_admitted"),
+              "runtime query encoder integration should record admitted canary on local fallback encoder path");
+  assert_true(composed.vector_store != nullptr && composed.vector_store->last_request_.has_value(),
+              "runtime query encoder integration should drive the embedding-required vector store with local fallback encoder");
+  assert_true(!composed.vector_store->last_request_->query_embedding.empty(),
+              "runtime query encoder integration should attach a non-empty local fallback query embedding");
+}
+
 }  // namespace
 
 int main() {
   try {
     runtime_query_encoder_integration_allows_hybrid_when_encoder_is_ready();
     runtime_query_encoder_integration_falls_back_when_encoder_is_missing();
+    runtime_query_encoder_integration_uses_local_fallback_encoder_when_enabled();
   } catch (const std::exception& ex) {
     std::cerr << "[RuntimeKnowledgeQueryEncoderIntegrationTest] FAILED: "
               << ex.what() << '\n';

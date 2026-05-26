@@ -237,11 +237,13 @@ run_iteration() {
     assert_json_contains "$hybrid_json" '"disposition":"completed"' "iteration ${label} hybrid canary retrieve"
     assert_json_contains "$hybrid_json" '\"operation\":\"retrieve\"' "iteration ${label} hybrid canary payload"
     assert_json_contains "$hybrid_json" '\"ok\":true' "iteration ${label} hybrid canary ok"
+    assert_json_contains "$hybrid_json" '\"mode\":\"hybrid\"' "iteration ${label} hybrid canary mode"
+    assert_json_contains "$hybrid_json" 'runtime_canary_admitted' "iteration ${label} hybrid canary admitted"
+    assert_json_contains "$hybrid_json" '\"vector_backend_ready\":true' "iteration ${label} hybrid vector backend ready"
     assert_json_matches "$hybrid_json" '\\"slice_count\\":[1-9][0-9]*' "iteration ${label} hybrid canary slice count"
     assert_json_matches "$hybrid_json" 'selected_corpora|corpus_summary' "iteration ${label} hybrid corpus summary"
-    assert_json_matches "$hybrid_json" '\\"vector_backend_ready\\":(true|false)' "iteration ${label} hybrid vector backend marker"
     assert_json_matches "$hybrid_json" '\\"sparse_hit_count\\":[0-9]+' "iteration ${label} hybrid sparse hit count"
-    assert_json_matches "$hybrid_json" '\\"dense_hit_count\\":[0-9]+' "iteration ${label} hybrid dense hit count"
+    assert_json_matches "$hybrid_json" '\\"dense_hit_count\\":[1-9][0-9]*' "iteration ${label} hybrid dense hit count"
   fi
 
   health_final_json=$(run_root dasall-cli knowledge health --json --timeout-ms "$TIMEOUT_MS")
@@ -418,6 +420,14 @@ if not summary['all_final_health_refresh_in_flight_false_or_absent']:
   raise SystemExit('knowledge soak observed refresh_in_flight after final health probe')
 if hybrid_canary_enabled and not summary['all_hybrid_iterations_have_selected_corpora']:
     raise SystemExit('knowledge soak observed a hybrid canary iteration without selected corpora')
+if hybrid_canary_enabled and summary['hybrid_mode_values'] != ['hybrid']:
+  raise SystemExit('knowledge soak observed a hybrid canary mode different from hybrid')
+if hybrid_canary_enabled and not summary['all_hybrid_iterations_admitted']:
+  raise SystemExit('knowledge soak observed a hybrid canary iteration without runtime_canary_admitted')
+if hybrid_canary_enabled and not summary['all_hybrid_iterations_vector_backend_ready']:
+  raise SystemExit('knowledge soak observed a hybrid canary iteration without ready vector backend')
+if hybrid_canary_enabled and summary['min_hybrid_dense_hit_count'] <= 0:
+  raise SystemExit('knowledge soak observed a hybrid canary iteration without a dense hit')
 
 (artifact_dir / 'knowledge-soak-summary.json').write_text(
     json.dumps(summary, indent=2) + '\n',
