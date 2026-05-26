@@ -1,3 +1,38 @@
+# 记录 #819
+
+- 日期：2026-05-26
+- 阶段：knowledge/runtime-owned refresh automation
+- 任务：KNO-TODO-041 建立 Runtime-owned selective refresh automation
+- 状态：已完成（代码、focused validation、TODO 回写已落盘）
+
+### 改动
+
+1. 更新 `platform/include/linux/PosixTimerProvider.h`、`platform/src/linux/PosixTimerProvider.cpp` 与 `tests/unit/platform/linux/PosixTimerProviderTest.cpp`，把 Linux timer provider 从 handle-only skeleton 收口为真实 callback delivery + cancel 语义；focused unit gate 现能直接验证 periodic callback 至少触发一次且 cancel 后不再继续回调。
+2. 更新 `apps/runtime_support/CMakeLists.txt`、`apps/runtime_support/include/RuntimeLiveDependencyComposition.h` 与 `apps/runtime_support/src/RuntimeLiveDependencyComposition.cpp`，为 runtime live composition 新增 `platform::ITimer` 注入 seam，并把 installed knowledge service 包装成 runtime-owned periodic full-scan auto-refresh controller：timer tick 固定走 `request_refresh(CorpusChangeSet{})`，timer-ready path 写出 `runtime:<owner>:knowledge-refresh-automation-ready`，timer 缺失或 arm 失败时写出 `runtime:<owner>:knowledge-refresh-automation-fallback:*`。
+3. 更新 `apps/daemon/src/main.cpp`、`apps/gateway/CMakeLists.txt`、`apps/gateway/src/main.cpp`、`tests/integration/knowledge/KnowledgeRefreshLoopTest.cpp`、`tests/integration/knowledge/CMakeLists.txt`、`tests/integration/access/CMakeLists.txt` 与 `tests/integration/access/RuntimeLiveCompositionFailureMatrixTest.cpp`，新增 `tests/integration/knowledge/KnowledgeRuntimeAutoRefreshIntegrationTest.cpp`；daemon/gateway 现默认注入 `PosixTimerProvider`，Knowledge refresh loop 新增 empty `CorpusChangeSet` full-scan fallback regression，新的 runtime auto-refresh integration 与 failure matrix 已锁定 timer tick refresh 闭环和 automation ready/fallback 分层 marker。
+
+### 验证
+
+1. `Build_CMakeTools(buildTargets=["dasall_posix_timer_provider_unit_test"])`
+   - 结果：通过。
+2. `./build/vscode-linux-ninja/tests/unit/platform/linux/dasall_posix_timer_provider_unit_test && echo PASS`
+   - 结果：`PASS`。
+3. `Build_CMakeTools(buildTargets=["dasall_knowledge_refresh_loop_integration_test","dasall_knowledge_runtime_auto_refresh_integration_test"])`
+   - 结果：通过。
+4. `./build/vscode-linux-ninja/tests/integration/knowledge/dasall_knowledge_refresh_loop_integration_test && ./build/vscode-linux-ninja/tests/integration/knowledge/dasall_knowledge_runtime_auto_refresh_integration_test && echo PASS`
+   - 结果：`PASS`。
+5. `Build_CMakeTools(buildTargets=["dasall-daemon","dasall_gateway","dasall_access_runtime_live_composition_failure_matrix_integration_test"])`
+   - 结果：通过。
+6. `./build/vscode-linux-ninja/tests/integration/access/dasall_access_runtime_live_composition_failure_matrix_integration_test && echo PASS`
+   - 结果：`PASS`。
+7. `RunCtest_CMakeTools` 对 `PosixTimerProviderTest`、`KnowledgeRefreshLoopTest`、`KnowledgeRuntimeAutoRefreshIntegrationTest` 与 `RuntimeLiveCompositionFailureMatrixTest` 仍命中仓库已知泛化 `生成失败`，因此本轮继续按仓库回退口径使用 direct binary 验收 focused gate。
+
+### 结果
+
+1. dense snapshot freshness 现可由 runtime-owned periodic full-scan refresh 自动推进，不再长期依赖手工 `knowledge refresh` CLI；manual `changed_source -> updated_sources` selective seam 继续 authoritative，busy contract 未被自动化吞掉。
+2. daemon/gateway 入口现在都具备真实 `PosixTimerProvider` wiring，runtime live composition 也能稳定区分 `knowledge-refresh-automation-ready` 与 `knowledge-refresh-automation-fallback:*`，不会把 automation fallback 误写成 knowledge degraded。
+3. `KNO-TODO-041` 已完成；按用户要求串行推进的 `KNO-TODO-039`、`KNO-TODO-040`、`KNO-TODO-041` 已全部闭环。
+
 # 记录 #818
 
 - 日期：2026-05-26

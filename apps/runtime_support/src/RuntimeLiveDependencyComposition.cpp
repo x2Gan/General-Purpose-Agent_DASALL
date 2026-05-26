@@ -6,6 +6,7 @@
 #include <cstdlib>
 #include <filesystem>
 #include <functional>
+#include <limits>
 #include <memory>
 #include <map>
 #include <mutex>
@@ -23,6 +24,7 @@
 
 #include "LogEvent.h"
 #include "ICognitionEngine.h"
+#include "IKnowledgeService.h"
 #include "ILLMManager.h"
 #include "LLMGenerateRequest.h"
 #include "LLMManagerResult.h"
@@ -56,6 +58,7 @@
 #include "config/InstallLayout.h"
 #include "execution/BuiltinExecutorLane.h"
 #include "health/RuntimeHealthProbe.h"
+#include "ITimer.h"
 #include "maintenance/BackgroundMaintenanceHooks.h"
 #include "bridge/ToolServiceBridge.h"
 #include "registry/ToolRegistry.h"
@@ -1304,6 +1307,133 @@ class RuntimeControlPlaneHealthSignalProvider final
   };
 }
 
+constexpr std::string_view kKnowledgeRefreshAutomationReadySuffix =
+    ":knowledge-refresh-automation-ready";
+constexpr std::string_view kKnowledgeRefreshAutomationFallbackPrefix =
+    ":knowledge-refresh-automation-fallback:";
+constexpr std::string_view kKnowledgeRefreshAutomationTimerUnavailable =
+    "timer-unavailable";
+constexpr std::string_view kKnowledgeRefreshAutomationInvalidInterval =
+    "invalid-refresh-interval";
+constexpr std::string_view kKnowledgeRefreshAutomationTimerArmFailed =
+    "timer-arm-failed";
+
+class AutoRefreshKnowledgeService final : public knowledge::IKnowledgeService {
+ public:
+  AutoRefreshKnowledgeService(std::shared_ptr<knowledge::IKnowledgeService> inner_service,
+                              std::shared_ptr<platform::ITimer> timer,
+                              platform::TimerHandle timer_handle)
+      : inner_service_(std::move(inner_service)),
+        timer_(std::move(timer)),
+        timer_handle_(timer_handle) {}
+
+  ~AutoRefreshKnowledgeService() override {
+    if (timer_ != nullptr && timer_handle_.has_consistent_values()) {
+      (void)timer_->cancel(timer_handle_);
+    }
+  }
+
+  bool init(const knowledge::KnowledgeConfigSnapshot& config) override {
+    return inner_service_->init(config);
+  }
+
+  knowledge::KnowledgeRetrieveResult retrieve(
+      const knowledge::KnowledgeQuery& query) override {
+    return inner_service_->retrieve(query);
+  }
+
+  knowledge::KnowledgeHealthSnapshot health_snapshot() const override {
+    return inner_service_->health_snapshot();
+  }
+
+  knowledge::RefreshResult request_refresh(
+      const knowledge::CorpusChangeSet& changes) override {
+    return inner_service_->request_refresh(changes);
+  }
+
+ private:
+  std::shared_ptr<knowledge::IKnowledgeService> inner_service_;
+  std::shared_ptr<platform::ITimer> timer_;
+  platform::TimerHandle timer_handle_;
+};
+
+struct KnowledgeAutoRefreshArmResult {
+  std::shared_ptr<knowledge::IKnowledgeService> service;
+  std::string evidence;
+};
+
+[[nodiscard]] std::string make_runtime_knowledge_automation_evidence(
+    std::string_view composition_owner,
+    std::string_view suffix) {
+  return std::string("runtime:") + std::string(composition_owner) +
+         std::string(suffix);
+}
+
+[[nodiscard]] platform::TimerSpec make_knowledge_refresh_timer_spec(
+    const std::uint32_t refresh_interval_ms) {
+  return platform::TimerSpec{
+      .mode = platform::TimerMode::Periodic,
+      .interval_ms = refresh_interval_ms,
+      .initial_delay_ms = refresh_interval_ms,
+      .clock_kind = platform::TimerClockKind::Monotonic,
+  };
+}
+
+[[nodiscard]] KnowledgeAutoRefreshArmResult arm_runtime_knowledge_auto_refresh(
+    const std::shared_ptr<knowledge::IKnowledgeService>& knowledge_service,
+    const std::shared_ptr<platform::ITimer>& timer,
+    const std::int64_t refresh_interval_ms,
+    std::string_view composition_owner) {
+  if (timer == nullptr) {
+    return KnowledgeAutoRefreshArmResult{
+        .service = knowledge_service,
+        .evidence = make_runtime_knowledge_automation_evidence(
+            composition_owner,
+            std::string(kKnowledgeRefreshAutomationFallbackPrefix) +
+                std::string(kKnowledgeRefreshAutomationTimerUnavailable)),
+    };
+  }
+
+  if (refresh_interval_ms <= 0 ||
+      refresh_interval_ms >
+          static_cast<std::int64_t>(std::numeric_limits<std::uint32_t>::max())) {
+    return KnowledgeAutoRefreshArmResult{
+        .service = knowledge_service,
+        .evidence = make_runtime_knowledge_automation_evidence(
+            composition_owner,
+            std::string(kKnowledgeRefreshAutomationFallbackPrefix) +
+                std::string(kKnowledgeRefreshAutomationInvalidInterval)),
+    };
+  }
+
+  const auto started = timer->start_periodic(
+      make_knowledge_refresh_timer_spec(static_cast<std::uint32_t>(refresh_interval_ms)),
+      [knowledge_service](const platform::TimerDriftStats&) {
+        try {
+          static_cast<void>(knowledge_service->request_refresh(knowledge::CorpusChangeSet{}));
+        } catch (...) {
+        }
+      });
+  if (!started.ok()) {
+    return KnowledgeAutoRefreshArmResult{
+        .service = knowledge_service,
+        .evidence = make_runtime_knowledge_automation_evidence(
+            composition_owner,
+            std::string(kKnowledgeRefreshAutomationFallbackPrefix) +
+                std::string(kKnowledgeRefreshAutomationTimerArmFailed)),
+    };
+  }
+
+  return KnowledgeAutoRefreshArmResult{
+      .service = std::make_shared<AutoRefreshKnowledgeService>(knowledge_service,
+                                                               timer,
+                                                               *started.value),
+      .evidence = make_runtime_knowledge_automation_evidence(
+          composition_owner,
+          kKnowledgeRefreshAutomationReadySuffix),
+  };
+}
+
 [[nodiscard]] fs::path selected_root(const fs::path& default_root,
                                      const fs::path& override_root) {
   return override_root.empty() ? default_root : override_root;
@@ -2298,10 +2428,16 @@ RuntimeDependencyCompositionResult compose_minimal_live_dependency_set(
     const auto positive_probe_error =
       validate_installed_knowledge_positive_probe(knowledge_result.service);
     if (positive_probe_error.empty()) {
-      dependency_set->knowledge_service = knowledge_result.service;
+      const auto auto_refresh = arm_runtime_knowledge_auto_refresh(
+          knowledge_result.service,
+          options.knowledge_refresh_timer,
+          policy_snapshot->capability_cache_policy().refresh_interval_ms,
+          composition_owner);
+      dependency_set->knowledge_service = auto_refresh.service;
       dependency_set->external_evidence.push_back(
         std::string("runtime:") + std::string(composition_owner) +
         ":knowledge-installed-assets-ready");
+      dependency_set->external_evidence.push_back(auto_refresh.evidence);
       if (!knowledge_runtime_canary_allowlist.empty() &&
           installed_knowledge_hybrid_canary_ready(knowledge_result.service,
                                                   knowledge_runtime_canary_allowlist)) {

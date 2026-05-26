@@ -85,6 +85,7 @@ constexpr std::string_view kCorpusId = "adr_normative";
 constexpr std::string_view kDocumentSourceUri = "docs/adr/ADR-REFRESH.md";
 constexpr std::string_view kBaselineToken = "refreshstableanchor";
 constexpr std::string_view kUpdatedToken = "refreshupdatedanchor";
+constexpr std::string_view kFullScanUpdatedToken = "refreshfullscanupdatedanchor";
 
 class TempDirectory {
  public:
@@ -560,6 +561,37 @@ void test_refresh_loop_rejects_busy_request_while_real_refresh_is_in_flight() {
                                          "first refresh should still complete successfully after busy rejection");
 }
 
+void test_refresh_loop_full_scan_refresh_picks_up_updated_content_without_changed_sources() {
+  KnowledgeRefreshLoopHarness harness;
+  harness.write_document("# ADR Refresh\n\nrefreshstableanchor baseline evidence remains searchable before update.\n");
+
+  assert_refresh_accepted(harness.refresh(CorpusChangeSet{}),
+                          "initial full-scan refresh should accept the baseline corpus");
+  assert_refresh_reaches_terminal_status(harness,
+                                         RefreshStatus::Completed,
+                                         "initial full-scan refresh should complete before the fallback update runs");
+  const auto baseline_snapshot_id = harness.current_snapshot_id();
+
+  harness.write_document(
+      "# ADR Refresh\n\nrefreshfullscanupdatedanchor full-scan fallback refresh should pick this update up.\n");
+  assert_refresh_accepted(harness.refresh(CorpusChangeSet{}),
+                          "fallback full-scan refresh should accept an empty change set after content changed");
+  assert_refresh_reaches_terminal_status(harness,
+                                         RefreshStatus::Completed,
+                                         "fallback full-scan refresh should complete through the async worker");
+
+  const auto refreshed_snapshot_id = harness.current_snapshot_id();
+  assert_true(refreshed_snapshot_id != baseline_snapshot_id,
+              "full-scan fallback refresh should activate a new snapshot after content changes");
+
+  const auto retrieve_result = harness.retrieve("req-knowledge-refresh-full-scan",
+                                                std::string(kFullScanUpdatedToken));
+  assert_true(retrieve_result.ok && retrieve_result.evidence.has_value(),
+              "retrieve should succeed after the full-scan fallback refresh completes");
+  assert_true(evidence_contains_token(*retrieve_result.evidence, kFullScanUpdatedToken),
+              "full-scan fallback refresh should expose the updated token without changed_sources input");
+}
+
 void test_refresh_loop_rolls_back_to_last_known_good_when_swap_activation_fails() {
   KnowledgeRefreshLoopHarness harness;
   harness.write_document("# ADR Refresh\n\nrefreshstableanchor baseline evidence remains searchable before update.\n");
@@ -604,6 +636,7 @@ int main() {
   try {
     test_refresh_loop_swaps_updated_snapshot_and_retrieve_observes_new_content();
     test_refresh_loop_rejects_busy_request_while_real_refresh_is_in_flight();
+    test_refresh_loop_full_scan_refresh_picks_up_updated_content_without_changed_sources();
     test_refresh_loop_rolls_back_to_last_known_good_when_swap_activation_fails();
   } catch (const std::exception& exception) {
     std::cerr << exception.what() << '\n';

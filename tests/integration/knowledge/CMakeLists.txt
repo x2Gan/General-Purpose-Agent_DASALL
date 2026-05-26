@@ -85,6 +85,13 @@ dasall_add_knowledge_integration_test(
 )
 
 dasall_add_knowledge_integration_test(
+  dasall_knowledge_runtime_auto_refresh_integration_test
+  KnowledgeRuntimeAutoRefreshIntegrationTest
+  KnowledgeRuntimeAutoRefreshIntegrationTest.cpp
+  "integration;knowledge;runtime"
+)
+
+dasall_add_knowledge_integration_test(
   dasall_knowledge_installed_asset_probe_integration_test
   KnowledgeInstalledAssetProbeIntegrationTest
   KnowledgeInstalledAssetProbeIntegrationTest.cpp
@@ -198,6 +205,20 @@ target_include_directories(dasall_knowledge_refresh_loop_integration_test
 target_link_libraries(dasall_knowledge_refresh_loop_integration_test
   PRIVATE
     dasall_sqlite3
+)
+
+target_compile_definitions(dasall_knowledge_runtime_auto_refresh_integration_test
+  PRIVATE
+    DASALL_SOURCE_ROOT="${CMAKE_SOURCE_DIR}"
+)
+
+target_link_libraries(dasall_knowledge_runtime_auto_refresh_integration_test
+  PRIVATE
+    dasall_apps_runtime_support
+    dasall_infra
+    dasall_platform
+    dasall_profiles
+    dasall_runtime
 )
 
 target_link_libraries(dasall_knowledge_installed_asset_probe_integration_test

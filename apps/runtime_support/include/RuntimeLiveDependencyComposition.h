@@ -18,6 +18,12 @@ class RuntimeDependencySet;
 
 }  // namespace dasall::runtime
 
+namespace dasall::platform {
+
+class ITimer;
+
+}  // namespace dasall::platform
+
 namespace dasall::knowledge {
 
 struct DenseStoreFactoryContext;
@@ -59,8 +65,9 @@ struct RuntimeLiveDependencyCompositionOptions {
   std::function<std::unique_ptr<knowledge::retrieve::IVectorRecallStore>(
       const knowledge::DenseStoreFactoryContext& context)>
       create_vector_recall_store_override;
-    std::function<std::unique_ptr<knowledge::retrieve::IQueryEncoder>()>
+  std::function<std::unique_ptr<knowledge::retrieve::IQueryEncoder>()>
       create_query_encoder_override;
+  std::shared_ptr<platform::ITimer> knowledge_refresh_timer;
 };
 
 [[nodiscard]] RuntimeDependencyCompositionResult compose_minimal_live_dependency_set(

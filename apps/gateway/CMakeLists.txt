@@ -19,6 +19,7 @@ target_link_libraries(dasall_gateway
     dasall_runtime
     dasall_contracts
     dasall_infra
+    dasall_platform
     dasall_profiles
     cpp-httplib
 )

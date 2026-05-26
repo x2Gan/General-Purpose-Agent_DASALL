@@ -46,6 +46,7 @@
 #include "config/InstallLayout.h"
 #include "ProfileCatalog.h"
 #include "RuntimePolicyProvider.h"
+#include "linux/PosixTimerProvider.h"
 
 namespace {
 
@@ -299,6 +300,8 @@ runtime_state_root_override_from_env() {
       state_root_override.has_value()) {
     composition_options.state_root_override = *state_root_override;
   }
+  composition_options.knowledge_refresh_timer =
+      std::make_shared<dasall::platform::linux::PosixTimerProvider>();
 
   const auto runtime_composition =
       dasall::apps::runtime_support::compose_minimal_live_dependency_set(

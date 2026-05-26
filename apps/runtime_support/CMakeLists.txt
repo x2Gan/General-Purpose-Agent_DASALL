@@ -23,6 +23,7 @@ target_link_libraries(dasall_apps_runtime_support
     dasall_llm
     dasall_memory
     dasall_multi_agent
+    dasall_platform
     dasall_services
     dasall_tools
 )

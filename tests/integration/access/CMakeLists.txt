@@ -619,6 +619,7 @@ target_link_libraries(dasall_access_runtime_live_composition_failure_matrix_inte
     dasall_apps_runtime_support
     dasall_infra
     dasall_knowledge
+    dasall_platform
     dasall_profiles
     dasall_runtime
 )

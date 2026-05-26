@@ -46,6 +46,7 @@
 #include "agent/AgentResult.h"
 #include "config/InstallLayout.h"
 #include "diagnostics/DiagnosticsServiceFacade.h"
+#include "linux/PosixTimerProvider.h"
 #include "linux/UnixIpcProvider.h"
 
 namespace {
@@ -459,6 +460,8 @@ map_agent_result_to_dispatch_result(
       state_root_override.has_value()) {
     composition_options.state_root_override = *state_root_override;
   }
+  composition_options.knowledge_refresh_timer =
+      std::make_shared<dasall::platform::linux::PosixTimerProvider>();
 
   const auto runtime_composition =
       dasall::apps::runtime_support::compose_minimal_live_dependency_set(

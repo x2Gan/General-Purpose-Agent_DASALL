@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "AgentFacade.h"
+#include "ITimer.h"
 #include "IKnowledgeService.h"
 #include "KnowledgeTypes.h"
 #include "index/IndexWriter.h"
@@ -100,6 +101,44 @@ load_runtime_policy_snapshot() {
                        return value.rfind(expected_prefix, 0) == 0;
                      });
 }
+
+class RecordingTimer final : public dasall::platform::ITimer {
+ public:
+  dasall::platform::PlatformResult<dasall::platform::TimerHandle> start_once(
+      const dasall::platform::TimerSpec& spec,
+      dasall::platform::TimerCallback callback) override {
+    one_shot_specs.push_back(spec);
+    one_shot_callbacks += callback ? 1 : 0;
+    return dasall::platform::PlatformResult<dasall::platform::TimerHandle>::success(
+        dasall::platform::TimerHandle{.native_id = 91U});
+  }
+
+  dasall::platform::PlatformResult<dasall::platform::TimerHandle> start_periodic(
+      const dasall::platform::TimerSpec& spec,
+      dasall::platform::TimerCallback callback) override {
+    periodic_specs.push_back(spec);
+    periodic_callbacks += callback ? 1 : 0;
+    return dasall::platform::PlatformResult<dasall::platform::TimerHandle>::success(
+        dasall::platform::TimerHandle{.native_id =
+                                          static_cast<std::uint64_t>(40U + periodic_specs.size())});
+  }
+
+  dasall::platform::PlatformResult<dasall::platform::TimerCancelResult> cancel(
+      const dasall::platform::TimerHandle& handle) override {
+    cancelled_handles.push_back(handle.native_id);
+    return dasall::platform::PlatformResult<dasall::platform::TimerCancelResult>::success(
+        dasall::platform::TimerCancelResult{
+            .cancelled = true,
+            .drift_stats = {},
+        });
+  }
+
+  std::vector<dasall::platform::TimerSpec> one_shot_specs;
+  std::vector<dasall::platform::TimerSpec> periodic_specs;
+  std::vector<std::uint64_t> cancelled_handles;
+  int one_shot_callbacks = 0;
+  int periodic_callbacks = 0;
+};
 
 class FakeRuntimeVectorRecallStore final : public dasall::knowledge::retrieve::IVectorRecallStore {
  public:
@@ -233,7 +272,8 @@ compose_live_dependency_set(
     const std::shared_ptr<const dasall::profiles::RuntimePolicySnapshot>& policy_snapshot,
     const CompositionOwnerSpec& spec,
     const std::filesystem::path& readonly_assets_root,
-    const std::filesystem::path& state_root) {
+  const std::filesystem::path& state_root,
+  std::shared_ptr<dasall::platform::ITimer> knowledge_refresh_timer) {
   return dasall::apps::runtime_support::compose_minimal_live_dependency_set(
       policy_snapshot,
       spec.composition_owner,
@@ -247,6 +287,7 @@ compose_live_dependency_set(
                 return std::make_unique<FakeRuntimeVectorRecallStore>();
               },
           .create_query_encoder_override = {},
+          .knowledge_refresh_timer = std::move(knowledge_refresh_timer),
       });
 }
 
@@ -256,11 +297,13 @@ void runtime_live_composition_keeps_ready_markers_stratified() {
     const TempStateRoot assets_root("dasall-runtime-live-matrix-assets-ready");
     const TempStateRoot state_root("dasall-runtime-live-matrix-state-ready");
     copy_installed_runtime_assets(assets_root.path());
+    auto timer = std::make_shared<RecordingTimer>();
 
     const auto composition = compose_live_dependency_set(policy_snapshot,
                                                          spec,
                                                          assets_root.path(),
-                                                         state_root.path());
+                                                         state_root.path(),
+                                                         timer);
     assert_true(composition.ok(),
                 "runtime live composition matrix should compose a ready baseline for " +
                     spec.composition_owner + ": " + composition.error);
@@ -278,6 +321,12 @@ void runtime_live_composition_keeps_ready_markers_stratified() {
     const auto hybrid_canary_marker =
       std::string("runtime:") + spec.composition_owner +
       ":knowledge-hybrid-canary-ready";
+    const auto automation_ready_marker =
+      std::string("runtime:") + spec.composition_owner +
+      ":knowledge-refresh-automation-ready";
+    const auto automation_fallback_prefix =
+      std::string("runtime:") + spec.composition_owner +
+      ":knowledge-refresh-automation-fallback:";
     const auto degraded_prefix =
         std::string("runtime:") + spec.composition_owner + ":knowledge-degraded:";
     assert_true(contains_port(dependency_set->external_evidence, ready_marker),
@@ -286,9 +335,15 @@ void runtime_live_composition_keeps_ready_markers_stratified() {
     assert_true(contains_port(dependency_set->external_evidence, hybrid_canary_marker),
         "runtime live composition matrix should expose the hybrid canary ready marker for " +
         spec.composition_owner);
+    assert_true(contains_port(dependency_set->external_evidence, automation_ready_marker),
+          "runtime live composition matrix should expose the automation ready marker for " +
+            spec.composition_owner);
     assert_true(!contains_prefix(dependency_set->external_evidence, degraded_prefix),
                 "runtime live composition matrix should not mix degraded knowledge markers into the ready baseline for " +
                     spec.composition_owner);
+    assert_true(!contains_prefix(dependency_set->external_evidence, automation_fallback_prefix),
+          "runtime live composition matrix should not mix automation fallback markers into the timer-ready baseline for " +
+            spec.composition_owner);
 
     dasall::runtime::AgentFacade facade;
     const auto init_result =
@@ -311,6 +366,7 @@ void runtime_live_composition_emits_hybrid_marker_when_encoder_is_ready() {
     const TempStateRoot assets_root("dasall-runtime-live-matrix-assets-encoder-ready");
     const TempStateRoot state_root("dasall-runtime-live-matrix-state-encoder-ready");
     copy_installed_runtime_assets(assets_root.path());
+    auto timer = std::make_shared<RecordingTimer>();
 
     const auto composition = dasall::apps::runtime_support::compose_minimal_live_dependency_set(
         policy_snapshot,
@@ -327,6 +383,7 @@ void runtime_live_composition_emits_hybrid_marker_when_encoder_is_ready() {
             .create_query_encoder_override = [] {
               return std::make_unique<StaticQueryEncoder>();
             },
+            .knowledge_refresh_timer = timer,
         });
     assert_true(composition.ok(),
                 "runtime live composition matrix should compose an encoder-ready hybrid baseline for " +
@@ -338,12 +395,23 @@ void runtime_live_composition_emits_hybrid_marker_when_encoder_is_ready() {
     const auto hybrid_canary_marker =
         std::string("runtime:") + spec.composition_owner +
         ":knowledge-hybrid-canary-ready";
+    const auto automation_ready_marker =
+      std::string("runtime:") + spec.composition_owner +
+      ":knowledge-refresh-automation-ready";
+    const auto automation_fallback_prefix =
+      std::string("runtime:") + spec.composition_owner +
+      ":knowledge-refresh-automation-fallback:";
     assert_true(contains_port(composition.dependency_set->external_evidence, ready_marker),
                 "runtime live composition matrix should keep installed ready marker on encoder-ready path for " +
                     spec.composition_owner);
     assert_true(contains_port(composition.dependency_set->external_evidence, hybrid_canary_marker),
                 "runtime live composition matrix should expose hybrid ready marker only when encoder-required path is ready for " +
                     spec.composition_owner);
+    assert_true(contains_port(composition.dependency_set->external_evidence, automation_ready_marker) &&
+            !contains_prefix(composition.dependency_set->external_evidence,
+                     automation_fallback_prefix),
+          "runtime live composition matrix should keep automation ready stratified on the encoder-ready path for " +
+            spec.composition_owner);
   }
 }
 
@@ -357,7 +425,8 @@ void runtime_live_composition_fail_closes_when_required_ports_are_missing() {
     auto composition = compose_live_dependency_set(policy_snapshot,
                                                    spec,
                                                    assets_root.path(),
-                                                   state_root.path());
+                                                   state_root.path(),
+                                                   std::make_shared<RecordingTimer>());
     assert_true(composition.ok(),
                 "runtime live composition matrix should compose the pre-fail-closed baseline for " +
                     spec.composition_owner + ": " + composition.error);
@@ -395,7 +464,8 @@ void runtime_live_composition_marks_degraded_runtime_when_knowledge_is_missing()
     const auto composition = compose_live_dependency_set(policy_snapshot,
                                                          spec,
                                                          assets_root.path(),
-                                                         state_root.path());
+                                                         state_root.path(),
+                                                         std::make_shared<RecordingTimer>());
     assert_true(composition.ok(),
                 "runtime live composition matrix should keep required ports available when knowledge is missing for " +
                     spec.composition_owner + ": " + composition.error);
@@ -435,6 +505,7 @@ void runtime_live_composition_omits_hybrid_marker_when_encoder_is_missing() {
     const TempStateRoot assets_root("dasall-runtime-live-matrix-assets-encoder-missing");
     const TempStateRoot state_root("dasall-runtime-live-matrix-state-encoder-missing");
     copy_installed_runtime_assets(assets_root.path());
+    auto timer = std::make_shared<RecordingTimer>();
 
     const auto composition = dasall::apps::runtime_support::compose_minimal_live_dependency_set(
         policy_snapshot,
@@ -449,6 +520,7 @@ void runtime_live_composition_omits_hybrid_marker_when_encoder_is_missing() {
                   return std::make_unique<EmbeddingRequiredRuntimeVectorRecallStore>();
                 },
             .create_query_encoder_override = {},
+            .knowledge_refresh_timer = timer,
         });
     assert_true(composition.ok(),
                 "runtime live composition matrix should still compose when query encoder is missing for " +
@@ -460,12 +532,66 @@ void runtime_live_composition_omits_hybrid_marker_when_encoder_is_missing() {
     const auto hybrid_canary_marker =
         std::string("runtime:") + spec.composition_owner +
         ":knowledge-hybrid-canary-ready";
+    const auto automation_ready_marker =
+      std::string("runtime:") + spec.composition_owner +
+      ":knowledge-refresh-automation-ready";
+    const auto automation_fallback_prefix =
+      std::string("runtime:") + spec.composition_owner +
+      ":knowledge-refresh-automation-fallback:";
     assert_true(contains_port(composition.dependency_set->external_evidence, ready_marker),
                 "runtime live composition matrix should keep installed ready marker even without query encoder for " +
                     spec.composition_owner);
     assert_true(!contains_port(composition.dependency_set->external_evidence, hybrid_canary_marker),
                 "runtime live composition matrix should omit hybrid ready marker when embedding-required store lacks a query encoder for " +
                     spec.composition_owner);
+    assert_true(contains_port(composition.dependency_set->external_evidence, automation_ready_marker) &&
+            !contains_prefix(composition.dependency_set->external_evidence,
+                     automation_fallback_prefix),
+          "runtime live composition matrix should keep automation ready evidence even when the encoder-required hybrid marker is absent for " +
+            spec.composition_owner);
+    }
+  }
+
+  void runtime_live_composition_marks_automation_fallback_when_timer_is_missing() {
+    const auto policy_snapshot = load_runtime_policy_snapshot();
+    for (const auto& spec : owner_specs()) {
+    const TempStateRoot assets_root("dasall-runtime-live-matrix-assets-automation-fallback");
+    const TempStateRoot state_root("dasall-runtime-live-matrix-state-automation-fallback");
+    copy_installed_runtime_assets(assets_root.path());
+
+    const auto composition = compose_live_dependency_set(policy_snapshot,
+                               spec,
+                               assets_root.path(),
+                               state_root.path(),
+                               nullptr);
+    assert_true(composition.ok(),
+          "runtime live composition matrix should still compose when the knowledge automation timer is missing for " +
+            spec.composition_owner + ": " + composition.error);
+
+    const auto readiness = composition.dependency_set->describe_readiness();
+    const auto ready_marker =
+      std::string("runtime:") + spec.composition_owner +
+      ":knowledge-installed-assets-ready";
+    const auto automation_ready_marker =
+      std::string("runtime:") + spec.composition_owner +
+      ":knowledge-refresh-automation-ready";
+    const auto automation_fallback_prefix =
+      std::string("runtime:") + spec.composition_owner +
+      ":knowledge-refresh-automation-fallback:";
+    const auto degraded_prefix =
+      std::string("runtime:") + spec.composition_owner + ":knowledge-degraded:";
+    assert_true(readiness.default_unary_ready(),
+          "runtime live composition matrix should keep unary readiness even when automation falls back for " +
+            spec.composition_owner + ": " + readiness.summary());
+    assert_true(contains_port(composition.dependency_set->external_evidence, ready_marker),
+          "runtime live composition matrix should keep the installed knowledge ready marker when automation falls back for " +
+            spec.composition_owner);
+    assert_true(!contains_port(composition.dependency_set->external_evidence, automation_ready_marker) &&
+            contains_prefix(composition.dependency_set->external_evidence,
+                     automation_fallback_prefix) &&
+            !contains_prefix(composition.dependency_set->external_evidence, degraded_prefix),
+          "runtime live composition matrix should stratify automation fallback away from knowledge degradation for " +
+            spec.composition_owner);
   }
 }
 
@@ -478,6 +604,7 @@ int main() {
     runtime_live_composition_fail_closes_when_required_ports_are_missing();
     runtime_live_composition_marks_degraded_runtime_when_knowledge_is_missing();
     runtime_live_composition_omits_hybrid_marker_when_encoder_is_missing();
+    runtime_live_composition_marks_automation_fallback_when_timer_is_missing();
   } catch (const std::exception& ex) {
     std::cerr << "[RuntimeLiveCompositionFailureMatrixTest] FAILED: " << ex.what() << '\n';
     return 1;
