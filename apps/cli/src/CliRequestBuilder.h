@@ -155,6 +155,15 @@ class CliRequestBuilder {
     return encoded;
   }
 
+  static void append_payload_item(std::string& payload,
+                                  std::string_view key,
+                                  std::string_view value) {
+    payload += ";";
+    payload += key;
+    payload += "=";
+    payload += percent_encode_payload_value(value);
+  }
+
   [[nodiscard]] static std::optional<dasall::access::daemon::UdsRequestFrame>
   build_knowledge_frame(const CliCommand& command,
                         dasall::access::daemon::UdsRequestFrame frame) {
@@ -171,12 +180,34 @@ class CliRequestBuilder {
         return std::nullopt;
       }
       frame.args.emplace("query_text", *command.knowledge_query_text);
-      frame.payload += ";query_text=" +
-                       percent_encode_payload_value(*command.knowledge_query_text);
+      append_payload_item(frame.payload, "query_text", *command.knowledge_query_text);
+      if (command.knowledge_preferred_mode.has_value()) {
+        frame.args.emplace("preferred_mode", *command.knowledge_preferred_mode);
+        append_payload_item(frame.payload, "preferred_mode",
+                            *command.knowledge_preferred_mode);
+      }
+      if (command.knowledge_query_kind.has_value()) {
+        frame.args.emplace("query_kind", *command.knowledge_query_kind);
+        append_payload_item(frame.payload, "query_kind", *command.knowledge_query_kind);
+      }
+      if (command.knowledge_required_language.has_value()) {
+        frame.args.emplace("required_language", *command.knowledge_required_language);
+        append_payload_item(frame.payload,
+                            "required_language",
+                            *command.knowledge_required_language);
+      }
+      for (const auto& allowed_corpus : command.knowledge_allowed_corpora) {
+        append_payload_item(frame.payload, "allowed_corpus", allowed_corpus);
+      }
+      for (const auto& domain_tag : command.knowledge_domain_tags) {
+        append_payload_item(frame.payload, "domain_tag", domain_tag);
+      }
+      for (const auto& required_tag : command.knowledge_required_tags) {
+        append_payload_item(frame.payload, "required_tag", required_tag);
+      }
     } else if (command.knowledge_command == CliKnowledgeCommandKind::Refresh) {
       for (const auto& changed_source : command.knowledge_refresh_changed_sources) {
-        frame.payload += ";changed_source=" +
-                         percent_encode_payload_value(changed_source);
+        append_payload_item(frame.payload, "changed_source", changed_source);
       }
     }
     return frame;

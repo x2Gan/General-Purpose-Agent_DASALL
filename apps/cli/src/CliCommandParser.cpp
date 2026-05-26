@@ -28,8 +28,68 @@ struct ParsedConfigFlags {
 };
 
 struct ParsedKnowledgeFlags {
+  std::optional<std::string> preferred_mode;
+  std::optional<std::string> query_kind;
+  std::vector<std::string> allowed_corpora;
+  std::vector<std::string> domain_tags;
+  std::vector<std::string> required_tags;
+  std::optional<std::string> required_language;
   std::vector<std::string> changed_sources;
 };
+
+[[nodiscard]] std::string canonicalize_keyword_token(std::string_view value) {
+  std::string canonical;
+  canonical.reserve(value.size());
+
+  bool previous_was_separator = false;
+  for (const unsigned char character : value) {
+    if (std::isalnum(character) != 0) {
+      canonical.push_back(
+          static_cast<char>(std::tolower(character)));
+      previous_was_separator = false;
+      continue;
+    }
+
+    if (character == '-' || character == '_' || std::isspace(character) != 0) {
+      if (!canonical.empty() && !previous_was_separator) {
+        canonical.push_back('_');
+        previous_was_separator = true;
+      }
+      continue;
+    }
+
+    return {};
+  }
+
+  while (!canonical.empty() && canonical.back() == '_') {
+    canonical.pop_back();
+  }
+
+  return canonical;
+}
+
+[[nodiscard]] bool is_valid_knowledge_preferred_mode(std::string_view value) {
+  return value == "lexical_only" || value == "dense_only" || value == "hybrid";
+}
+
+[[nodiscard]] bool is_valid_knowledge_query_kind(std::string_view value) {
+  return value == "fact_lookup" || value == "procedure_lookup" ||
+         value == "diagnostic_context" || value == "policy_evidence" ||
+         value == "multi_hop";
+}
+
+[[nodiscard]] bool has_knowledge_only_flags(const ParsedKnowledgeFlags& flags) {
+  return flags.preferred_mode.has_value() || flags.query_kind.has_value() ||
+         flags.required_language.has_value() || !flags.allowed_corpora.empty() ||
+         !flags.domain_tags.empty() || !flags.required_tags.empty() ||
+         !flags.changed_sources.empty();
+}
+
+[[nodiscard]] bool has_knowledge_retrieve_flags(const ParsedKnowledgeFlags& flags) {
+  return flags.preferred_mode.has_value() || flags.query_kind.has_value() ||
+         flags.required_language.has_value() || !flags.allowed_corpora.empty() ||
+         !flags.domain_tags.empty() || !flags.required_tags.empty();
+}
 
 [[nodiscard]] bool has_local_only_flags(const ParsedStableFlags& flags) {
   return flags.socket_path.has_value() || flags.timeout_ms.has_value() ||
@@ -154,6 +214,32 @@ struct ParsedKnowledgeFlags {
   }
 
   output_values.push_back(*parsed_value);
+  return true;
+}
+
+[[nodiscard]] bool parse_keyword_flag(
+    std::string_view arg,
+    std::string_view flag_name,
+    std::size_t& index,
+    const std::vector<std::string>& raw_args,
+    std::optional<std::string>& output_value,
+    bool (*validator)(std::string_view)) {
+  if (output_value.has_value()) {
+    return false;
+  }
+
+  std::optional<std::string> parsed_value;
+  if (!parse_long_flag_with_value(arg, flag_name, index, raw_args, parsed_value) ||
+      !parsed_value.has_value()) {
+    return false;
+  }
+
+  const auto canonical = canonicalize_keyword_token(*parsed_value);
+  if (canonical.empty() || !validator(canonical)) {
+    return false;
+  }
+
+  output_value = canonical;
   return true;
 }
 
@@ -453,6 +539,60 @@ std::optional<CliCommand> CliCommandParser::parse(int argc,
       continue;
     }
 
+    if (arg.starts_with("--preferred-mode=") || arg == "--preferred-mode") {
+      if (!parse_keyword_flag(arg, "--preferred-mode", index, cmd.raw_args,
+                              knowledge_flags.preferred_mode,
+                              is_valid_knowledge_preferred_mode)) {
+        return std::nullopt;
+      }
+      continue;
+    }
+
+    if (arg.starts_with("--query-kind=") || arg == "--query-kind") {
+      if (!parse_keyword_flag(arg, "--query-kind", index, cmd.raw_args,
+                              knowledge_flags.query_kind,
+                              is_valid_knowledge_query_kind)) {
+        return std::nullopt;
+      }
+      continue;
+    }
+
+    if (arg.starts_with("--allowed-corpus=") || arg == "--allowed-corpus") {
+      if (!parse_repeated_string_flag(arg, "--allowed-corpus", index,
+                                      cmd.raw_args,
+                                      knowledge_flags.allowed_corpora)) {
+        return std::nullopt;
+      }
+      continue;
+    }
+
+    if (arg.starts_with("--domain-tag=") || arg == "--domain-tag") {
+      if (!parse_repeated_string_flag(arg, "--domain-tag", index,
+                                      cmd.raw_args,
+                                      knowledge_flags.domain_tags)) {
+        return std::nullopt;
+      }
+      continue;
+    }
+
+    if (arg.starts_with("--required-tag=") || arg == "--required-tag") {
+      if (!parse_repeated_string_flag(arg, "--required-tag", index,
+                                      cmd.raw_args,
+                                      knowledge_flags.required_tags)) {
+        return std::nullopt;
+      }
+      continue;
+    }
+
+    if (arg.starts_with("--required-language=") || arg == "--required-language") {
+      if (!parse_long_flag_with_value(arg, "--required-language", index,
+                                      cmd.raw_args,
+                                      knowledge_flags.required_language)) {
+        return std::nullopt;
+      }
+      continue;
+    }
+
     if (arg.starts_with("--changed-source=") || arg == "--changed-source") {
       if (!parse_repeated_string_flag(arg, "--changed-source", index,
                                       cmd.raw_args,
@@ -471,7 +611,7 @@ std::optional<CliCommand> CliCommandParser::parse(int argc,
 
   if (help_requested) {
     const bool explicit_help_command = !positional_args.empty() && positional_args[0] == "help";
-    if (!validate_help_scope(flags) || !knowledge_flags.changed_sources.empty()) {
+    if (!validate_help_scope(flags) || has_knowledge_only_flags(knowledge_flags)) {
       return std::nullopt;
     }
 
@@ -505,7 +645,7 @@ std::optional<CliCommand> CliCommandParser::parse(int argc,
 
   apply_flags_to_command(flags, cmd);
 
-  if (cmd.name != "knowledge" && !knowledge_flags.changed_sources.empty()) {
+  if (cmd.name != "knowledge" && has_knowledge_only_flags(knowledge_flags)) {
     return std::nullopt;
   }
 
@@ -571,12 +711,15 @@ std::optional<CliCommand> CliCommandParser::parse(int argc,
         if (positional_args.size() != 2) {
           return std::nullopt;
         }
-        if (!knowledge_flags.changed_sources.empty()) {
+        if (has_knowledge_only_flags(knowledge_flags)) {
           return std::nullopt;
         }
         return cmd;
       case CliKnowledgeCommandKind::Refresh:
         if (positional_args.size() != 2) {
+          return std::nullopt;
+        }
+        if (has_knowledge_retrieve_flags(knowledge_flags)) {
           return std::nullopt;
         }
         cmd.knowledge_refresh_changed_sources =
@@ -590,6 +733,12 @@ std::optional<CliCommand> CliCommandParser::parse(int argc,
         if (!cmd.knowledge_query_text.has_value() || cmd.knowledge_query_text->empty()) {
           return std::nullopt;
         }
+        cmd.knowledge_preferred_mode = std::move(knowledge_flags.preferred_mode);
+        cmd.knowledge_query_kind = std::move(knowledge_flags.query_kind);
+        cmd.knowledge_allowed_corpora = std::move(knowledge_flags.allowed_corpora);
+        cmd.knowledge_domain_tags = std::move(knowledge_flags.domain_tags);
+        cmd.knowledge_required_tags = std::move(knowledge_flags.required_tags);
+        cmd.knowledge_required_language = std::move(knowledge_flags.required_language);
         return cmd;
       case CliKnowledgeCommandKind::None:
         return std::nullopt;
@@ -689,12 +838,17 @@ std::string CliCommandParser::usage_string(std::string_view command_name,
     }
 
     if (subcommand_name == "retrieve") {
-      return "Usage: dasall-cli knowledge retrieve <query_text> [--json] "
+          return "Usage: dasall-cli knowledge retrieve <query_text> [--preferred-mode <lexical-only|dense-only|hybrid>] "
+            "[--query-kind <fact-lookup|procedure-lookup|diagnostic-context|policy-evidence|multi-hop>] "
+            "[--allowed-corpus <id>]... [--domain-tag <tag>]... [--required-tag <tag>]... "
+            "[--required-language <lang>] [--json] "
              "[--timeout-ms <ms>] [--socket-path <path>] [--quiet]\n";
     }
 
     return "Usage: dasall-cli knowledge <health|refresh|retrieve> [query_text] "
-           "[--json] [--timeout-ms <ms>] [--socket-path <path>] [--quiet]\n";
+          "[--preferred-mode <mode>] [--query-kind <kind>] [--allowed-corpus <id>]... "
+          "[--domain-tag <tag>]... [--required-tag <tag>]... [--required-language <lang>] "
+          "[--json] [--timeout-ms <ms>] [--socket-path <path>] [--quiet]\n";
   }
 
   return "Usage:\n"
@@ -707,7 +861,7 @@ std::string CliCommandParser::usage_string(std::string_view command_name,
       "  dasall-cli config apply --from-file <path> --no-input [--json]\n"
          "  dasall-cli ping [--json] [--timeout-ms <ms>] [--socket-path <path>] [--quiet]\n"
          "  dasall-cli readiness [--json] [--timeout-ms <ms>] [--socket-path <path>] [--quiet]\n"
-         "  dasall-cli knowledge <health|refresh|retrieve> [query_text] [--changed-source <path>]... [--json] [--timeout-ms <ms>] "
+         "  dasall-cli knowledge <health|refresh|retrieve> [query_text] [--changed-source <path>]... [--preferred-mode <mode>] [--query-kind <kind>] [--allowed-corpus <id>]... [--domain-tag <tag>]... [--required-tag <tag>]... [--required-language <lang>] [--json] [--timeout-ms <ms>] "
          "[--socket-path <path>] [--quiet]\n"
          "  dasall-cli run <request_json_or_-> [--async] [--request-id <id>] [--session <hint>] "
          "[--trace-id <id>] [--timeout-ms <ms>] [--json] [--socket-path <path>] [--quiet] [--no-input]\n"

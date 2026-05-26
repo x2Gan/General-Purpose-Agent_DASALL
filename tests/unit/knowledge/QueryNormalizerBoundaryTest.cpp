@@ -138,6 +138,39 @@ void test_query_normalizer_rejects_reserved_multihop_queries_as_not_supported() 
                "reserved multihop query should expose a stable not_supported ref id");
 }
 
+void test_query_normalizer_rejects_invalid_required_filters() {
+  const QueryNormalizer normalizer(make_policy());
+  const KnowledgeQuery query{
+      .request_id = "req-query-normalizer-required-filter-invalid",
+      .session_id = std::nullopt,
+      .goal_id = std::nullopt,
+      .query_text = "Inspect runtime hybrid rollout readiness",
+      .query_kind = KnowledgeQueryKind::DiagnosticContext,
+      .domain_tags = {"runtime"},
+      .allowed_corpora = {"knowledge-core"},
+      .required_tags = {"###"},
+      .required_language = std::string("   "),
+      .latest_observation_digest_summary = std::nullopt,
+      .belief_state_summary = std::nullopt,
+      .top_k = 8U,
+      .max_context_projection_items = 6U,
+      .allow_stale = false,
+      .retrieval_evidence_budget_hint = 0U,
+  };
+
+  const auto result = normalizer.normalize(query);
+
+  assert_true(result.has_consistent_values(),
+              "invalid required filters should still return a structured NormalizeResult");
+  assert_true(!result.ok,
+              "invalid required_tags or required_language should be rejected");
+  assert_equal(static_cast<int>(KnowledgeErrorCode::QueryValidationFailed),
+               *result.error->details.code,
+               "invalid required filters should map to QueryValidationFailed");
+  assert_equal(std::string("query_validation_failed"), result.error->source_ref.ref_id,
+               "invalid required filters should expose the stable validation ref id");
+}
+
 }  // namespace
 
 int main() {
@@ -145,6 +178,7 @@ int main() {
     test_query_normalizer_rejects_empty_queries_with_validation_error();
     test_query_normalizer_truncates_and_filters_without_silently_widening_scope();
     test_query_normalizer_rejects_reserved_multihop_queries_as_not_supported();
+    test_query_normalizer_rejects_invalid_required_filters();
   } catch (const std::exception& exception) {
     std::cerr << exception.what() << '\n';
     return 1;

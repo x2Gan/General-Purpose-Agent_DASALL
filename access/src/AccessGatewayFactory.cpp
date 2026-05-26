@@ -469,8 +469,86 @@ struct DaemonDiagPayload {
 struct DaemonKnowledgePayload {
   std::string operation;
   std::string query_text;
+  std::optional<knowledge::RetrievalMode> preferred_mode;
+  std::optional<knowledge::KnowledgeQueryKind> query_kind;
+  std::vector<std::string> allowed_corpora;
+  std::vector<std::string> domain_tags;
+  std::vector<std::string> required_tags;
+  std::optional<std::string> required_language;
   std::vector<std::string> changed_sources;
 };
+
+[[nodiscard]] std::string canonicalize_keyword_token(std::string_view value) {
+  std::string canonical;
+  canonical.reserve(value.size());
+
+  bool previous_was_separator = false;
+  for (const unsigned char character : value) {
+    if (std::isalnum(character) != 0) {
+      canonical.push_back(static_cast<char>(std::tolower(character)));
+      previous_was_separator = false;
+      continue;
+    }
+
+    if (character == '-' || character == '_' || std::isspace(character) != 0) {
+      if (!canonical.empty() && !previous_was_separator) {
+        canonical.push_back('_');
+        previous_was_separator = true;
+      }
+      continue;
+    }
+
+    return {};
+  }
+
+  while (!canonical.empty() && canonical.back() == '_') {
+    canonical.pop_back();
+  }
+
+  return canonical;
+}
+
+[[nodiscard]] std::optional<knowledge::RetrievalMode> parse_retrieval_mode_value(
+    std::string_view value) {
+  const auto canonical = canonicalize_keyword_token(value);
+  if (canonical == "lexical_only") {
+    return knowledge::RetrievalMode::LexicalOnly;
+  }
+  if (canonical == "dense_only") {
+    return knowledge::RetrievalMode::DenseOnly;
+  }
+  if (canonical == "hybrid") {
+    return knowledge::RetrievalMode::Hybrid;
+  }
+  return std::nullopt;
+}
+
+[[nodiscard]] std::optional<knowledge::KnowledgeQueryKind> parse_query_kind_value(
+    std::string_view value) {
+  const auto canonical = canonicalize_keyword_token(value);
+  if (canonical == "fact_lookup") {
+    return knowledge::KnowledgeQueryKind::FactLookup;
+  }
+  if (canonical == "procedure_lookup") {
+    return knowledge::KnowledgeQueryKind::ProcedureLookup;
+  }
+  if (canonical == "diagnostic_context") {
+    return knowledge::KnowledgeQueryKind::DiagnosticContext;
+  }
+  if (canonical == "policy_evidence") {
+    return knowledge::KnowledgeQueryKind::PolicyEvidence;
+  }
+  if (canonical == "multi_hop") {
+    return knowledge::KnowledgeQueryKind::MultiHop;
+  }
+  return std::nullopt;
+}
+
+[[nodiscard]] bool has_retrieve_query_surface(const DaemonKnowledgePayload& payload) {
+  return payload.preferred_mode.has_value() || payload.query_kind.has_value() ||
+         payload.required_language.has_value() || !payload.allowed_corpora.empty() ||
+         !payload.domain_tags.empty() || !payload.required_tags.empty();
+}
 
 [[nodiscard]] std::optional<unsigned char> decode_hex_digit(const char digit) {
   if (digit >= '0' && digit <= '9') {
@@ -534,9 +612,52 @@ struct DaemonKnowledgePayload {
         return std::nullopt;
       }
       if (key == "operation") {
+        if (!parsed.operation.empty()) {
+          return std::nullopt;
+        }
         parsed.operation = *decoded_value;
       } else if (key == "query_text") {
+        if (!parsed.query_text.empty()) {
+          return std::nullopt;
+        }
         parsed.query_text = *decoded_value;
+      } else if (key == "preferred_mode") {
+        if (parsed.preferred_mode.has_value()) {
+          return std::nullopt;
+        }
+        parsed.preferred_mode = parse_retrieval_mode_value(*decoded_value);
+        if (!parsed.preferred_mode.has_value()) {
+          return std::nullopt;
+        }
+      } else if (key == "query_kind") {
+        if (parsed.query_kind.has_value()) {
+          return std::nullopt;
+        }
+        parsed.query_kind = parse_query_kind_value(*decoded_value);
+        if (!parsed.query_kind.has_value()) {
+          return std::nullopt;
+        }
+      } else if (key == "allowed_corpus") {
+        if (decoded_value->empty()) {
+          return std::nullopt;
+        }
+        parsed.allowed_corpora.push_back(*decoded_value);
+      } else if (key == "domain_tag") {
+        if (decoded_value->empty()) {
+          return std::nullopt;
+        }
+        parsed.domain_tags.push_back(*decoded_value);
+      } else if (key == "required_tag") {
+        if (decoded_value->empty()) {
+          return std::nullopt;
+        }
+        parsed.required_tags.push_back(*decoded_value);
+      } else if (key == "required_language") {
+        if (parsed.required_language.has_value() ||
+            canonicalize_keyword_token(*decoded_value).empty()) {
+          return std::nullopt;
+        }
+        parsed.required_language = *decoded_value;
       } else if (key == "changed_source") {
         if (decoded_value->empty()) {
           return std::nullopt;
@@ -559,6 +680,9 @@ struct DaemonKnowledgePayload {
     return std::nullopt;
   }
   if (parsed.operation != "retrieve" && !parsed.query_text.empty()) {
+    return std::nullopt;
+  }
+  if (parsed.operation != "retrieve" && has_retrieve_query_surface(parsed)) {
     return std::nullopt;
   }
   if (parsed.operation != "refresh" && !parsed.changed_sources.empty()) {
@@ -743,8 +867,10 @@ struct DaemonKnowledgePayload {
   std::size_t slice_count = 0U;
   std::string first_citation;
   std::string first_snippet;
+  bool degraded = false;
   if (retrieve_result.evidence.has_value()) {
     slice_count = retrieve_result.evidence->slices.size();
+    degraded = retrieve_result.evidence->degraded;
     if (!retrieve_result.evidence->slices.empty()) {
       first_citation = retrieve_result.evidence->slices.front().citation_ref;
       first_snippet = retrieve_result.evidence->slices.front().snippet;
@@ -754,6 +880,10 @@ struct DaemonKnowledgePayload {
   std::string payload = "{\"operation\":\"retrieve\"";
   payload += ",\"ok\":" + bool_json(retrieve_result.ok);
   payload += ",\"mode\":" + json_string(retrieval_mode_name(retrieve_result.mode));
+  payload += ",\"degraded\":" + bool_json(degraded);
+  payload += ",\"reason_codes\":" + json_array(retrieve_result.reason_codes);
+  payload += ",\"warning_count\":" + std::to_string(retrieve_result.warning_count);
+  payload += ",\"corpus_summary\":" + json_array(retrieve_result.corpus_summary);
   payload += ",\"slice_count\":" + std::to_string(slice_count);
   payload += ",\"first_citation\":" + json_string(first_citation);
   payload += ",\"first_snippet\":" + json_string(first_snippet);
@@ -801,7 +931,12 @@ struct DaemonKnowledgePayload {
   knowledge::KnowledgeQuery query;
   query.request_id = packet.packet_id.empty() ? "knowledge-retrieve" : packet.packet_id;
   query.query_text = payload.query_text;
-  query.query_kind = knowledge::KnowledgeQueryKind::FactLookup;
+  query.preferred_mode = payload.preferred_mode;
+  query.query_kind = payload.query_kind.value_or(knowledge::KnowledgeQueryKind::FactLookup);
+  query.domain_tags = payload.domain_tags;
+  query.allowed_corpora = payload.allowed_corpora;
+  query.required_tags = payload.required_tags;
+  query.required_language = payload.required_language;
   query.top_k = 3U;
   query.max_context_projection_items = 3U;
   query.allow_stale = false;
@@ -810,8 +945,12 @@ struct DaemonKnowledgePayload {
     return make_knowledge_response(packet,
                                    format_knowledge_retrieve_payload(retrieve_result));
   }
-  return make_rejected_result(AccessErrorCode::RuntimeDispatchFailed,
-                              "knowledge_retrieve_failed");
+  return make_rejected_result(
+      AccessErrorCode::RuntimeDispatchFailed,
+      retrieve_result.error.has_value() &&
+              !retrieve_result.error->source_ref.ref_id.empty()
+          ? retrieve_result.error->source_ref.ref_id
+          : std::string("knowledge_retrieve_failed"));
 }
 
 [[nodiscard]] RuntimeDispatchResult make_status_dispatch_result(

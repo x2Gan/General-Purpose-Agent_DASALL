@@ -16,8 +16,11 @@ struct NormalizedQuery {
   std::string request_id;
   std::string normalized_text;
   std::vector<std::string> lexical_terms;
+  std::optional<RetrievalMode> preferred_mode;
   std::vector<std::string> domain_tags;
   std::vector<std::string> allowed_corpora;
+  std::vector<std::string> required_tags;
+  std::optional<std::string> required_language;
   KnowledgeQueryKind query_kind = KnowledgeQueryKind::FactLookup;
   std::size_t top_k = 8U;
   std::size_t max_context_projection_items = 6U;
@@ -62,10 +65,16 @@ class QueryNormalizer {
       std::vector<std::string>& warnings) const;
   [[nodiscard]] std::vector<std::string> normalize_tags(
       const std::vector<std::string>& tags,
-      std::vector<std::string>& warnings) const;
+      std::vector<std::string>& warnings,
+      std::string_view dropped_invalid_warning,
+      std::string_view filtered_allowlist_warning) const;
   [[nodiscard]] std::vector<std::string> normalize_allowed_corpora(
       const std::vector<std::string>& corpora,
       std::vector<std::string>& warnings) const;
+    [[nodiscard]] std::optional<std::vector<std::string>> normalize_required_tags(
+      const std::vector<std::string>& tags) const;
+    [[nodiscard]] std::optional<std::string> normalize_required_language(
+      const std::optional<std::string>& language) const;
 
   QueryNormalizePolicy policy_;
 };

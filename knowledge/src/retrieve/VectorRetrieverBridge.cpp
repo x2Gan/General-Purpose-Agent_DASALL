@@ -109,7 +109,7 @@ DenseQueryRequest VectorRetrieverBridge::build_dense_query(
   DenseQueryRequest dense_query;
   dense_query.query_text = request.normalized_query.normalized_text;
   dense_query.allowed_corpus_ids = request.plan.corpus_ids;
-  dense_query.required_tags = request.normalized_query.domain_tags;
+  dense_query.required_tags = request.normalized_query.required_tags;
   dense_query.required_language = request.required_language;
   dense_query.top_k = request.plan.dense_top_k;
 

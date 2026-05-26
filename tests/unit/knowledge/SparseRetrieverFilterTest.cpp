@@ -31,6 +31,7 @@ using dasall::tests::support::assert_true;
           .lexical_terms = {"policy", "override"},
           .domain_tags = {"policy"},
           .allowed_corpora = {},
+          .required_tags = {"policy"},
           .query_kind = KnowledgeQueryKind::PolicyEvidence,
           .top_k = 4U,
           .max_context_projection_items = 3U,

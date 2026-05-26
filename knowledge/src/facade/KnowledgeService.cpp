@@ -72,12 +72,6 @@ namespace {
   return KnowledgeErrorCode::InternalError;
 }
 
-[[nodiscard]] std::optional<std::string> derive_required_language(
-    const KnowledgeQuery& query) {
-  (void)query;
-  return std::nullopt;
-}
-
 [[nodiscard]] rerank::RerankPolicy make_rerank_policy(const KnowledgeQuery& query) {
   rerank::RerankPolicy policy;
   policy.top_k = query.top_k;
@@ -394,7 +388,7 @@ KnowledgeRetrieveResult KnowledgeServiceFacade::retrieve(const KnowledgeQuery& q
   retrieve::RecallRequest recall_request;
   recall_request.normalized_query = *normalize_result.normalized_query;
   recall_request.plan = *route_result.plan;
-  recall_request.required_language = derive_required_language(query);
+  recall_request.required_language = normalize_result.normalized_query->required_language;
   auto recall_result = deps_.recall(recall_request);
   if (!recall_result.has_consistent_values()) {
     return fail_closed(query, route_result.plan->mode,
@@ -449,6 +443,10 @@ KnowledgeRetrieveResult KnowledgeServiceFacade::retrieve(const KnowledgeQuery& q
   result.ok = true;
   result.mode = route_result.plan->mode;
   result.evidence = std::move(evidence);
+  result.reason_codes = route_result.route_reason_codes;
+  result.warning_count = normalize_result.normalized_query->warnings.size() +
+                         recall_result.candidates.warnings.size();
+  result.corpus_summary = route_result.plan->corpus_ids;
   result.retrieval_evidence_refs = build_retrieval_evidence_refs(
       ranked_hits,
       *result.evidence,

@@ -100,9 +100,12 @@ struct KnowledgeQuery {
 	std::optional<std::string> session_id;
 	std::optional<std::string> goal_id;
 	std::string query_text;
+	std::optional<RetrievalMode> preferred_mode;
 	KnowledgeQueryKind query_kind = KnowledgeQueryKind::FactLookup;
 	std::vector<std::string> domain_tags;
 	std::vector<std::string> allowed_corpora;
+	std::vector<std::string> required_tags;
+	std::optional<std::string> required_language;
 	std::optional<std::string> latest_observation_digest_summary;
 	std::optional<std::string> belief_state_summary;
 	std::size_t top_k = 8U;
@@ -114,7 +117,9 @@ struct KnowledgeQuery {
 		return !request_id.empty() && !query_text.empty() && top_k > 0U &&
 					 max_context_projection_items > 0U &&
 					 detail::has_unique_values(domain_tags) &&
-					 detail::has_unique_values(allowed_corpora);
+					 detail::has_unique_values(allowed_corpora) &&
+					 detail::has_unique_values(required_tags) &&
+					 (!required_language.has_value() || !required_language->empty());
 	}
 };
 
@@ -217,6 +222,9 @@ struct KnowledgeRetrieveResult {
 	RetrievalMode mode = RetrievalMode::LexicalOnly;
 	std::optional<EvidenceBundle> evidence;
 	std::vector<dasall::contracts::RetrievalEvidenceRef> retrieval_evidence_refs;
+	std::vector<std::string> reason_codes;
+	std::size_t warning_count = 0U;
+	std::vector<std::string> corpus_summary;
 	std::optional<dasall::contracts::ErrorInfo> error;
 
 	[[nodiscard]] bool has_consistent_values() const {
@@ -230,6 +238,8 @@ struct KnowledgeRetrieveResult {
 		}
 
 		return (!evidence.has_value() || evidence->has_consistent_values()) &&
+					 detail::has_unique_values(reason_codes) &&
+					 detail::has_unique_values(corpus_summary) &&
 					 std::all_of(retrieval_evidence_refs.begin(),
 								retrieval_evidence_refs.end(),
 								[](const dasall::contracts::RetrievalEvidenceRef& ref) {

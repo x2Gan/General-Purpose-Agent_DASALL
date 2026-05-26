@@ -59,9 +59,12 @@ void test_knowledge_query_surface_keeps_reserved_fields_and_defaults() {
       .session_id = std::string("sess-01"),
       .goal_id = std::string("goal-01"),
       .query_text = "show me the recovery manager contract",
+      .preferred_mode = RetrievalMode::Hybrid,
       .query_kind = KnowledgeQueryKind::MultiHop,
       .domain_tags = {"runtime", "contracts"},
       .allowed_corpora = {"adr_normative", "ssot_normative"},
+      .required_tags = {"runtime-owner", "adr"},
+      .required_language = std::string("zh-CN"),
       .latest_observation_digest_summary = std::string("digest"),
       .belief_state_summary = std::string("belief"),
       .top_k = 10U,
@@ -74,6 +77,9 @@ void test_knowledge_query_surface_keeps_reserved_fields_and_defaults() {
               "knowledge query surface should accept reserved fields and non-zero budgets");
   assert_true(query.query_kind == KnowledgeQueryKind::MultiHop,
               "knowledge query kind should expose the reserved MultiHop enum value");
+  assert_true(query.preferred_mode.has_value() &&
+                  *query.preferred_mode == RetrievalMode::Hybrid,
+              "knowledge query surface should keep request-scoped preferred_mode module-local");
 }
 
 void test_knowledge_surface_types_capture_runtime_facing_shapes() {
@@ -137,6 +143,9 @@ void test_knowledge_surface_types_capture_runtime_facing_shapes() {
       .ok = true,
       .mode = RetrievalMode::Hybrid,
       .evidence = bundle,
+      .reason_codes = {"mode_hybrid", "allowed_corpora_filter_applied"},
+      .warning_count = 2U,
+      .corpus_summary = {"adr_normative", "ssot_normative"},
       .error = std::nullopt,
   };
 

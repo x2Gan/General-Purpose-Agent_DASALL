@@ -92,6 +92,7 @@ class RecordingVectorStore final : public IVectorRecallStore {
   query.lexical_terms = {"policy", "evidence"};
   query.domain_tags = {"normative", "policy"};
   query.allowed_corpora = {"adr_normative", "architecture_reference"};
+  query.required_tags = {"normative", "policy"};
   query.query_kind = KnowledgeQueryKind::PolicyEvidence;
   query.top_k = 5U;
   query.max_context_projection_items = 4U;

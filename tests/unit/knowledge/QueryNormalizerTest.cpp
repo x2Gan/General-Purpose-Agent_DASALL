@@ -52,9 +52,12 @@ void test_query_normalizer_canonicalizes_text_aliases_and_filters_deterministica
       .session_id = std::nullopt,
       .goal_id = std::nullopt,
       .query_text = "  SQLITE-FTS5\tSnapshot   swap??  ",
+      .preferred_mode = dasall::knowledge::RetrievalMode::Hybrid,
       .query_kind = KnowledgeQueryKind::FactLookup,
       .domain_tags = {"Arch", "arch", "runtime"},
       .allowed_corpora = {"Knowledge Core", "runtime ssot", "knowledge-core"},
+      .required_tags = {"Runtime Owner", "runtime-owner", "ADR"},
+      .required_language = std::string("ZH-CN"),
       .latest_observation_digest_summary = std::nullopt,
       .belief_state_summary = std::nullopt,
       .top_k = 8U,
@@ -82,6 +85,16 @@ void test_query_normalizer_canonicalizes_text_aliases_and_filters_deterministica
   assert_true(result.normalized_query->allowed_corpora ==
                   std::vector<std::string>({"knowledge-core", "runtime-ssot"}),
               "normalizer should canonicalize and deduplicate allowed corpora without widening the scope");
+    assert_true(result.normalized_query->preferred_mode.has_value() &&
+            *result.normalized_query->preferred_mode ==
+              dasall::knowledge::RetrievalMode::Hybrid,
+          "normalizer should preserve request-scoped preferred_mode for later runtime gating");
+    assert_true(result.normalized_query->required_tags ==
+            std::vector<std::string>({"runtime-owner", "adr"}),
+          "normalizer should canonicalize and deduplicate required_tags independently from domain_tags");
+    assert_true(result.normalized_query->required_language.has_value() &&
+            *result.normalized_query->required_language == "zh-cn",
+          "normalizer should canonicalize required_language to a stable lower-case identifier");
   assert_true(result.normalized_query->prefer_exact_match,
               "fact lookup queries should default to prefer_exact_match");
   assert_true(result.normalized_query->allow_stale,

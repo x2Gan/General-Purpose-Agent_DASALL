@@ -28,12 +28,20 @@ class FakeKnowledgeService final : public dasall::knowledge::IKnowledgeService {
   }
 
   dasall::knowledge::KnowledgeRetrieveResult retrieve(
-      const dasall::knowledge::KnowledgeQuery&) override {
+      const dasall::knowledge::KnowledgeQuery& query) override {
     ++retrieve_call_count;
+    last_query = query;
     dasall::knowledge::KnowledgeRetrieveResult result;
     result.ok = true;
-    result.mode = dasall::knowledge::RetrievalMode::LexicalOnly;
+    const bool explicit_hybrid_canary =
+        query.preferred_mode.has_value() &&
+        *query.preferred_mode == dasall::knowledge::RetrievalMode::Hybrid;
+    result.mode = explicit_hybrid_canary
+                      ? dasall::knowledge::RetrievalMode::LexicalOnly
+                      : query.preferred_mode.value_or(
+                            dasall::knowledge::RetrievalMode::LexicalOnly);
     dasall::knowledge::EvidenceBundle evidence;
+    evidence.degraded = explicit_hybrid_canary;
     evidence.slices.push_back(dasall::knowledge::EvidenceSlice{
         .evidence_id = "evidence:knowledge-test",
         .snippet = "DeepSeek Chat installed provider evidence",
@@ -43,6 +51,14 @@ class FakeKnowledgeService final : public dasall::knowledge::IKnowledgeService {
         .tags = {"installed"},
     });
     result.evidence = std::move(evidence);
+    result.reason_codes = explicit_hybrid_canary
+                              ? std::vector<std::string>{"profile_forced_lexical_only",
+                                                         "allowed_corpora_filter_applied"}
+                              : std::vector<std::string>{"mode_lexical_only"};
+    result.warning_count = query.required_tags.size();
+    result.corpus_summary = query.allowed_corpora.empty()
+                                ? std::vector<std::string>{"dasall_llm_providers"}
+                                : query.allowed_corpora;
     return result;
   }
 
@@ -72,6 +88,7 @@ class FakeKnowledgeService final : public dasall::knowledge::IKnowledgeService {
   int retrieve_call_count = 0;
   mutable int health_call_count = 0;
   int refresh_call_count = 0;
+  std::optional<dasall::knowledge::KnowledgeQuery> last_query;
   dasall::knowledge::CorpusChangeSet last_refresh_changes;
 };
 
@@ -266,13 +283,81 @@ void knowledge_retrieve_completes_without_runtime_pipeline() {
   assert_equal(1,
                knowledge_service->retrieve_call_count,
                "knowledge retrieve should call IKnowledgeService retrieve once");
+    assert_true(knowledge_service->last_query.has_value() &&
+            !knowledge_service->last_query->preferred_mode.has_value() &&
+            knowledge_service->last_query->query_kind ==
+              dasall::knowledge::KnowledgeQueryKind::FactLookup,
+          "default knowledge retrieve should preserve lexical-only default query controls");
   assert_true(result.publish_envelope.has_value() &&
                   result.publish_envelope->agent_result.has_value() &&
                   result.publish_envelope->agent_result->response_text.has_value() &&
                   result.publish_envelope->agent_result->response_text->find(
-                      "\"slice_count\":1") != std::string::npos,
-              "knowledge retrieve should publish result count JSON payload");
+              "\"slice_count\":1") != std::string::npos &&
+            result.publish_envelope->agent_result->response_text->find(
+              "\"degraded\":false") != std::string::npos &&
+            result.publish_envelope->agent_result->response_text->find(
+              "\"reason_codes\":[\"mode_lexical_only\"]") != std::string::npos &&
+            result.publish_envelope->agent_result->response_text->find(
+              "\"warning_count\":0") != std::string::npos,
+          "knowledge retrieve should publish additive explain fields without breaking legacy payload");
 }
+
+  void knowledge_retrieve_maps_request_scoped_query_surface_without_runtime_pipeline() {
+    int runtime_call_count = 0;
+    auto knowledge_service = std::make_shared<FakeKnowledgeService>();
+    auto gateway = build_gateway(&runtime_call_count, knowledge_service, 512);
+
+    InboundPacket packet;
+    packet.packet_id = "knowledge";
+    packet.entry_type = "daemon";
+    packet.protocol_kind = "ipc_uds";
+    packet.peer_ref = "local_trusted:1000";
+    packet.payload =
+      "operation=retrieve;query_text=Hybrid%20canary;preferred_mode=hybrid;query_kind=policy_evidence;allowed_corpus=adr_normative;allowed_corpus=ssot_normative;domain_tag=runtime;required_tag=runtime-owner;required_language=zh-CN";
+
+    const auto result = gateway->submit(packet);
+    assert_equal(static_cast<int>(AccessDisposition::Completed),
+           static_cast<int>(result.disposition),
+           "knowledge retrieve with request-scoped surface should complete through daemon access route");
+    assert_equal(0,
+           runtime_call_count,
+           "knowledge retrieve with request-scoped surface should not be dispatched to runtime submit backend");
+    assert_true(knowledge_service->last_query.has_value(),
+          "knowledge retrieve with request-scoped surface should capture the mapped KnowledgeQuery");
+    assert_true(knowledge_service->last_query->preferred_mode.has_value() &&
+            *knowledge_service->last_query->preferred_mode ==
+              dasall::knowledge::RetrievalMode::Hybrid,
+          "knowledge retrieve should map preferred_mode onto KnowledgeQuery");
+    assert_true(knowledge_service->last_query->query_kind ==
+            dasall::knowledge::KnowledgeQueryKind::PolicyEvidence,
+          "knowledge retrieve should map query_kind onto KnowledgeQuery");
+    assert_equal(2,
+           static_cast<int>(knowledge_service->last_query->allowed_corpora.size()),
+           "knowledge retrieve should forward repeated allowed_corpus values");
+    assert_equal(1,
+           static_cast<int>(knowledge_service->last_query->domain_tags.size()),
+           "knowledge retrieve should forward domain_tags");
+    assert_equal(1,
+           static_cast<int>(knowledge_service->last_query->required_tags.size()),
+           "knowledge retrieve should forward required_tags");
+    assert_true(knowledge_service->last_query->required_language ==
+            std::optional<std::string>{"zh-CN"},
+          "knowledge retrieve should forward required_language");
+    assert_true(result.publish_envelope.has_value() &&
+            result.publish_envelope->agent_result.has_value() &&
+            result.publish_envelope->agent_result->response_text.has_value() &&
+            result.publish_envelope->agent_result->response_text->find(
+              "\"degraded\":true") != std::string::npos &&
+            result.publish_envelope->agent_result->response_text->find(
+              "\"reason_codes\":[\"profile_forced_lexical_only\",\"allowed_corpora_filter_applied\"]") !=
+              std::string::npos &&
+            result.publish_envelope->agent_result->response_text->find(
+              "\"warning_count\":1") != std::string::npos &&
+            result.publish_envelope->agent_result->response_text->find(
+              "\"corpus_summary\":[\"adr_normative\",\"ssot_normative\"]") !=
+              std::string::npos,
+          "knowledge retrieve should project additive explain fields into daemon JSON payload");
+  }
 
         void knowledge_health_exposes_refresh_terminal_status_without_runtime_pipeline() {
           int runtime_call_count = 0;
@@ -329,6 +414,29 @@ void knowledge_invalid_payload_is_rejected_before_runtime_pipeline() {
               "invalid knowledge payload should expose stable error_ref");
 }
 
+void knowledge_invalid_query_surface_payload_is_rejected_before_runtime_pipeline() {
+  int runtime_call_count = 0;
+  auto knowledge_service = std::make_shared<FakeKnowledgeService>();
+  auto gateway = build_gateway(&runtime_call_count, knowledge_service, 256);
+
+  InboundPacket packet;
+  packet.packet_id = "knowledge";
+  packet.entry_type = "daemon";
+  packet.protocol_kind = "ipc_uds";
+  packet.peer_ref = "local_trusted:1000";
+  packet.payload = "operation=retrieve;query_text=DeepSeek%20Chat;preferred_mode=wide_open";
+
+  const auto result = gateway->submit(packet);
+  assert_equal(static_cast<int>(AccessDisposition::Rejected),
+               static_cast<int>(result.disposition),
+               "knowledge retrieve with invalid query surface should be rejected");
+  assert_equal(0,
+               runtime_call_count,
+               "invalid knowledge query surface should not reach runtime backend");
+  assert_true(result.error_ref.has_value() && *result.error_ref == "knowledge_payload_invalid",
+              "invalid knowledge query surface should expose stable error_ref");
+}
+
 }  // namespace
 
 int main() {
@@ -340,8 +448,10 @@ int main() {
     knowledge_refresh_completes_without_runtime_pipeline();
     knowledge_refresh_forwards_changed_sources_without_runtime_pipeline();
     knowledge_retrieve_completes_without_runtime_pipeline();
+    knowledge_retrieve_maps_request_scoped_query_surface_without_runtime_pipeline();
     knowledge_health_exposes_refresh_terminal_status_without_runtime_pipeline();
     knowledge_invalid_payload_is_rejected_before_runtime_pipeline();
+    knowledge_invalid_query_surface_payload_is_rejected_before_runtime_pipeline();
   } catch (const std::exception& ex) {
     std::cerr << "[DaemonAccessPipelineFactoryTest] FAILED: " << ex.what() << '\n';
     return 1;

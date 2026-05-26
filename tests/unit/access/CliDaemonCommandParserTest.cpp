@@ -173,10 +173,63 @@ void test_parse_knowledge_commands() {
   assert_equal(std::string("DeepSeek Chat"), *retrieve_cmd->knowledge_query_text,
          "knowledge retrieve should join query text tail");
 
+    const char* scoped_retrieve_argv[] = {
+      "dasall-cli",
+      "knowledge",
+      "retrieve",
+      "--preferred-mode",
+      "hybrid",
+      "--query-kind",
+      "policy-evidence",
+      "--allowed-corpus=adr_normative",
+      "--allowed-corpus",
+      "ssot_normative",
+      "--domain-tag",
+      "runtime",
+      "--required-tag",
+      "runtime-owner",
+      "--required-language",
+      "zh-CN",
+      "Hybrid",
+      "canary"};
+    const auto scoped_retrieve_cmd = CliCommandParser::parse(18, scoped_retrieve_argv);
+    assert_true(scoped_retrieve_cmd.has_value(),
+     "knowledge retrieve should parse request-scoped query surface flags");
+    assert_equal(std::string("hybrid"), *scoped_retrieve_cmd->knowledge_preferred_mode,
+      "knowledge retrieve should canonicalize preferred-mode flag");
+    assert_equal(std::string("policy_evidence"), *scoped_retrieve_cmd->knowledge_query_kind,
+      "knowledge retrieve should canonicalize query-kind flag");
+    assert_equal(2,
+      static_cast<int>(scoped_retrieve_cmd->knowledge_allowed_corpora.size()),
+      "knowledge retrieve should preserve repeated allowed-corpus flags");
+    assert_equal(1,
+      static_cast<int>(scoped_retrieve_cmd->knowledge_domain_tags.size()),
+      "knowledge retrieve should preserve domain-tag flags");
+    assert_equal(1,
+      static_cast<int>(scoped_retrieve_cmd->knowledge_required_tags.size()),
+      "knowledge retrieve should preserve required-tag flags");
+    assert_equal(std::string("zh-CN"),
+      *scoped_retrieve_cmd->knowledge_required_language,
+      "knowledge retrieve should preserve required-language value");
+    assert_equal(std::string("Hybrid canary"), *scoped_retrieve_cmd->knowledge_query_text,
+      "knowledge retrieve should still preserve positional query text after flags");
+
   const char* invalid_retrieve_argv[] = {"dasall-cli", "knowledge", "retrieve"};
   const auto invalid_retrieve = CliCommandParser::parse(3, invalid_retrieve_argv);
   assert_true(!invalid_retrieve.has_value(),
         "knowledge retrieve should reject missing query text");
+
+  const char* invalid_mode_argv[] = {
+    "dasall-cli", "knowledge", "retrieve", "--preferred-mode", "wide-open", "query"};
+  const auto invalid_mode = CliCommandParser::parse(6, invalid_mode_argv);
+  assert_true(!invalid_mode.has_value(),
+        "knowledge retrieve should reject invalid preferred-mode values");
+
+  const char* invalid_allowed_corpus_argv[] = {
+    "dasall-cli", "knowledge", "retrieve", "--allowed-corpus=", "query"};
+  const auto invalid_allowed_corpus = CliCommandParser::parse(5, invalid_allowed_corpus_argv);
+  assert_true(!invalid_allowed_corpus.has_value(),
+        "knowledge retrieve should reject empty allowed-corpus values");
 
   const char* invalid_health_argv[] = {
     "dasall-cli", "knowledge", "health", "extra"};
@@ -194,6 +247,10 @@ void test_parse_knowledge_commands() {
   const auto usage = CliCommandParser::usage_string("knowledge", "retrieve");
   assert_true(usage.find("knowledge retrieve <query_text>") != std::string::npos,
         "knowledge retrieve usage should expose query argument");
+    assert_true(usage.find("--preferred-mode <lexical-only|dense-only|hybrid>") != std::string::npos,
+      "knowledge retrieve usage should expose preferred-mode flag");
+    assert_true(usage.find("--allowed-corpus <id>") != std::string::npos,
+      "knowledge retrieve usage should expose corpus scoping flag");
     const auto refresh_usage = CliCommandParser::usage_string("knowledge", "refresh");
     assert_true(refresh_usage.find("--changed-source <path>") != std::string::npos,
       "knowledge refresh usage should expose changed-source flag");

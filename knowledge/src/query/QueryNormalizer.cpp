@@ -170,6 +170,8 @@ bool NormalizedQuery::has_consistent_values() const {
          query_kind != KnowledgeQueryKind::MultiHop && top_k > 0U &&
          max_context_projection_items > 0U && detail::has_unique_values(lexical_terms) &&
          detail::has_unique_values(domain_tags) && detail::has_unique_values(allowed_corpora) &&
+         detail::has_unique_values(required_tags) &&
+         (!required_language.has_value() || !required_language->empty()) &&
          detail::has_unique_values(warnings);
 }
 
@@ -252,8 +254,24 @@ NormalizeResult QueryNormalizer::normalize(const KnowledgeQuery& query) const {
   }
 
   const auto defaults = defaults_for_query_kind(query.query_kind);
-  const auto domain_tags = normalize_tags(query.domain_tags, warnings);
+  const auto domain_tags = normalize_tags(query.domain_tags,
+                                          warnings,
+                                          "domain_tag_dropped_invalid",
+                                          "domain_tag_filtered_allowlist");
   const auto allowed_corpora = normalize_allowed_corpora(query.allowed_corpora, warnings);
+  const auto required_tags = normalize_required_tags(query.required_tags);
+  if (!required_tags.has_value()) {
+    return make_error_result(KnowledgeErrorCode::QueryValidationFailed,
+                             "required_tags must contain non-empty normalized values",
+                             "query_validation_failed");
+  }
+
+  const auto required_language = normalize_required_language(query.required_language);
+  if (query.required_language.has_value() && !required_language.has_value()) {
+    return make_error_result(KnowledgeErrorCode::QueryValidationFailed,
+                             "required_language must contain a non-empty normalized value",
+                             "query_validation_failed");
+  }
 
   std::size_t top_k = query.top_k == 0U ? defaults.max_top_k : query.top_k;
   if (query.top_k == 0U) {
@@ -284,8 +302,11 @@ NormalizeResult QueryNormalizer::normalize(const KnowledgeQuery& query) const {
       .request_id = query.request_id,
       .normalized_text = normalized_text,
       .lexical_terms = lexical_terms,
+      .preferred_mode = query.preferred_mode,
       .domain_tags = domain_tags,
       .allowed_corpora = allowed_corpora,
+      .required_tags = *required_tags,
+      .required_language = required_language,
       .query_kind = query.query_kind,
       .top_k = top_k,
       .max_context_projection_items = max_context_projection_items,
@@ -360,11 +381,13 @@ std::vector<std::string> QueryNormalizer::derive_lexical_terms(
 }
 
 std::vector<std::string> QueryNormalizer::normalize_tags(const std::vector<std::string>& tags,
-                                                         std::vector<std::string>& warnings) const {
+                                                         std::vector<std::string>& warnings,
+                                                         std::string_view dropped_invalid_warning,
+                                                         std::string_view filtered_allowlist_warning) const {
   bool saw_invalid = false;
   auto normalized_tags = canonicalize_values(tags, &saw_invalid);
   if (saw_invalid) {
-    append_unique(warnings, "domain_tag_dropped_invalid");
+    append_unique(warnings, std::string(dropped_invalid_warning));
   }
 
   std::vector<std::string> filtered_tags;
@@ -375,7 +398,7 @@ std::vector<std::string> QueryNormalizer::normalize_tags(const std::vector<std::
     }
 
     if (!allowed_tags.empty() && !contains_value(allowed_tags, tag)) {
-      append_unique(warnings, "domain_tag_filtered_allowlist");
+      append_unique(warnings, std::string(filtered_allowlist_warning));
       continue;
     }
 
@@ -383,6 +406,31 @@ std::vector<std::string> QueryNormalizer::normalize_tags(const std::vector<std::
   }
 
   return filtered_tags;
+}
+
+std::optional<std::vector<std::string>> QueryNormalizer::normalize_required_tags(
+    const std::vector<std::string>& tags) const {
+  bool saw_invalid = false;
+  auto normalized_tags = canonicalize_values(tags, &saw_invalid);
+  if (saw_invalid) {
+    return std::nullopt;
+  }
+
+  return normalized_tags;
+}
+
+std::optional<std::string> QueryNormalizer::normalize_required_language(
+    const std::optional<std::string>& language) const {
+  if (!language.has_value()) {
+    return std::nullopt;
+  }
+
+  auto normalized_language = normalize_identifier(*language);
+  if (normalized_language.empty()) {
+    return std::nullopt;
+  }
+
+  return normalized_language;
 }
 
 std::vector<std::string> QueryNormalizer::normalize_allowed_corpora(

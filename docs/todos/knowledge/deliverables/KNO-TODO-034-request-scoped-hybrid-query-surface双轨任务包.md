@@ -121,3 +121,14 @@
 2. daemon/access JSON payload 能返回 `mode`、`degraded`、`reason_codes`、`warning_count` 与 `corpus_summary`。
 3. 未显式提供新字段时，现有 lexical-only baseline 与旧命令行为保持不变。
 4. `contracts/` 无新增 retrieval supporting object，runtime-owned canary admission 仍未下沉到 Knowledge。
+
+## 10. Build 完成证据（2026-05-26）
+
+1. `knowledge/include/KnowledgeTypes.h`、`knowledge/src/query/QueryNormalizer.cpp`、`knowledge/src/facade/KnowledgeService.cpp`、`knowledge/src/retrieve/SparseRetriever.cpp` 与 `knowledge/src/retrieve/VectorRetrieverBridge.cpp` 已把 `preferred_mode`、`required_tags`、`required_language` 收口到 module-local query plane：`required_tags` 不再借用 `domain_tags`，`required_language` 不再走空实现，`KnowledgeRetrieveResult` 现可回传 `reason_codes`、`warning_count` 与 `corpus_summary`。
+2. `apps/cli/src/CliCommandParser.cpp`、`apps/cli/src/CliRequestBuilder.h` 与 `access/src/AccessGatewayFactory.cpp` 已把 `knowledge retrieve` 扩展为 request-scoped control surface：CLI 可显式传入 `--preferred-mode`、`--query-kind`、`--allowed-corpus`、`--domain-tag`、`--required-tag`、`--required-language`，daemon/access 会把它们映射到 `KnowledgeQuery`，并将 additive explain fields 反投影回 JSON。
+3. 已新增 `tests/integration/access/KnowledgeRuntimeQuerySurfaceIntegrationTest.cpp` 并接入 `tests/integration/access/CMakeLists.txt`；同时扩展 `CliDaemonCommandParserTest`、`DaemonAccessPipelineFactoryTest`、`dasall_knowledge_interface_surface_unit_test`、`QueryNormalizerTest`、`QueryNormalizerBoundaryTest`、`SparseRetrieverFilterTest` 与 `VectorRetrieverBridgeTest`，覆盖默认 lexical-only 兼容路径、显式 hybrid canary query 映射和非法 query surface 拒绝路径。
+4. 验证结果：
+   - `Build_CMakeTools(buildTargets=["dasall_knowledge_interface_surface_unit_test","dasall_query_normalizer_unit_test","dasall_query_normalizer_boundary_unit_test","dasall_sparse_retriever_filter_unit_test","dasall_vector_retriever_bridge_unit_test","dasall-cli_command_parser_unit_test","dasall-daemon_access_pipeline_factory_unit_test","dasall_knowledge_runtime_query_surface_integration_test"])`：通过。
+   - `RunCtest_CMakeTools` 对上述 tests 仍命中仓库已知泛化 `生成失败`。
+   - 已按仓库回退口径直接执行 `./build/vscode-linux-ninja/tests/unit/knowledge/dasall_knowledge_interface_surface_unit_test`、`./build/vscode-linux-ninja/tests/unit/knowledge/dasall_query_normalizer_unit_test`、`./build/vscode-linux-ninja/tests/unit/knowledge/dasall_query_normalizer_boundary_unit_test`、`./build/vscode-linux-ninja/tests/unit/knowledge/dasall_sparse_retriever_filter_unit_test`、`./build/vscode-linux-ninja/tests/unit/knowledge/dasall_vector_retriever_bridge_unit_test`、`./build/vscode-linux-ninja/tests/unit/apps/cli/dasall-cli_command_parser_unit_test`、`./build/vscode-linux-ninja/tests/unit/apps/daemon/dasall-daemon_access_pipeline_factory_unit_test` 与 `./build/vscode-linux-ninja/tests/integration/access/dasall_knowledge_runtime_query_surface_integration_test`，退出码均为 `0`。
+5. Build 结论：`KNO-TODO-034-B` 已完成，Gate-I（query surface ready）可判定通过；下一原子任务转入 `KNO-TODO-035`，继续在 runtime owner 下收口 hybrid canary seam，而不是把 rollout 判定下沉到 Knowledge。

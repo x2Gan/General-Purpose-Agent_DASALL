@@ -417,7 +417,7 @@ SparseRetrieveResult SparseRetriever::retrieve(
   SparseIndexSearchRequest search_request{
       .expression = expression,
       .allowed_corpus_ids = request.plan.corpus_ids,
-      .required_tags = request.normalized_query.domain_tags,
+      .required_tags = request.normalized_query.required_tags,
       .required_language = request.required_language,
       .minimum_authority_level =
           minimum_authority_level(request.normalized_query.query_kind),
@@ -451,7 +451,7 @@ SparseRetrieveResult SparseRetriever::retrieve(
     if (!contains_string(request.plan.corpus_ids, row.corpus_id)) {
       continue;
     }
-    if (!contains_all_tags(row.tags, request.normalized_query.domain_tags)) {
+    if (!contains_all_tags(row.tags, request.normalized_query.required_tags)) {
       continue;
     }
     if (!matches_language(row.language, request.required_language)) {
