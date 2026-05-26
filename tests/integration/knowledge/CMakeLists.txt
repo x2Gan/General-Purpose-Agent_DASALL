@@ -259,6 +259,7 @@ target_link_libraries(dasall_knowledge_production_telemetry_integration_test
   PRIVATE
     dasall_apps_runtime_support
     dasall_infra
+    dasall_llm
     dasall_profiles
     dasall_runtime
 )

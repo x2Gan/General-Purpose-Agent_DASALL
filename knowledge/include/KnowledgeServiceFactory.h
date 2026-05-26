@@ -15,6 +15,12 @@
 
 namespace dasall::knowledge {
 
+namespace query {
+
+struct NormalizedQuery;
+
+}  // namespace query
+
 struct DenseStoreFactoryContext {
   std::filesystem::path snapshots_root;
   std::function<std::optional<IndexManifest>()> active_manifest;
@@ -38,6 +44,9 @@ struct InstalledAssetKnowledgeServiceOptions {
       create_vector_recall_store;
   std::function<std::unique_ptr<retrieve::IQueryEncoder>()> create_query_encoder;
   std::vector<std::string> runtime_canary_allowed_corpora;
+  std::function<bool()> runtime_vector_backend_available;
+  std::function<bool(const query::NormalizedQuery&)> runtime_canary_backend_ready;
+  std::function<std::vector<std::string>()> runtime_recent_reason_codes;
 
   [[nodiscard]] bool has_consistent_values() const {
     return readonly_assets_root.is_absolute() && state_root.is_absolute() &&

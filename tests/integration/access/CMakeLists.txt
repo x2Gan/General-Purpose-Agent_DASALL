@@ -684,6 +684,7 @@ target_link_libraries(dasall_runtime_knowledge_query_encoder_integration_test
     dasall_apps_runtime_support
     dasall_infra
     dasall_knowledge
+    dasall_llm
     dasall_profiles
     dasall_runtime
 )

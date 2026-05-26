@@ -1,3 +1,36 @@
+# 记录 #825
+
+- 日期：2026-05-26
+- 阶段：knowledge/production embedding provider contract closeout
+- 任务：KNO-TODO-043 production embedding provider 替代 env-gated local fallback
+- 状态：已完成（代码、focused integration、telemetry gate、TODO/worklog 回写已落盘）
+
+### 改动
+
+1. 更新 `apps/runtime_support/CMakeLists.txt`、`apps/runtime_support/include/RuntimeLiveDependencyComposition.h` 与 `apps/runtime_support/src/RuntimeLiveDependencyComposition.cpp`，把默认 query encoder 从 env-gated local hash fallback 收口为 provider-backed production path；新增 runtime-local query encoder health state、provider 选择 / secret materialize / HTTP embedding transport / cached embedding 管理与 transport override seam，显式 `DASALL_DETACHED_VECTOR_LOCAL_FALLBACK=1` 现仅保留 local/test/package fallback。
+2. 更新 `knowledge/include/KnowledgeServiceFactory.h` 与 `knowledge/src/KnowledgeServiceFactory.cpp`，把 passive health 与 active canary readiness 分离：普通 lexical retrieve 继续只读本地 snapshot，不被 telemetry/health 路径被动联网；只有 explicit hybrid canary admission 才调用 `runtime_canary_backend_ready(query)`，因此 provider-missing、provider-empty-embedding、invalid-secret 都会在 admission 前 lexical-only fail-closed，并保留明确 `runtime_canary_*` / `query_encoder_*` reason code。
+3. 更新 `llm/assets/providers/deepseek/models.yaml`、`tests/integration/access/CMakeLists.txt`、`tests/integration/access/RuntimeKnowledgeQueryEncoderIntegrationTest.cpp`、`tests/integration/knowledge/CMakeLists.txt` 与 `tests/integration/knowledge/KnowledgeProductionTelemetryIntegrationTest.cpp`，新增 `deepseek-embedding` metadata、provider-ready/provider-missing/provider-empty-embedding/invalid-secret/local-fallback focused matrix，以及 provider-ready Hybrid / invalid-secret lexical-only 的 shared audit/metrics/trace telemetry gate。
+4. 回写 `docs/todos/knowledge/deliverables/KNO-TODO-043-production-embedding-provider-contract收口双轨任务包.md`、`docs/todos/knowledge/DASALL_knowledge子系统专项TODO.md` 与 `docs/todos/DASALL_子系统查漏补缺专项记录.md`，把 043 从 D Gate 升级到 Build 完成态，并记录 direct-binary fallback 验证口径。
+
+### 验证
+
+1. `Build_CMakeTools(buildTargets=["dasall_runtime_knowledge_query_encoder_integration_test"])`
+   - 结果：通过。
+2. `./build/vscode-linux-ninja/tests/integration/access/dasall_runtime_knowledge_query_encoder_integration_test && echo PASS`
+   - 结果：`PASS`。
+3. `Build_CMakeTools(buildTargets=["dasall_knowledge_production_telemetry_integration_test"])`
+   - 结果：通过。
+4. `RunCtest_CMakeTools(tests=["KnowledgeProductionTelemetryIntegrationTest"])`
+   - 结果：继续命中仓库已知泛化 `生成失败`，因此本轮沿用 direct-binary fallback 口径，不扩大验证面。
+5. `./build/vscode-linux-ninja/tests/integration/knowledge/dasall_knowledge_production_telemetry_integration_test && echo PASS`
+   - 结果：`PASS`。
+
+### 结果
+
+1. `KNO-TODO-043-B` 已完成：默认 query encoder 现优先走 provider-backed production path，关闭 `DASALL_DETACHED_VECTOR_LOCAL_FALLBACK` 后 provider-ready 正例仍可返回 Hybrid/Dense evidence。
+2. provider-missing、provider-empty-embedding、invalid-secret 三条负例现在都会在 explicit canary admission 前 lexical-only fail-closed，并保留明确 `runtime_canary_backend_not_ready` 与 `query_encoder_*` reason code。
+3. production telemetry / audit 现可稳定暴露 provider-backed canary 的 admitted / fail-closed explain token，而不需要依赖内部日志 grep；ADR-006 / ADR-007 / ADR-008 owner boundary 未回退。
+
 # 记录 #824
 
 - 日期：2026-05-26

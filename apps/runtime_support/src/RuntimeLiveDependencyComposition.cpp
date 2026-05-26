@@ -3,8 +3,10 @@
 #include <algorithm>
 #include <chrono>
 #include <cctype>
+#include <cstddef>
 #include <cstdlib>
 #include <filesystem>
+#include <fstream>
 #include <functional>
 #include <limits>
 #include <memory>
@@ -22,9 +24,13 @@
 
 #include <sqlite3.h>
 
+#include <sys/wait.h>
+#include <unistd.h>
+
 #include "LogEvent.h"
 #include "ICognitionEngine.h"
 #include "IKnowledgeService.h"
+#include "ILLMTransport.h"
 #include "ILLMManager.h"
 #include "LLMGenerateRequest.h"
 #include "LLMManagerResult.h"
@@ -72,6 +78,7 @@
 #include "tracing/ISpan.h"
 #include "tracing/ITracer.h"
 #include "tracing/TraceTypes.h"
+#include "provider/ProviderCatalogRepository.h"
 #include "vector/DetachedVectorIndexFactory.h"
 
 namespace dasall::apps::runtime_support {
@@ -80,6 +87,834 @@ namespace {
 namespace fs = std::filesystem;
 
 constexpr std::string_view kKnowledgeDenseSnapshotDatabaseName = "dense.sqlite";
+constexpr std::string_view kKnowledgeQueryEmbeddingFeatureNote =
+    "knowledge_query_embedding_default";
+constexpr std::string_view kSecretRefPrefix = "secret://";
+constexpr std::string_view kProfileRefPrefix = "profile://";
+constexpr std::string_view kKnowledgeEmbeddingEndpointPath = "/embeddings";
+constexpr std::string_view kKnowledgeQueryEncoderTransportError =
+    "query_encoder_transport_failed";
+constexpr std::string_view kKnowledgeQueryEncoderInvalidSecret =
+    "query_encoder_invalid_secret";
+constexpr std::string_view kKnowledgeQueryEncoderEmptyEmbedding =
+    "query_encoder_empty_embedding";
+constexpr std::string_view kKnowledgeQueryEncoderProviderMissing =
+    "query_encoder_provider_missing";
+constexpr std::string_view kKnowledgeQueryEncoderResponseInconsistent =
+    "query_encoder_response_inconsistent";
+constexpr std::string_view kKnowledgeQueryEncoderProviderRejected =
+    "query_encoder_provider_rejected";
+constexpr std::string_view kKnowledgeQueryEncoderSecretMissing =
+    "query_encoder_secret_missing";
+constexpr std::string_view kKnowledgeQueryEncoderSecretMaterializeFailed =
+    "query_encoder_secret_materialize_failed";
+constexpr std::string_view kKnowledgeQueryEncoderInvalidAuthRef =
+    "query_encoder_invalid_auth_ref";
+constexpr std::string_view kKnowledgeQueryEncoderTransportMissing =
+    "query_encoder_transport_missing";
+
+struct RuntimeKnowledgeEmbeddingProviderConfig {
+  std::string provider_id;
+  std::string model_id;
+  std::string base_url;
+  std::string auth_ref;
+  std::string base_url_alias;
+  std::string snapshot_version;
+  std::uint32_t timeout_ms = 15000U;
+
+  [[nodiscard]] bool has_consistent_values() const {
+    return !provider_id.empty() && !model_id.empty() && !base_url.empty() &&
+           !auth_ref.empty() && !base_url_alias.empty() &&
+           !snapshot_version.empty() && timeout_ms > 0U;
+  }
+};
+
+[[nodiscard]] std::string trim_copy(std::string_view value) {
+  std::size_t begin = 0U;
+  while (begin < value.size() &&
+         std::isspace(static_cast<unsigned char>(value[begin])) != 0) {
+    ++begin;
+  }
+
+  std::size_t end = value.size();
+  while (end > begin &&
+         std::isspace(static_cast<unsigned char>(value[end - 1U])) != 0) {
+    --end;
+  }
+
+  return std::string(value.substr(begin, end - begin));
+}
+
+[[nodiscard]] std::string escape_json(std::string_view value) {
+  std::string escaped;
+  escaped.reserve(value.size());
+  for (const char character : value) {
+    switch (character) {
+      case '\\':
+        escaped += "\\\\";
+        break;
+      case '"':
+        escaped += "\\\"";
+        break;
+      case '\n':
+        escaped += "\\n";
+        break;
+      case '\r':
+        escaped += "\\r";
+        break;
+      case '\t':
+        escaped += "\\t";
+        break;
+      default:
+        escaped.push_back(character);
+        break;
+    }
+  }
+
+  return escaped;
+}
+
+[[nodiscard]] std::optional<std::string> secret_name_from_auth_ref(
+    std::string_view auth_ref) {
+  if (!auth_ref.starts_with(kSecretRefPrefix) ||
+      auth_ref.size() <= kSecretRefPrefix.size()) {
+    return std::nullopt;
+  }
+
+  return std::string(auth_ref.substr(kSecretRefPrefix.size()));
+}
+
+[[nodiscard]] std::optional<std::size_t> find_json_value_start(std::string_view payload,
+                                                               std::string_view key,
+                                                               std::size_t offset = 0U) {
+  const std::string needle = "\"" + std::string(key) + "\"";
+  const std::size_t key_position = payload.find(needle, offset);
+  if (key_position == std::string_view::npos) {
+    return std::nullopt;
+  }
+
+  const std::size_t colon_position = payload.find(':', key_position + needle.size());
+  if (colon_position == std::string_view::npos) {
+    return std::nullopt;
+  }
+
+  std::size_t value_position = colon_position + 1U;
+  while (value_position < payload.size() &&
+         std::isspace(static_cast<unsigned char>(payload[value_position])) != 0) {
+    ++value_position;
+  }
+
+  if (value_position >= payload.size()) {
+    return std::nullopt;
+  }
+
+  return value_position;
+}
+
+[[nodiscard]] std::optional<std::string> extract_json_array_field(
+    std::string_view payload,
+    std::string_view key,
+    std::size_t offset = 0U) {
+  const auto value_start = find_json_value_start(payload, key, offset);
+  if (!value_start.has_value() || payload[*value_start] != '[') {
+    return std::nullopt;
+  }
+
+  bool in_string = false;
+  bool escaping = false;
+  int depth = 0;
+  for (std::size_t index = *value_start; index < payload.size(); ++index) {
+    const char character = payload[index];
+    if (escaping) {
+      escaping = false;
+      continue;
+    }
+
+    if (character == '\\') {
+      escaping = true;
+      continue;
+    }
+
+    if (character == '"') {
+      in_string = !in_string;
+      continue;
+    }
+
+    if (in_string) {
+      continue;
+    }
+
+    if (character == '[') {
+      ++depth;
+    } else if (character == ']') {
+      --depth;
+      if (depth == 0) {
+        return std::string(payload.substr(*value_start, index - *value_start + 1U));
+      }
+    }
+  }
+
+  return std::nullopt;
+}
+
+[[nodiscard]] std::vector<float> parse_json_float_array(std::string_view payload) {
+  std::vector<float> values;
+  if (payload.size() < 2U || payload.front() != '[' || payload.back() != ']') {
+    return values;
+  }
+
+  std::string token;
+  token.reserve(32U);
+  for (std::size_t index = 1U; index + 1U < payload.size(); ++index) {
+    const char character = payload[index];
+    if (std::isdigit(static_cast<unsigned char>(character)) != 0 || character == '-' ||
+        character == '+' || character == '.' || character == 'e' ||
+        character == 'E') {
+      token.push_back(character);
+      continue;
+    }
+
+    if (!token.empty()) {
+      try {
+        values.push_back(std::stof(token));
+      } catch (...) {
+        return {};
+      }
+      token.clear();
+    }
+  }
+
+  if (!token.empty()) {
+    try {
+      values.push_back(std::stof(token));
+    } catch (...) {
+      return {};
+    }
+  }
+
+  return values;
+}
+
+[[nodiscard]] std::vector<float> extract_embedding_vector(std::string_view payload) {
+  const auto embedding_json = extract_json_array_field(payload, "embedding");
+  if (!embedding_json.has_value()) {
+    return {};
+  }
+
+  return parse_json_float_array(*embedding_json);
+}
+
+[[nodiscard]] std::string normalize_base_url(std::string_view base_url) {
+  std::string normalized = trim_copy(base_url);
+  while (!normalized.empty() && normalized.back() == '/') {
+    normalized.pop_back();
+  }
+  return normalized;
+}
+
+[[nodiscard]] std::string build_embedding_url(std::string_view base_url) {
+  return normalize_base_url(base_url) + std::string(kKnowledgeEmbeddingEndpointPath);
+}
+
+[[nodiscard]] std::string secure_buffer_to_string(
+    const infra::secret::SecureBuffer& buffer) {
+  std::string value;
+  value.reserve(buffer.bytes().size());
+  for (const std::byte byte : buffer.bytes()) {
+    value.push_back(static_cast<char>(byte));
+  }
+  return value;
+}
+
+[[nodiscard]] std::string shell_quote(const std::filesystem::path& path) {
+  std::string quoted = "'";
+  const std::string value = path.string();
+  for (const char character : value) {
+    if (character == '\'') {
+      quoted += "'\\''";
+    } else {
+      quoted.push_back(character);
+    }
+  }
+  quoted.push_back('\'');
+  return quoted;
+}
+
+[[nodiscard]] std::string curl_config_escape(std::string_view value) {
+  std::string escaped;
+  escaped.reserve(value.size());
+  for (const char character : value) {
+    switch (character) {
+      case '\\':
+        escaped += "\\\\";
+        break;
+      case '"':
+        escaped += "\\\"";
+        break;
+      case '\n':
+        escaped += "\\n";
+        break;
+      case '\r':
+        escaped += "\\r";
+        break;
+      case '\t':
+        escaped += "\\t";
+        break;
+      default:
+        escaped.push_back(character);
+        break;
+    }
+  }
+  return escaped;
+}
+
+[[nodiscard]] std::optional<std::filesystem::path> make_temp_file(
+    const std::filesystem::path& temp_dir,
+    std::string_view prefix) {
+  std::error_code error;
+  std::filesystem::create_directories(temp_dir, error);
+  if (error) {
+    return std::nullopt;
+  }
+
+  std::filesystem::path pattern = temp_dir / (std::string(prefix) + ".XXXXXX");
+  std::string raw_pattern = pattern.string();
+  const int fd = ::mkstemp(raw_pattern.data());
+  if (fd < 0) {
+    return std::nullopt;
+  }
+
+  (void)::close(fd);
+  return std::filesystem::path(raw_pattern);
+}
+
+[[nodiscard]] bool write_file(const std::filesystem::path& path,
+                              std::string_view content) {
+  std::ofstream stream(path, std::ios::binary | std::ios::trunc);
+  if (!stream.is_open()) {
+    return false;
+  }
+
+  stream.write(content.data(), static_cast<std::streamsize>(content.size()));
+  stream.flush();
+  return stream.good();
+}
+
+[[nodiscard]] std::string build_curl_config(const llm::LLMTransportRequest& request,
+                                            const std::filesystem::path& body_path) {
+  std::ostringstream config;
+  config << "silent\n";
+  config << "show-error\n";
+  config << "request = \"";
+  config << (request.method == llm::LLMTransportMethod::Post ? "POST" : "GET");
+  config << "\"\n";
+  config << "url = \"" << curl_config_escape(request.url) << "\"\n";
+  config << "max-time = \"" << std::max<std::uint32_t>(1U, (request.timeout_ms + 999U) / 1000U)
+         << "\"\n";
+  config << "connect-timeout = \"10\"\n";
+  config << "output = \"-\"\n";
+  config << "write-out = \"\\n__DASALL_CURL_HTTP_STATUS__:%{http_code}\"\n";
+  config << "user-agent = \"DASALL/0.1 runtime-knowledge-query-encoder\"\n";
+  for (const auto& header : request.headers) {
+    config << "header = \""
+           << curl_config_escape(header.name + ": " + header.value)
+           << "\"\n";
+  }
+  config << "data-binary = \"@" << curl_config_escape(body_path.string()) << "\"\n";
+  return config.str();
+}
+
+[[nodiscard]] llm::LLMTransportResponse parse_curl_output(std::string output,
+                                                          int process_status) {
+  constexpr std::string_view kStatusMarker = "\n__DASALL_CURL_HTTP_STATUS__:";
+  const std::size_t marker_position = output.rfind(kStatusMarker);
+  if (marker_position == std::string::npos) {
+    return llm::LLMTransportResponse{
+        .status_code = 0U,
+        .body = {},
+        .error_message = "runtime query encoder transport did not return an HTTP status marker",
+    };
+  }
+
+  const std::size_t status_start = marker_position + kStatusMarker.size();
+  std::string status_text = output.substr(status_start);
+  while (!status_text.empty() &&
+         (status_text.back() == '\n' || status_text.back() == '\r')) {
+    status_text.pop_back();
+  }
+
+  std::uint16_t status_code = 0U;
+  try {
+    status_code = static_cast<std::uint16_t>(std::stoul(status_text));
+  } catch (...) {
+    return llm::LLMTransportResponse{
+        .status_code = 0U,
+        .body = {},
+        .error_message = "runtime query encoder transport returned a malformed HTTP status marker",
+    };
+  }
+
+  if (process_status != 0 && status_code == 0U) {
+    return llm::LLMTransportResponse{
+        .status_code = 0U,
+        .body = {},
+        .error_message = "runtime query encoder transport failed before receiving an HTTP response",
+    };
+  }
+
+  output.erase(marker_position);
+  return llm::LLMTransportResponse{
+      .status_code = status_code,
+      .body = std::move(output),
+      .error_message = {},
+  };
+}
+
+[[nodiscard]] std::string run_curl_command(const std::filesystem::path& curl_path,
+                                           const std::filesystem::path& config_path,
+                                           int* process_status) {
+  const std::string command = shell_quote(curl_path) + " --config " +
+                              shell_quote(config_path);
+  FILE* pipe = ::popen(command.c_str(), "r");
+  if (pipe == nullptr) {
+    if (process_status != nullptr) {
+      *process_status = -1;
+    }
+    return {};
+  }
+
+  std::array<char, 4096U> buffer{};
+  std::string output;
+  while (true) {
+    const std::size_t bytes_read = std::fread(buffer.data(), 1U, buffer.size(), pipe);
+    if (bytes_read == 0U) {
+      break;
+    }
+    output.append(buffer.data(), bytes_read);
+  }
+
+  const int close_status = ::pclose(pipe);
+  if (process_status != nullptr) {
+    if (WIFEXITED(close_status)) {
+      *process_status = WEXITSTATUS(close_status);
+    } else {
+      *process_status = close_status;
+    }
+  }
+  return output;
+}
+
+class RuntimeKnowledgeQueryEncoderCurlTransport final : public llm::ILLMTransport {
+ public:
+  explicit RuntimeKnowledgeQueryEncoderCurlTransport(
+      std::filesystem::path temp_dir = std::filesystem::temp_directory_path())
+      : temp_dir_(std::move(temp_dir)) {}
+
+  [[nodiscard]] llm::LLMTransportResponse send(
+      const llm::LLMTransportRequest& request) override {
+    if (!request.has_consistent_values()) {
+      return llm::LLMTransportResponse{
+          .status_code = 0U,
+          .body = {},
+          .error_message = "runtime query encoder transport received an inconsistent request",
+      };
+    }
+
+    const auto body_path = make_temp_file(temp_dir_, "dasall-runtime-query-encoder-body");
+    const auto config_path = make_temp_file(temp_dir_, "dasall-runtime-query-encoder-config");
+    if (!body_path.has_value() || !config_path.has_value()) {
+      return llm::LLMTransportResponse{
+          .status_code = 0U,
+          .body = {},
+          .error_message = "runtime query encoder transport could not allocate temp files",
+      };
+    }
+
+    struct CleanupGuard {
+      std::filesystem::path body_path;
+      std::filesystem::path config_path;
+      ~CleanupGuard() {
+        std::error_code error;
+        std::filesystem::remove(body_path, error);
+        std::filesystem::remove(config_path, error);
+      }
+    } cleanup_guard{*body_path, *config_path};
+
+    if (!write_file(*body_path, request.body) ||
+        !write_file(*config_path, build_curl_config(request, *body_path))) {
+      return llm::LLMTransportResponse{
+          .status_code = 0U,
+          .body = {},
+          .error_message = "runtime query encoder transport could not write curl temp files",
+      };
+    }
+
+    int process_status = 0;
+    const auto output = run_curl_command("/usr/bin/curl", *config_path, &process_status);
+    return parse_curl_output(output, process_status);
+  }
+
+ private:
+  std::filesystem::path temp_dir_;
+};
+
+[[nodiscard]] std::optional<RuntimeKnowledgeEmbeddingProviderConfig>
+select_runtime_knowledge_embedding_provider(const fs::path& providers_root,
+                                           std::vector<std::string>* failure_reason_codes) {
+  llm::provider::ProviderCatalogRepository repository;
+  if (!repository.init(llm::ProviderCatalogSourceConfig{
+          .baseline_root = providers_root.string(),
+          .deployment_root = {},
+          .snapshot_cache_root = {},
+          .signature_required = false,
+          .merge_mode = "overlay",
+      }) ||
+      !repository.reload()) {
+    if (failure_reason_codes != nullptr) {
+      failure_reason_codes->push_back(kKnowledgeQueryEncoderProviderMissing.data());
+    }
+    return std::nullopt;
+  }
+
+  const auto snapshot = repository.snapshot();
+  if (snapshot == nullptr || !snapshot->has_consistent_values()) {
+    if (failure_reason_codes != nullptr) {
+      failure_reason_codes->push_back(kKnowledgeQueryEncoderProviderMissing.data());
+    }
+    return std::nullopt;
+  }
+
+  for (const auto& provider : snapshot->providers) {
+    if (!provider.has_consistent_values() || !provider.runtime.activation_flag) {
+      continue;
+    }
+
+    if (provider.descriptor.adapter_family != "openai_compatible") {
+      continue;
+    }
+
+    for (const auto& model : snapshot->models) {
+      if (!model.has_consistent_values() ||
+          model.summary.provider_id != provider.descriptor.provider_id ||
+          std::find(model.feature_notes.begin(),
+                    model.feature_notes.end(),
+                    std::string(kKnowledgeQueryEmbeddingFeatureNote)) ==
+              model.feature_notes.end()) {
+        continue;
+      }
+
+      RuntimeKnowledgeEmbeddingProviderConfig config;
+      config.provider_id = provider.descriptor.provider_id;
+      config.model_id = model.summary.model_id;
+      config.base_url = provider.descriptor.base_url;
+      config.auth_ref = provider.descriptor.auth_ref;
+      config.base_url_alias = provider.runtime.base_url_alias;
+      config.snapshot_version = provider.descriptor.source_version;
+      if (config.has_consistent_values()) {
+        return config;
+      }
+    }
+  }
+
+  if (failure_reason_codes != nullptr) {
+    failure_reason_codes->push_back(kKnowledgeQueryEncoderProviderMissing.data());
+  }
+  return std::nullopt;
+}
+
+class RuntimeProductionQueryEncoderHealthState {
+ public:
+  RuntimeProductionQueryEncoderHealthState(
+      std::optional<RuntimeKnowledgeEmbeddingProviderConfig> provider_config,
+      std::shared_ptr<infra::secret::ISecretManager> secret_manager,
+      std::shared_ptr<llm::ILLMTransport> transport,
+      std::string composition_owner)
+      : provider_config_(std::move(provider_config)),
+        secret_manager_(std::move(secret_manager)),
+        transport_(std::move(transport)),
+        composition_owner_(std::move(composition_owner)) {
+    if (!provider_config_.has_value()) {
+      current_failure_reason_codes_ = {std::string(kKnowledgeQueryEncoderProviderMissing)};
+    }
+  }
+
+  [[nodiscard]] bool has_provider_configuration() const {
+    std::scoped_lock lock(mutex_);
+    return provider_config_.has_value() && provider_config_->has_consistent_values();
+  }
+
+  [[nodiscard]] bool current_available() const {
+    std::scoped_lock lock(mutex_);
+    return local_contract_ready_locked();
+  }
+
+  [[nodiscard]] bool ensure_canary_ready(std::string_view normalized_text) {
+    std::scoped_lock lock(mutex_);
+    if (!local_contract_ready_locked()) {
+      return false;
+    }
+
+    if (cached_query_text_ == normalized_text && !cached_embedding_.empty()) {
+      return true;
+    }
+
+    return send_embedding_request_locked(normalized_text);
+  }
+
+  [[nodiscard]] std::vector<float> encode_query(std::string_view normalized_text) {
+    std::scoped_lock lock(mutex_);
+    if (!local_contract_ready_locked()) {
+      return {};
+    }
+
+    if (cached_query_text_ == normalized_text && !cached_embedding_.empty()) {
+      return cached_embedding_;
+    }
+
+    if (!send_embedding_request_locked(normalized_text)) {
+      return {};
+    }
+
+    return cached_embedding_;
+  }
+
+  [[nodiscard]] std::vector<std::string> recent_reason_codes() const {
+    std::scoped_lock lock(mutex_);
+    return current_failure_reason_codes_;
+  }
+
+ private:
+  [[nodiscard]] infra::secret::SecretAccessContext make_access_context_locked(
+      std::string_view purpose) const {
+    const std::string request_id = std::string("runtime-knowledge-query-encoder:") +
+                                   std::string(purpose);
+    return infra::secret::SecretAccessContext{
+        .request_id = request_id,
+        .session_id = std::nullopt,
+        .task_id = request_id,
+        .actor = composition_owner_,
+        .consumer_module = std::string("runtime.knowledge.query_encoder"),
+        .permission_domain = std::string("llm.provider.auth"),
+    };
+  }
+
+  [[nodiscard]] bool local_contract_ready_locked() const {
+    if (!provider_config_.has_value() || !provider_config_->has_consistent_values()) {
+      current_failure_reason_codes_ = {std::string(kKnowledgeQueryEncoderProviderMissing)};
+      cached_query_text_.clear();
+      cached_embedding_.clear();
+      remote_failure_active_ = false;
+      return false;
+    }
+
+    if (transport_ == nullptr) {
+      current_failure_reason_codes_ = {std::string(kKnowledgeQueryEncoderTransportMissing)};
+      cached_query_text_.clear();
+      cached_embedding_.clear();
+      remote_failure_active_ = false;
+      return false;
+    }
+
+    if (provider_config_->auth_ref.starts_with(kSecretRefPrefix)) {
+      if (secret_manager_ == nullptr) {
+        current_failure_reason_codes_ = {std::string(kKnowledgeQueryEncoderSecretMissing)};
+        cached_query_text_.clear();
+        cached_embedding_.clear();
+        remote_failure_active_ = false;
+        return false;
+      }
+
+      const auto secret_name = secret_name_from_auth_ref(provider_config_->auth_ref);
+      if (!secret_name.has_value()) {
+        current_failure_reason_codes_ = {std::string(kKnowledgeQueryEncoderInvalidAuthRef)};
+        cached_query_text_.clear();
+        cached_embedding_.clear();
+        remote_failure_active_ = false;
+        return false;
+      }
+
+      const auto inspection = secret_manager_->inspect(*secret_name);
+      if (!inspection.ok || !inspection.is_valid()) {
+        current_failure_reason_codes_ = {std::string(kKnowledgeQueryEncoderSecretMissing)};
+        cached_query_text_.clear();
+        cached_embedding_.clear();
+        remote_failure_active_ = false;
+        return false;
+      }
+    } else if (!provider_config_->auth_ref.starts_with(kProfileRefPrefix)) {
+      current_failure_reason_codes_ = {std::string(kKnowledgeQueryEncoderInvalidAuthRef)};
+      cached_query_text_.clear();
+      cached_embedding_.clear();
+      remote_failure_active_ = false;
+      return false;
+    }
+
+    if (remote_failure_active_) {
+      return false;
+    }
+
+    current_failure_reason_codes_.clear();
+    return true;
+  }
+
+  [[nodiscard]] std::optional<std::string> materialize_bearer_token_locked() const {
+    if (!provider_config_.has_value()) {
+      current_failure_reason_codes_ = {std::string(kKnowledgeQueryEncoderProviderMissing)};
+      return std::nullopt;
+    }
+
+    if (provider_config_->auth_ref.starts_with(kProfileRefPrefix)) {
+      return std::string();
+    }
+
+    const auto secret_name = secret_name_from_auth_ref(provider_config_->auth_ref);
+    if (!secret_name.has_value() || secret_manager_ == nullptr) {
+      current_failure_reason_codes_ = {std::string(kKnowledgeQueryEncoderSecretMissing)};
+      return std::nullopt;
+    }
+
+    const auto access_context = make_access_context_locked("materialize");
+    const auto handle_result = secret_manager_->get_secret(
+        infra::secret::SecretQuery{
+            .secret_name = *secret_name,
+            .version_hint = {},
+            .purpose = std::string("knowledge_query_embedding"),
+            .access_mode = infra::secret::SecretAccessMode::Materialize,
+        },
+        access_context);
+    if (!handle_result.ok || !handle_result.is_valid()) {
+      current_failure_reason_codes_ = {std::string(kKnowledgeQueryEncoderSecretMaterializeFailed)};
+      return std::nullopt;
+    }
+
+    const auto materialized_result = secret_manager_->materialize(handle_result.handle,
+                                                                  access_context);
+    if (!materialized_result.ok || !materialized_result.is_valid() ||
+        materialized_result.materialized_secret == nullptr ||
+        !materialized_result.materialized_secret->is_accessible()) {
+      current_failure_reason_codes_ = {std::string(kKnowledgeQueryEncoderSecretMaterializeFailed)};
+      return std::nullopt;
+    }
+
+    const std::string token =
+        secure_buffer_to_string(*materialized_result.materialized_secret);
+    if (materialized_result.lease.is_valid()) {
+      (void)secret_manager_->release(materialized_result.lease);
+    }
+    return token;
+  }
+
+  [[nodiscard]] bool send_embedding_request_locked(std::string_view normalized_text) const {
+    if (!provider_config_.has_value() || !provider_config_->has_consistent_values()) {
+      current_failure_reason_codes_ = {std::string(kKnowledgeQueryEncoderProviderMissing)};
+      cached_query_text_.clear();
+      cached_embedding_.clear();
+      remote_failure_active_ = false;
+      return false;
+    }
+
+    const auto bearer_token = materialize_bearer_token_locked();
+    if (!bearer_token.has_value()) {
+      cached_query_text_.clear();
+      cached_embedding_.clear();
+      remote_failure_active_ = false;
+      return false;
+    }
+
+    llm::LLMTransportRequest request;
+    request.method = llm::LLMTransportMethod::Post;
+    request.url = build_embedding_url(provider_config_->base_url);
+    request.auth_ref = provider_config_->auth_ref;
+    request.base_url_alias = provider_config_->base_url_alias;
+    request.snapshot_version = provider_config_->snapshot_version;
+    request.timeout_ms = provider_config_->timeout_ms;
+    request.headers = {
+        llm::LLMTransportHeader{.name = "Content-Type", .value = "application/json"},
+        llm::LLMTransportHeader{.name = "Accept", .value = "application/json"},
+    };
+    if (!bearer_token->empty()) {
+      request.headers.push_back(llm::LLMTransportHeader{
+          .name = "Authorization",
+          .value = std::string("Bearer ") + *bearer_token,
+      });
+    }
+    request.body = std::string("{\"model\":\"") +
+                   escape_json(provider_config_->model_id) +
+                   "\",\"input\":\"" +
+                   escape_json(normalized_text) +
+                   "\"}";
+
+    const auto response = transport_->send(request);
+    if (!response.has_consistent_values()) {
+      current_failure_reason_codes_ = {std::string(kKnowledgeQueryEncoderTransportError)};
+      cached_query_text_.clear();
+      cached_embedding_.clear();
+      remote_failure_active_ = true;
+      return false;
+    }
+
+    if (!response.ok()) {
+      if (response.status_code == 401U || response.status_code == 403U) {
+        current_failure_reason_codes_ = {std::string(kKnowledgeQueryEncoderInvalidSecret)};
+      } else if (response.status_code >= 400U && response.status_code < 500U) {
+        current_failure_reason_codes_ = {std::string(kKnowledgeQueryEncoderProviderRejected)};
+      } else {
+        current_failure_reason_codes_ = {std::string(kKnowledgeQueryEncoderTransportError)};
+      }
+      cached_query_text_.clear();
+      cached_embedding_.clear();
+      remote_failure_active_ = true;
+      return false;
+    }
+
+    const auto embedding = extract_embedding_vector(response.body);
+    if (embedding.empty()) {
+      current_failure_reason_codes_ = {std::string(kKnowledgeQueryEncoderEmptyEmbedding)};
+      cached_query_text_.clear();
+      cached_embedding_.clear();
+      remote_failure_active_ = true;
+      return false;
+    }
+
+    cached_query_text_ = std::string(normalized_text);
+    cached_embedding_ = embedding;
+    current_failure_reason_codes_.clear();
+    remote_failure_active_ = false;
+    return true;
+  }
+
+  std::optional<RuntimeKnowledgeEmbeddingProviderConfig> provider_config_;
+  std::shared_ptr<infra::secret::ISecretManager> secret_manager_;
+  std::shared_ptr<llm::ILLMTransport> transport_;
+  std::string composition_owner_;
+  mutable std::mutex mutex_;
+  mutable std::string cached_query_text_;
+  mutable std::vector<float> cached_embedding_;
+  mutable std::vector<std::string> current_failure_reason_codes_;
+  mutable bool remote_failure_active_ = false;
+};
+
+class RuntimeProductionEmbeddingQueryEncoder final
+    : public knowledge::retrieve::IQueryEncoder {
+ public:
+  explicit RuntimeProductionEmbeddingQueryEncoder(
+      std::shared_ptr<RuntimeProductionQueryEncoderHealthState> state)
+      : state_(std::move(state)) {}
+
+  [[nodiscard]] std::vector<float> encode(std::string_view query_text) const override {
+    if (state_ == nullptr) {
+      return {};
+    }
+    return state_->encode_query(query_text);
+  }
+
+  [[nodiscard]] bool available() const override {
+    return state_ != nullptr && state_->current_available();
+  }
+
+ private:
+  std::shared_ptr<RuntimeProductionQueryEncoderHealthState> state_;
+};
 
 [[nodiscard]] std::int64_t current_time_ms() {
   return std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -2782,6 +3617,8 @@ RuntimeDependencyCompositionResult compose_minimal_live_dependency_set(
       create_vector_recall_store = options.create_vector_recall_store_override;
   std::function<std::unique_ptr<knowledge::retrieve::IQueryEncoder>()>
       create_query_encoder = options.create_query_encoder_override;
+    std::shared_ptr<RuntimeProductionQueryEncoderHealthState>
+      runtime_query_encoder_health_state;
   if (!build_dense_snapshot && knowledge_vector_runtime_available) {
     const auto vector_memory_config = *memory_config;
     build_dense_snapshot = [vector_memory_config](
@@ -2796,6 +3633,31 @@ RuntimeDependencyCompositionResult compose_minimal_live_dependency_set(
       return std::make_unique<RuntimeKnowledgeVectorRecallStore>(vector_memory_config,
                                                                  context);
     };
+  }
+  const bool local_query_fallback_forced =
+      environment_flag_enabled("DASALL_DETACHED_VECTOR_LOCAL_FALLBACK");
+  if (!create_query_encoder && knowledge_hybrid_runtime_configured &&
+      !local_query_fallback_forced) {
+    std::vector<std::string> provider_selection_failures;
+    auto provider_config = select_runtime_knowledge_embedding_provider(
+        readonly_assets_root / "llm" / "providers",
+        &provider_selection_failures);
+    auto transport = options.knowledge_query_encoder_transport_override;
+    if (transport == nullptr) {
+      transport = std::make_shared<RuntimeKnowledgeQueryEncoderCurlTransport>();
+    }
+    runtime_query_encoder_health_state =
+        std::make_shared<RuntimeProductionQueryEncoderHealthState>(
+            std::move(provider_config),
+            dependency_set->secret_manager,
+            std::move(transport),
+            std::string(composition_owner));
+    if (runtime_query_encoder_health_state->has_provider_configuration()) {
+      create_query_encoder = [runtime_query_encoder_health_state]() {
+        return std::make_unique<RuntimeProductionEmbeddingQueryEncoder>(
+            runtime_query_encoder_health_state);
+      };
+    }
   }
   if (!create_query_encoder && knowledge_hybrid_runtime_configured) {
     const auto vector_memory_config = *memory_config;
@@ -2815,6 +3677,26 @@ RuntimeDependencyCompositionResult compose_minimal_live_dependency_set(
           .create_vector_recall_store = create_vector_recall_store,
           .create_query_encoder = create_query_encoder,
           .runtime_canary_allowed_corpora = knowledge_runtime_canary_allowlist,
+            .runtime_vector_backend_available =
+              runtime_query_encoder_health_state == nullptr
+                ? std::function<bool()>{}
+                : [runtime_query_encoder_health_state] {
+                  return runtime_query_encoder_health_state->current_available();
+                },
+            .runtime_canary_backend_ready =
+              runtime_query_encoder_health_state == nullptr
+                ? std::function<bool(const knowledge::query::NormalizedQuery&)>{}
+                : [runtime_query_encoder_health_state](
+                  const knowledge::query::NormalizedQuery& query) {
+                  return runtime_query_encoder_health_state->ensure_canary_ready(
+                    query.normalized_text);
+                },
+            .runtime_recent_reason_codes =
+              runtime_query_encoder_health_state == nullptr
+                ? std::function<std::vector<std::string>()>{}
+                : [runtime_query_encoder_health_state] {
+                  return runtime_query_encoder_health_state->recent_reason_codes();
+                },
       });
   if (knowledge_result.ok()) {
     const auto positive_probe_error =

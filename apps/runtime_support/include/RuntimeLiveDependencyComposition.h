@@ -20,6 +20,12 @@ class RuntimeDependencySet;
 
 }  // namespace dasall::runtime
 
+namespace dasall::llm {
+
+class ILLMTransport;
+
+}  // namespace dasall::llm
+
 namespace dasall::platform {
 
 class ITimer;
@@ -90,6 +96,7 @@ struct RuntimeLiveDependencyCompositionOptions {
       create_vector_recall_store_override;
   std::function<std::unique_ptr<knowledge::retrieve::IQueryEncoder>()>
       create_query_encoder_override;
+    std::shared_ptr<llm::ILLMTransport> knowledge_query_encoder_transport_override;
   std::shared_ptr<platform::ITimer> knowledge_refresh_timer;
   std::shared_ptr<IRuntimeKnowledgeRefreshSourceProvider>
       knowledge_refresh_source_provider;

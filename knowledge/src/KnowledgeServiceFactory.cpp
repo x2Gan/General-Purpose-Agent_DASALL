@@ -108,7 +108,8 @@ struct RuntimeCanaryDecision {
     const query::NormalizedQuery& query,
     const KnowledgeConfigSnapshot& config,
     const std::vector<std::string>& allowed_corpora,
-    bool vector_backend_ready) {
+    bool vector_backend_ready,
+    const std::vector<std::string>& backend_reason_codes) {
   RuntimeCanaryDecision decision;
   decision.requested = requests_runtime_canary(query.preferred_mode);
   if (!decision.requested) {
@@ -122,6 +123,9 @@ struct RuntimeCanaryDecision {
 
   if (!vector_backend_ready) {
     decision.reason_codes.push_back("runtime_canary_backend_not_ready");
+    for (const auto& backend_reason_code : backend_reason_codes) {
+      append_reason_code(decision.reason_codes, backend_reason_code);
+    }
     return decision;
   }
 
@@ -590,7 +594,12 @@ KnowledgeServiceFactoryResult create_installed_asset_knowledge_service(
                                                 now_ms(),
                                                 false);
         },
-        .vector_backend_available = [dense_bridge] {
+        .vector_backend_available = [dense_bridge,
+                                     runtime_vector_backend_available =
+                                         options.runtime_vector_backend_available] {
+          if (runtime_vector_backend_available) {
+            return runtime_vector_backend_available();
+          }
           return dense_bridge != nullptr && dense_bridge->available();
         },
         .last_known_good_available = [ledger] {
@@ -602,24 +611,45 @@ KnowledgeServiceFactoryResult create_installed_asset_knowledge_service(
         .degraded_return_count = [] {
           return 0U;
         },
-        .recent_reason_codes = [] {
+        .recent_reason_codes = [runtime_recent_reason_codes =
+                                    options.runtime_recent_reason_codes] {
+          if (runtime_recent_reason_codes) {
+            return runtime_recent_reason_codes();
+          }
           return std::vector<std::string>{};
         },
     });
 
-    deps.build_plan = [router, runtime_canary_allowed_corpora, dense_bridge](
+    deps.build_plan = [router,
+                       runtime_canary_allowed_corpora,
+                       dense_bridge,
+                       runtime_vector_backend_available =
+                           options.runtime_vector_backend_available,
+                       runtime_canary_backend_ready =
+                           options.runtime_canary_backend_ready,
+                       runtime_recent_reason_codes =
+                           options.runtime_recent_reason_codes](
                           const query::NormalizedQuery& query,
                           const KnowledgeConfigSnapshot& config,
                           const index::CorpusCatalogSnapshot& catalog,
                           const FreshnessSnapshot& freshness) {
       auto effective_config = config;
       auto effective_query = query;
-      const bool vector_backend_ready =
-          dense_bridge != nullptr && dense_bridge->available();
+      bool vector_backend_ready = runtime_vector_backend_available
+                                      ? runtime_vector_backend_available()
+                                      : (dense_bridge != nullptr && dense_bridge->available());
+      std::vector<std::string> backend_reason_codes;
+      if (requests_runtime_canary(query.preferred_mode) && runtime_canary_backend_ready) {
+        vector_backend_ready = runtime_canary_backend_ready(query);
+        if (!vector_backend_ready && runtime_recent_reason_codes) {
+          backend_reason_codes = runtime_recent_reason_codes();
+        }
+      }
       const auto canary_decision = decide_runtime_canary(query,
                                                          config,
                                                          runtime_canary_allowed_corpora,
-                                                         vector_backend_ready);
+                                                         vector_backend_ready,
+                                                         backend_reason_codes);
       if (canary_decision.admitted && query.preferred_mode.has_value()) {
         effective_config.retrieval_mode_default = *query.preferred_mode;
         effective_query.allowed_corpora = canary_decision.effective_allowed_corpora;

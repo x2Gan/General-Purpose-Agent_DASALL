@@ -77,3 +77,38 @@ models:
     feature_notes:
       - strip_reasoning_content_before_next_round
       - ignore_temperature_top_p_penalties_when_provider_disables_them
+  deepseek-embedding:
+    id: deepseek-embedding
+    display_name: DeepSeek Embedding
+    model_version: DeepSeek-Embedding-V1
+    reasoning_mode: non_thinking
+    tier_family: embedding
+    latency_tier: low
+    cost_tier: low
+    reasoning_depth_tier: standard
+    aliases:
+      - deepseek/embedding/default
+    context_window: 8192
+    default_max_output_tokens: 1
+    max_output_tokens_hard_limit: 1
+    input_modalities:
+      - text
+    supports_tools: false
+    supports_streaming: false
+    supports_json_object: false
+    supports_json_schema: false
+    supports_reasoning: false
+    supports_visible_reasoning: false
+    supports_prompt_cache: false
+    supports_native_stream_usage: false
+    pricing:
+      pricing_ref: deepseek-embedding-official-2026-05-26
+      input_cache_hit_usd_per_1m: 0.0
+      input_cache_miss_usd_per_1m: 0.08
+      output_usd_per_1m: 0.0
+    metadata_source_uri: https://api-docs.deepseek.com/api/create-embeddings
+    metadata_effective_at: 2026-05-26
+    verification_state:
+      embeddings: verified
+    feature_notes:
+      - knowledge_query_embedding_default

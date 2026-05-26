@@ -8,6 +8,7 @@ target_include_directories(dasall_apps_runtime_support
   PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/include
   PRIVATE
+    ${CMAKE_SOURCE_DIR}/llm/src
     ${CMAKE_SOURCE_DIR}/runtime/src
     ${CMAKE_SOURCE_DIR}/services/include
     ${CMAKE_SOURCE_DIR}/tools/src
