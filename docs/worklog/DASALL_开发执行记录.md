@@ -1,3 +1,31 @@
+# 记录 #818
+
+- 日期：2026-05-26
+- 阶段：knowledge/installed local hybrid canary soak evidence
+- 任务：KNO-TODO-040 固化 installed local hybrid canary / soak 证据
+- 状态：已完成（代码、real installed validation、TODO 回写已落盘）
+
+### 改动
+
+1. 更新 `scripts/packaging/knowledge_local_installed_proof.sh`，为 local proof 新增 `--hybrid-canary`、临时 `DASALL_DETACHED_VECTOR_LOCAL_FALLBACK=1` systemd drop-in、`knowledge-retrieve-hybrid-canary.json` raw artifact 与 `knowledge-proof.json` 的 `hybrid_canary_*` 摘要；同时修正 summary 对 escaped JSON array 的解析与 corpus summary 断言，避免 valid lexical fallback artifact 被误判为失败。
+2. 更新 `scripts/packaging/knowledge_refresh_retrieve_soak.sh`，为每轮新增 `iteration-XX-retrieve-hybrid-canary.json`，并把 `hybrid_mode_values`、`all_hybrid_iterations_have_selected_corpora`、`all_hybrid_iterations_record_dense_artifact_presence`、`any_hybrid_iteration_has_dense_artifact`、`min_hybrid_dense_hit_count` 与 `hybrid_reason_code_union` 固化到 `knowledge-soak-summary.json`；末尾 summary 不再错误强制 `Hybrid` / `runtime_canary_admitted`，而是按 040 D 包要求记录 fallback 事实。
+3. 更新 `.github/workflows/release-package-gate.yml` 与 `scripts/packaging/README.md`，把 release-runner local knowledge proof / soak 默认接到 `--hybrid-canary` contract，并同步回写 `docs/todos/knowledge/deliverables/KNO-TODO-040-installed-local-hybrid-canary-soak-evidence双轨任务包.md`、`docs/todos/knowledge/DASALL_knowledge子系统专项TODO.md`、`docs/todos/DASALL_子系统查漏补缺专项记录.md` 与本记录，固化 040 的 Design->Build 映射、real installed evidence 与后继顺序。
+
+### 验证
+
+1. `dpkg-buildpackage -us -uc -b`
+   - 结果：通过。
+2. `bash scripts/packaging/knowledge_local_installed_proof.sh --artifact-dir /tmp/dasall-kno-todo-040-proof-pass2 --hybrid-canary`
+   - 结果：通过；`knowledge-proof.json` 记录 `hybrid_canary_mode=lexical_only`、`hybrid_canary_reason_codes` 含 `runtime_canary_backend_not_ready`、`hybrid_canary_selected_corpora=["adr_normative"]`、`hybrid_canary_vector_backend_ready=false`、`hybrid_canary_dense_hit_count=0`。
+3. `bash scripts/packaging/knowledge_refresh_retrieve_soak.sh --artifact-dir /tmp/dasall-kno-todo-040-soak-pass2 --iterations 10 --hybrid-canary`
+   - 结果：通过；`knowledge-soak-summary.json` 记录 `iterations_completed=10`、`hybrid_mode_values=["lexical_only"]`、`all_hybrid_iterations_have_selected_corpora=true`、`all_hybrid_iterations_record_dense_artifact_presence=true`、`any_hybrid_iteration_has_dense_artifact=false`、`min_hybrid_dense_hit_count=0`，并保留 `runtime_canary_backend_not_ready` 在 `hybrid_reason_code_union` 中。
+
+### 结果
+
+1. local proof / soak 现已把 hybrid canary request、mode、reason_codes、selected_corpora、vector_backend_ready 与 dense artifact presence 固化为 authoritative local evidence；当前主机即使只返回 lexical fallback，也不会再把“无混合证据”静默吞掉。
+2. release-runner local knowledge proof / soak 现默认走 `--hybrid-canary`，owner README 和双轨任务包也已同步到 fallback-friendly contract，不再把 `Hybrid` / `runtime_canary_admitted` 误当成本机 hard gate。
+3. `KNO-TODO-040` 已完成；按用户要求的串行推进顺序，下一原子任务进入 `KNO-TODO-041`。
+
 # 记录 #817
 
 - 日期：2026-05-26

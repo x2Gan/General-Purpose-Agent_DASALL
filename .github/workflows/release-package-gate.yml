@@ -165,11 +165,12 @@ jobs:
           proof_log="${DASALL_RELEASE_GATE_KNOWLEDGE_PROOF_LOG}"
 
           {
-            printf '### bash scripts/packaging/knowledge_local_installed_proof.sh --artifact-dir %s\n' "${DASALL_KNOWLEDGE_PROOF_ARTIFACT_DIR}"
+            printf '### bash scripts/packaging/knowledge_local_installed_proof.sh --artifact-dir %s --hybrid-canary\n' "${DASALL_KNOWLEDGE_PROOF_ARTIFACT_DIR}"
           } > "${proof_log}"
 
           bash scripts/packaging/knowledge_local_installed_proof.sh \
-            --artifact-dir "${DASALL_KNOWLEDGE_PROOF_ARTIFACT_DIR}" >> "${proof_log}" 2>&1
+            --artifact-dir "${DASALL_KNOWLEDGE_PROOF_ARTIFACT_DIR}" \
+            --hybrid-canary >> "${proof_log}" 2>&1
 
       - name: Run local capability services soak
         if: ${{ always() }}
@@ -198,11 +199,12 @@ jobs:
           soak_log="${DASALL_RELEASE_GATE_KNOWLEDGE_SOAK_LOG}"
 
           {
-            printf '### bash scripts/packaging/knowledge_refresh_retrieve_soak.sh --artifact-dir %s\n' "${DASALL_KNOWLEDGE_SOAK_ARTIFACT_DIR}"
+            printf '### bash scripts/packaging/knowledge_refresh_retrieve_soak.sh --artifact-dir %s --hybrid-canary\n' "${DASALL_KNOWLEDGE_SOAK_ARTIFACT_DIR}"
           } > "${soak_log}"
 
           bash scripts/packaging/knowledge_refresh_retrieve_soak.sh \
-            --artifact-dir "${DASALL_KNOWLEDGE_SOAK_ARTIFACT_DIR}" >> "${soak_log}" 2>&1
+            --artifact-dir "${DASALL_KNOWLEDGE_SOAK_ARTIFACT_DIR}" \
+            --hybrid-canary >> "${soak_log}" 2>&1
 
       - name: Run local installed knowledge failure injection
         if: ${{ always() }}

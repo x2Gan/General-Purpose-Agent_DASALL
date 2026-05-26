@@ -454,6 +454,30 @@
 3. `access/src/AccessGatewayFactory.cpp`、`tests/unit/access/AccessKnowledgeRetrievePayloadTest.cpp` 与 `tests/unit/access/CMakeLists.txt` 已为 daemon/access retrieve payload 追加 `selected_corpora`、`warning_summary`、`vector_backend_ready`、`sparse_hit_count`、`dense_hit_count` additive 字段，并保持 034 已发布的 `mode/degraded/reason_codes/warning_count/corpus_summary/slice_count` 向后兼容。
 4. 2026-05-26 已通过 `cmake --build build/vscode-linux-ninja --target dasall_knowledge_retrieve_telemetry_fields_unit_test dasall_knowledge_production_telemetry_integration_test dasall_access_knowledge_retrieve_payload_unit_test -j2`；随后直接执行 `./build/vscode-linux-ninja/tests/unit/knowledge/dasall_knowledge_retrieve_telemetry_fields_unit_test && ./build/vscode-linux-ninja/tests/integration/knowledge/dasall_knowledge_production_telemetry_integration_test && ./build/vscode-linux-ninja/tests/unit/access/dasall_access_knowledge_retrieve_payload_unit_test && echo PASS`，结果 `PASS`。
 
+### 6.14 installed local hybrid canary / soak 证据双轨任务包
+
+说明：`KNO-TODO-040` 承接 `KNO-TODO-039-B`，负责把 039 已发布的 vector explain 字段固化到 installed local proof / soak owner 与 release workflow。本节按 `-D + -B` 双轨模板细化该任务；`KNO-TODO-040-D` 的设计交付已落盘到 `docs/todos/knowledge/deliverables/KNO-TODO-040-installed-local-hybrid-canary-soak-evidence双轨任务包.md`，`KNO-TODO-040-B` 只在不把 qemu / autopkgtest 变成完成前置、不回退 ADR-006 / ADR-007 / ADR-008 owner boundary、且 provider baseline artifact owner 保持不变的前提下推进。
+
+#### 6.14.1 Design->Build 拆分总表
+
+| 主任务 | Design 子任务（文档交付） | Build 子任务（代码交付） | 输入依据 | 代码目标 | 测试目标 | 验收命令 |
+|---|---|---|---|---|---|---|
+| KNO-TODO-040 | KNO-TODO-040-D：收敛 installed local hybrid canary / soak artifact contract 与 D Gate | KNO-TODO-040-B：落地 proof / soak hybrid canary artifact、fallback-friendly summary 与 release workflow 接线 | `KNO-TODO-039-B`；`docs/todos/knowledge/deliverables/KNO-TODO-040-installed-local-hybrid-canary-soak-evidence双轨任务包.md`；`scripts/packaging/README.md` release-runner contract | `scripts/packaging/knowledge_local_installed_proof.sh`；`scripts/packaging/knowledge_refresh_retrieve_soak.sh`；`.github/workflows/release-package-gate.yml`；`scripts/packaging/README.md` | local proof artifact contract；10 轮 soak artifact contract；release local workflow wiring review | `dpkg-buildpackage -us -uc -b`；`bash scripts/packaging/knowledge_local_installed_proof.sh --artifact-dir /tmp/dasall-kno-todo-040-proof-pass2 --hybrid-canary`；`bash scripts/packaging/knowledge_refresh_retrieve_soak.sh --artifact-dir /tmp/dasall-kno-todo-040-soak-pass2 --iterations 10 --hybrid-canary` |
+
+#### 6.14.2 原子任务状态清单（按子任务）
+
+| 子任务 ID | 状态 | 任务描述 | 交付物 | 完成判定 |
+|---|---|---|---|---|
+| KNO-TODO-040-D | Done | 收敛 installed local proof / soak hybrid canary artifact contract、fallback 语义与 D Gate | `docs/todos/knowledge/deliverables/KNO-TODO-040-installed-local-hybrid-canary-soak-evidence双轨任务包.md` | 已补齐本地证据、外部实践、Build 三件套、风险回退与 D Gate；明确 040 只固化 local authoritative evidence，不把 qemu / autopkgtest 变成完成前置（2026-05-26） |
+| KNO-TODO-040-B | Done | 落地 proof / soak hybrid canary raw artifact、fallback-friendly summary 与 release workflow 默认接线 | `scripts/packaging/knowledge_local_installed_proof.sh`；`scripts/packaging/knowledge_refresh_retrieve_soak.sh`；`.github/workflows/release-package-gate.yml`；`scripts/packaging/README.md` | proof / soak / workflow 现默认固定 `--hybrid-canary`；即使当前主机只返回 lexical fallback，也会把 mode、reason_codes、selected_corpora、vector_backend_ready 与 dense artifact presence 结构化保留为 authoritative local evidence（2026-05-26） |
+
+#### 6.14.3 Build 完成证据（2026-05-26）
+
+1. `scripts/packaging/knowledge_local_installed_proof.sh` 已新增 `--hybrid-canary` additive path、临时 `DASALL_DETACHED_VECTOR_LOCAL_FALLBACK=1` systemd drop-in、`knowledge-retrieve-hybrid-canary.json` raw artifact 与 `knowledge-proof.json` 的 `hybrid_canary_*` 摘要；同时修正 summary 对 escaped JSON array 的解析与 corpus summary 断言，避免 valid fallback artifact 被误判为失败。
+2. `scripts/packaging/knowledge_refresh_retrieve_soak.sh` 已为每轮新增 `iteration-XX-retrieve-hybrid-canary.json`，并把 `hybrid_mode_values`、`all_hybrid_iterations_have_selected_corpora`、`all_hybrid_iterations_record_dense_artifact_presence`、`any_hybrid_iteration_has_dense_artifact`、`min_hybrid_dense_hit_count` 与 `hybrid_reason_code_union` 固化到 `knowledge-soak-summary.json`；末尾 summary 不再错误强制 `Hybrid` / `runtime_canary_admitted`，而是按 040 D 包要求记录 fallback 事实。
+3. `.github/workflows/release-package-gate.yml` 与 `scripts/packaging/README.md` 已同步到新的 owner contract：release-runner local proof / soak 步骤默认追加 `--hybrid-canary`，归档与文档说明现在都把 raw hybrid artifact、summary 统计与 fallback-friendly evidence 当作 knowledge local authoritative owner 的一部分。
+4. 2026-05-26 已在本机 real installed-package 环境通过 `dpkg-buildpackage -us -uc -b`、`bash scripts/packaging/knowledge_local_installed_proof.sh --artifact-dir /tmp/dasall-kno-todo-040-proof-pass2 --hybrid-canary` 与 `bash scripts/packaging/knowledge_refresh_retrieve_soak.sh --artifact-dir /tmp/dasall-kno-todo-040-soak-pass2 --iterations 10 --hybrid-canary`；`knowledge-proof.json` 记录 `hybrid_canary_mode=lexical_only`、`hybrid_canary_reason_codes` 含 `runtime_canary_backend_not_ready`、`hybrid_canary_selected_corpora=["adr_normative"]`、`hybrid_canary_vector_backend_ready=false`、`hybrid_canary_dense_hit_count=0`，`knowledge-soak-summary.json` 记录 `iterations_completed=10`、`hybrid_mode_values=["lexical_only"]`、`all_hybrid_iterations_have_selected_corpora=true`、`all_hybrid_iterations_record_dense_artifact_presence=true`、`any_hybrid_iteration_has_dense_artifact=false`、`min_hybrid_dense_hit_count=0`，并保留 `runtime_canary_backend_not_ready` 在 `hybrid_reason_code_union` 中；final health 全程保持 `state=degraded`、`freshness_state=fresh` 与 `reason_codes=["vector_backend_disabled"]`，说明当前主机 fallback 事实已被完整落盘，而不是被静默吞掉。
+
 ---
 
 ## 7. 执行顺序建议
@@ -472,6 +496,7 @@
 | H request-scoped hybrid canary surface | KNO-TODO-034-D、034-B | 034-D 已完成；034-B 串行执行 | 先暴露 request-scoped control surface 与 daemon explain payload，再进入 035 的 runtime-owned canary seam；若 034-B 未通过，不得推进 035 / 038 / 039 |
 | I runtime-owned hybrid canary seam | KNO-TODO-035-D、035-B | 035-D 已完成；035-B 串行执行 | 只允许 runtime owner 放行 allowlisted explicit hybrid query；若 035-B 未通过，不得推进 036 / 037 / 038 的向量能力扩面 |
 | J vector observability / explain surface | KNO-TODO-039-D、039-B | 039-D / 039-B 已完成 | 039 已把 selected corpora、warning summary、lane hit 与 backend ready explain 收口到 production telemetry + daemon/access payload；040 才进入 installed local hybrid canary / soak 证据固化 |
+| K installed local hybrid canary / soak evidence | KNO-TODO-040-D、040-B | 040-D / 040-B 已完成 | 040 已把 proof / soak hybrid canary request、mode / reason / dense artifact presence 与 release workflow 默认接线收口为 authoritative local evidence；即使当前主机只返回 lexical fallback，也会完整落盘；041 才进入 Runtime-owned selective refresh automation |
 
 ### 7.2 必过门禁表
 
@@ -490,6 +515,7 @@
 | Gate-I：query surface ready | `knowledge retrieve` 已支持 request-scoped `preferred_mode` / corpus / tag / language 控制，且 JSON payload 回传 `mode`、`degraded`、reason codes、warning count 与 corpus summary | KNO-TODO-034-B | 禁止推进 035 的 runtime canary seam、038 的 mixed-corpus 路由收口与 039 的 production explain surface |
 | Gate-J：runtime canary seam ready | vector-ready runtime path 仅对 allowlisted corpus 的 explicit hybrid canary query 放行 `Hybrid` / `DenseOnly`，其余路径保持 `LexicalOnly`，并暴露 `knowledge-hybrid-canary-ready` marker | KNO-TODO-035-B | 禁止推进 036 / 037 / 038 的向量能力扩面与 production rollout 结论 |
 | Gate-K：vector explain surface ready | production-composed telemetry 与 daemon/access payload 已稳定暴露 `vector_backend_ready`、`warning_summary`、`selected_corpora`、`sparse_hit_count`、`dense_hit_count`，且 metrics label 无新增高基数扩散 | KNO-TODO-039-B | 禁止推进 040 的 installed local hybrid canary / soak 证据固化 |
+| Gate-L：installed local hybrid evidence ready | local proof / soak 与 release workflow 已默认固定 `--hybrid-canary`，`knowledge-proof.json` / `knowledge-soak-summary.json` 能稳定记录 mode、reason_codes、selected_corpora、vector_backend_ready 与 dense artifact presence；即使当前主机只返回 lexical fallback，也不会把 fallback 事实静默吞掉 | KNO-TODO-040-B | 禁止推进 041 的 Runtime-owned selective refresh automation |
 
 ---
 

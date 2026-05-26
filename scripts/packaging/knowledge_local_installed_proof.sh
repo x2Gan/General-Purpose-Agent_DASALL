@@ -16,6 +16,12 @@ TIMEOUT_MS=${DASALL_KNOWLEDGE_PROOF_TIMEOUT_MS:-30000}
 DAEMON_READY_ATTEMPTS=${DASALL_KNOWLEDGE_PROOF_DAEMON_READY_ATTEMPTS:-90}
 KNOWLEDGE_READY_ATTEMPTS=${DASALL_KNOWLEDGE_PROOF_KNOWLEDGE_READY_ATTEMPTS:-60}
 PROVIDER_QUERY=${DASALL_KNOWLEDGE_PROOF_PROVIDER_QUERY:-DeepSeek Chat}
+HYBRID_CANARY=0
+HYBRID_CANARY_QUERY=${DASALL_KNOWLEDGE_HYBRID_CANARY_QUERY:-ContextOrchestrator PromptComposer}
+HYBRID_CANARY_ALLOWED_CORPUS=${DASALL_KNOWLEDGE_HYBRID_CANARY_ALLOWED_CORPUS:-adr_normative}
+HYBRID_CANARY_QUERY_KIND=${DASALL_KNOWLEDGE_HYBRID_CANARY_QUERY_KIND:-policy-evidence}
+SYSTEMD_DROPIN_DIR=/run/systemd/system/dasall-daemon.service.d
+SYSTEMD_DROPIN_PATH=${SYSTEMD_DROPIN_DIR}/knowledge-hybrid-canary.conf
 
 log() {
   printf '[knowledge-proof] %s\n' "$*"
@@ -28,7 +34,7 @@ fail() {
 
 usage() {
   cat <<'EOF'
-Usage: bash scripts/packaging/knowledge_local_installed_proof.sh [--artifact-dir <path>] [--timeout-ms <value>]
+Usage: bash scripts/packaging/knowledge_local_installed_proof.sh [--artifact-dir <path>] [--timeout-ms <value>] [--hybrid-canary]
 EOF
 }
 
@@ -209,10 +215,32 @@ verify_service_not_started() {
 
 cleanup() {
   run_root systemctl disable --now dasall-daemon.service >/dev/null 2>&1 || true
+  if [ "$HYBRID_CANARY" -eq 1 ]; then
+    run_root_sh "
+      rm -f '${SYSTEMD_DROPIN_PATH}'
+      rmdir --ignore-fail-on-non-empty '${SYSTEMD_DROPIN_DIR}' >/dev/null 2>&1 || true
+      systemctl daemon-reload
+    " >/dev/null 2>&1 || true
+  fi
+}
+
+enable_hybrid_canary_runtime() {
+  [ "$HYBRID_CANARY" -eq 1 ] || return 0
+
+  log 'enabling temporary detached vector local fallback for hybrid canary'
+  run_root_sh "
+    install -d -m 0755 '${SYSTEMD_DROPIN_DIR}'
+    cat > '${SYSTEMD_DROPIN_PATH}' <<'EOF'
+[Service]
+Environment=DASALL_DETACHED_VECTOR_LOCAL_FALLBACK=1
+EOF
+    systemctl daemon-reload
+  "
 }
 
 write_proof_summary() {
-  python3 - "$ARTIFACT_DIR" "$PROVIDER_QUERY" <<'PY'
+  python3 - "$ARTIFACT_DIR" "$PROVIDER_QUERY" "$HYBRID_CANARY" \
+    "$HYBRID_CANARY_QUERY" "$HYBRID_CANARY_ALLOWED_CORPUS" <<'PY'
 import json
 import pathlib
 import re
@@ -220,6 +248,9 @@ import sys
 
 artifact_dir = pathlib.Path(sys.argv[1])
 provider_query = sys.argv[2]
+hybrid_canary_enabled = sys.argv[3] == '1'
+hybrid_canary_query = sys.argv[4]
+hybrid_canary_allowed_corpus = sys.argv[5]
 
 def read_text(name: str) -> str:
     return (artifact_dir / name).read_text(encoding='utf-8')
@@ -236,11 +267,25 @@ def optional_extract(pattern: str, text: str):
         return None
     return match.group(1)
 
+def extract_bool(pattern: str, text: str, label: str) -> bool:
+  return extract(pattern, text, label) == 'true'
+
+def extract_json_array(pattern: str, text: str, label: str):
+  raw = extract(pattern, text, label)
+  return json.loads(raw.replace('\\"', '"'))
+
+def optional_json_array(pattern: str, text: str):
+  raw = optional_extract(pattern, text)
+  if raw is None:
+    return None
+  return json.loads(raw.replace('\\"', '"'))
+
 ready_text = read_text('ready.json')
 refresh_text = read_text('knowledge-refresh.json')
 health_ready_text = read_text('knowledge-health-ready.json')
 provider_text = read_text('knowledge-retrieve-provider.json')
 health_final_text = read_text('knowledge-health-final.json')
+hybrid_text = read_text('knowledge-retrieve-hybrid-canary.json') if hybrid_canary_enabled else None
 
 data = {
     'ready_state': extract(r'\\"state\\":\\"([^\\]+)\\"', ready_text, 'ready state'),
@@ -255,6 +300,7 @@ data = {
     'provider_query': provider_query,
     'provider_slice_count': int(extract(r'\\"slice_count\\":([0-9]+)', provider_text, 'provider slice_count')),
     'provider_has_installed_deepseek_evidence': bool(re.search(r'DeepSeek Chat|deepseek-chat|llm/providers/deepseek/', provider_text)),
+    'hybrid_canary_enabled': hybrid_canary_enabled,
     'health_final_state': extract(r'\\"state\\":\\"([^\\]+)\\"', health_final_text, 'health final state'),
     'health_final_freshness_state': extract(r'\\"freshness_state\\":\\"([^\\]+)\\"', health_final_text, 'health final freshness_state'),
     'health_final_active_snapshot_id': extract(r'\\"active_snapshot_id\\":\\"([^\\]+)\\"', health_final_text, 'health final active snapshot'),
@@ -264,6 +310,34 @@ data = {
         else None
     ),
 }
+
+if hybrid_canary_enabled:
+    data.update(
+        {
+            'hybrid_canary_query': hybrid_canary_query,
+            'hybrid_canary_allowed_corpus': hybrid_canary_allowed_corpus,
+            'hybrid_canary_mode': extract(r'\\"mode\\":\\"([^\\]+)\\"', hybrid_text, 'hybrid canary mode'),
+            'hybrid_canary_degraded': extract_bool(r'\\"degraded\\":(true|false)', hybrid_text, 'hybrid canary degraded'),
+            'hybrid_canary_reason_codes': extract_json_array(r'\\"reason_codes\\":(\[.*?\])', hybrid_text, 'hybrid canary reason_codes'),
+            'hybrid_canary_warning_summary': optional_json_array(r'\\"warning_summary\\":(\[.*?\])', hybrid_text) or [],
+            'hybrid_canary_selected_corpora': (
+              optional_json_array(r'\\"selected_corpora\\":(\[.*?\])', hybrid_text)
+              or extract_json_array(r'\\"corpus_summary\\":(\[.*?\])', hybrid_text, 'hybrid canary corpus summary')
+            ),
+            'hybrid_canary_vector_backend_ready': extract_bool(
+                r'\\"vector_backend_ready\\":(true|false)',
+                hybrid_text,
+                'hybrid canary vector backend ready',
+            ),
+            'hybrid_canary_sparse_hit_count': int(
+                extract(r'\\"sparse_hit_count\\":([0-9]+)', hybrid_text, 'hybrid canary sparse_hit_count')
+            ),
+            'hybrid_canary_dense_hit_count': int(
+                extract(r'\\"dense_hit_count\\":([0-9]+)', hybrid_text, 'hybrid canary dense_hit_count')
+            ),
+        }
+    )
+    data['hybrid_canary_has_dense_artifact'] = data['hybrid_canary_dense_hit_count'] > 0
 
 (artifact_dir / 'knowledge-proof.json').write_text(
     json.dumps(data, indent=2) + '\n',
@@ -283,6 +357,10 @@ while [ "$#" -gt 0 ]; do
       [ "$#" -ge 2 ] || fail 'missing value for --timeout-ms'
       TIMEOUT_MS=$2
       shift 2
+      ;;
+    --hybrid-canary)
+      HYBRID_CANARY=1
+      shift 1
       ;;
     -h|--help)
       usage
@@ -314,6 +392,7 @@ reset_existing_state
 install_packages
 verify_packages_installed
 verify_service_not_started
+enable_hybrid_canary_runtime
 
 run_root systemctl enable --now dasall-daemon.service
 READY_JSON=$(wait_for_daemon_ready)
@@ -336,6 +415,25 @@ assert_json_contains "$KNOWLEDGE_RETRIEVE_JSON" '\"ok\":true' 'knowledge retriev
 assert_json_matches "$KNOWLEDGE_RETRIEVE_JSON" '\\"slice_count\\":[1-9][0-9]*' 'knowledge retrieve slice count'
 assert_json_matches "$KNOWLEDGE_RETRIEVE_JSON" 'DeepSeek Chat|deepseek-chat|llm/providers/deepseek/' 'knowledge retrieve installed provider evidence'
 write_artifact_file 'knowledge-retrieve-provider.json' "$KNOWLEDGE_RETRIEVE_JSON"
+
+if [ "$HYBRID_CANARY" -eq 1 ]; then
+  KNOWLEDGE_RETRIEVE_HYBRID_CANARY_JSON=$(run_root dasall-cli knowledge retrieve \
+    "$HYBRID_CANARY_QUERY" \
+    --preferred-mode hybrid \
+    --query-kind "$HYBRID_CANARY_QUERY_KIND" \
+    --allowed-corpus "$HYBRID_CANARY_ALLOWED_CORPUS" \
+    --json \
+    --timeout-ms "$TIMEOUT_MS")
+  write_artifact_file 'knowledge-retrieve-hybrid-canary.json' "$KNOWLEDGE_RETRIEVE_HYBRID_CANARY_JSON"
+  assert_json_contains "$KNOWLEDGE_RETRIEVE_HYBRID_CANARY_JSON" '"disposition":"completed"' 'knowledge hybrid canary retrieve smoke'
+  assert_json_contains "$KNOWLEDGE_RETRIEVE_HYBRID_CANARY_JSON" '\"operation\":\"retrieve\"' 'knowledge hybrid canary payload'
+  assert_json_contains "$KNOWLEDGE_RETRIEVE_HYBRID_CANARY_JSON" '\"ok\":true' 'knowledge hybrid canary ok'
+  assert_json_matches "$KNOWLEDGE_RETRIEVE_HYBRID_CANARY_JSON" '\\"slice_count\\":[1-9][0-9]*' 'knowledge hybrid canary slice count'
+  assert_json_matches "$KNOWLEDGE_RETRIEVE_HYBRID_CANARY_JSON" 'selected_corpora|corpus_summary' 'knowledge hybrid canary corpus summary'
+  assert_json_matches "$KNOWLEDGE_RETRIEVE_HYBRID_CANARY_JSON" '\\"vector_backend_ready\\":(true|false)' 'knowledge hybrid canary vector backend marker'
+  assert_json_matches "$KNOWLEDGE_RETRIEVE_HYBRID_CANARY_JSON" '\\"sparse_hit_count\\":[0-9]+' 'knowledge hybrid canary sparse hit count'
+  assert_json_matches "$KNOWLEDGE_RETRIEVE_HYBRID_CANARY_JSON" '\\"dense_hit_count\\":[0-9]+' 'knowledge hybrid canary dense hit count'
+fi
 
 KNOWLEDGE_HEALTH_FINAL_JSON=$(run_root dasall-cli knowledge health --json --timeout-ms "$TIMEOUT_MS")
 assert_knowledge_health_ready "$KNOWLEDGE_HEALTH_FINAL_JSON" 'knowledge health smoke'
