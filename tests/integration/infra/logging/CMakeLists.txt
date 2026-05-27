@@ -39,6 +39,18 @@ dasall_register_logging_integration_test(
 )
 
 dasall_register_logging_integration_test(
+  dasall_sink_dispatcher_route_integration_test
+  SinkDispatcherRouteIntegrationTest
+  SinkDispatcherRouteIntegrationTest.cpp
+)
+
+dasall_register_logging_integration_test(
+  dasall_logging_sink_failure_injection_test
+  LoggingSinkFailureInjectionTest
+  LoggingSinkFailureInjectionTest.cpp
+)
+
+dasall_register_logging_integration_test(
   dasall_log_query_integration_test
   LogQueryIntegrationTest
   LogQueryIntegrationTest.cpp

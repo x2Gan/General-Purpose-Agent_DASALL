@@ -109,6 +109,15 @@
 8. `INF-LOG-GATE-002` 的 golden 证据固定落在 `LoggingStructuredFormatterTest`、`LoggingRedactionFilterTest` 与 `LoggingFacadeRedactionIntegrationTest`；它们共同证明默认 `LoggingFacade` 主链无法绕过 redaction/formatter，且 golden 输出不含 secret/token/password/auth value。
 9. 本轮结论仍只到 L2 focused evidence：已冻结 redaction schema 与 structured field schema，但尚未宣称真实 sink 落盘、installed artifact 或 package handoff ready。
 
+### 6.2 INF-LOG-FIX-003 file / rotating sink adapter closeout
+
+1. `ILogSink` 成为 logging sink 的唯一 public seam；调用方只依赖 `ILogSink` / `FileLogSink`，不暴露具体 backend 实现细节，从而保留后续替换为更强 backend 实现的空间。
+2. `FileLogSink` 已在当前 repo 依赖集内闭合三项 owner 行为：build-tree 或 state_root 路径解析、同目录 `runtime.log.<n>` rotation family，以及对显式不可写路径的 fail-closed sink IO failure。
+3. build-tree focused path 仍允许使用相对 `logs/runtime.log`；installed/local-authoritative path 继续固定为 `state_root/logging/runtime.log`，且 `DASALL_STATE_ROOT` 是唯一 state_root override。
+4. `SinkDispatcher` 现已支持按 `SinkRoute` 注入 basic/audit sinks，并在保留 queue bookkeeping 的同时把 routed event 实际写入对应 file sink；未注入 sink 时保持 skeleton 行为，不把默认测试路径静默外推为 production-ready。
+5. `INF-LOG-GATE-003` 在本轮新增 focused 证据固定为 `FileLogSinkTest`、`SinkDispatcherRouteIntegrationTest` 与 `LoggingSinkFailureInjectionTest`；它们共同证明 structured/redacted event 可在 build-tree 临时目录落盘、rotation 可复验、显式不可写路径会 fail-closed 上报。
+6. 本轮结论仍停留在 L2/L3 build-tree evidence：已闭合 sink adapter、rotation 与 failure injection 行为，但 async worker、flush deadline、live composition config 与 installed package proof 继续留给 `INF-LOG-FIX-004~011`。
+
 ## 7. industry practice alignment
 
 1. OpenTelemetry Logs：把 `TraceId / SpanId / Resource` 作为 top-level correlation 对齐点，把 request-scoped 附加信息保留在 structured attributes；DASALL 只吸收字段契约，不在本轮引入 OTel SDK 直连。

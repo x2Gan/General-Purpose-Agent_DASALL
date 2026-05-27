@@ -415,6 +415,19 @@ key 域冻结规则：
 4. primary file sink 只允许自动创建 build-tree `logs/` 与 installed/local-authoritative `state_root/logging/` 两类父目录；若遇到其他不可写、越界或权限拒绝路径，必须 fail-closed 返回 sink IO failure，不得 silently fallback 到 repo 根、`/tmp` 或 qemu guest-side 路径。
 5. package smoke 与后续 installed proof 只接受 `state_root/logging/runtime.log` 及其 rotation family 作为 authoritative evidence；machine-isolated qemu / kvm rerun 只属于 packaging / release handoff，不进入当前 logging owner 验收。
 
+### 6.10.6 FileLogSink / SinkDispatcher adapter 收口补充
+
+`INF-LOG-FIX-003` 的实现目标不是把具体 backend 类型暴露给调用方，而是在当前 repo 依赖集内先闭合 file / rotation / fail-closed 这条最小 owner 行为链：
+
+1. 新增 `ILogSink` public seam 与 `FileLogSink` 默认文件适配层；调用方只经由 `ILogSink::write()` / `flush()` 交互，不依赖具体 backend 类型。
+2. `FileLogSink` 负责三类确定性行为：
+  - build-tree focused 路径与 installed/state_root authoritative 路径解析；
+  - `runtime.log.<n>` rotation family 维护；
+  - 显式不可写/越界/父目录不可创建路径的 fail-closed sink IO failure。
+3. `SinkDispatcher` 现支持按 `SinkRoute` 注入 basic/audit sink；若 route 对应 sink 未注入，则继续保留 skeleton 路径，不把该行为误写成 production-ready default persistence。
+4. queue 语义在本轮仍只保留 bookkeeping / validation；async worker、flush deadline、drop/block policy 的 deterministic 行为继续留给 `INF-LOG-FIX-004`，避免把两个原子任务混成同一实现面。
+5. focused 证据固定为 `FileLogSinkTest`、`SinkDispatcherRouteIntegrationTest`、`LoggingSinkFailureInjectionTest`；它们共同证明当前 adapter 已能承接 `LoggingFacade` 上游输出的 structured/redacted payload，并对 rotation 与 failure injection 给出可复验结果。
+
 ---
 
 ## 7. Design -> Build 映射（建议级）
@@ -423,7 +436,7 @@ key 域冻结规则：
 |---|---|---|---|---|---|---|
 | 统一入口接口 | 新增 logging 对外接口层 | 先稳定调用面，再实现细节 | infra/include/logging/ILogger.h | tests/unit/infra/logging/LoggingFacadeTest.cpp | cmake --build build-ci --target dasall_unit_tests && ctest --test-dir build-ci -R LoggingFacadeTest --output-on-failure | 无 |
 | 结构化记录模型 | 新增 LogEvent/LogContext/AuditRef | 统一字段语义，防止调用方各自拼接 | infra/include/logging/LogTypes.h | tests/unit/infra/logging/LogTypesTest.cpp | cmake --build build-ci --target dasall_unit_tests && ctest --test-dir build-ci -R LogTypesTest --output-on-failure | 依赖 contracts 标识字段语义 |
-| 异步多 sink | 新增 SinkDispatcher + AsyncQueueController | 满足高并发与可配置溢出策略 | infra/src/logging/SinkDispatcher.cpp, AsyncQueueController.cpp | tests/unit/infra/logging/AsyncQueueControllerTest.cpp | cmake --build build-ci --target dasall_unit_tests && ctest --test-dir build-ci -R AsyncQueueControllerTest --output-on-failure | 依赖 third_party/spdlog |
+| 异步多 sink | 新增 ILogSink + FileLogSink + SinkDispatcher + AsyncQueueController | 先闭合 backend-neutral route->sink adapter、rotation 与 fail-closed，再在后续任务推进 worker/backpressure | infra/include/logging/ILogSink.h、infra/include/logging/FileLogSink.h、infra/src/logging/FileLogSink.cpp、infra/src/logging/SinkDispatcher.cpp、AsyncQueueController.cpp | tests/unit/infra/logging/FileLogSinkTest.cpp、tests/integration/infra/logging/SinkDispatcherRouteIntegrationTest.cpp、tests/integration/infra/logging/LoggingSinkFailureInjectionTest.cpp、tests/unit/infra/logging/AsyncQueueControllerTest.cpp | cmake --build build-ci --target dasall_file_log_sink_unit_test dasall_sink_dispatcher_route_integration_test dasall_logging_sink_failure_injection_test && ctest --test-dir build-ci -R FileLogSinkTest --output-on-failure && ctest --test-dir build-ci -R SinkDispatcherRouteIntegrationTest --output-on-failure && ctest --test-dir build-ci -R LoggingSinkFailureInjectionTest --output-on-failure | 依赖已冻结 primary backend policy，但不向调用方暴露具体 backend |
 | 审计协同 | 新增 AuditLinkAdapter 对接路径 | 明确 logging 不重复建设审计存储 | infra/src/logging/AuditLinkAdapter.cpp | tests/integration/infra/logging/AuditLinkIntegrationTest.cpp | cmake --build build-ci --target dasall_integration_tests && ctest --test-dir build-ci -R AuditLinkIntegrationTest --output-on-failure | 依赖 infra/audit IAuditLogger |
 | 脱敏治理 | 新增 RedactionFilter 与 StructuredFormatter 主链 | 防止敏感数据明文落盘并固定结构化 schema | infra/src/logging/RedactionFilter.cpp、StructuredFormatter.cpp | tests/unit/infra/logging/LoggingRedactionFilterTest.cpp、tests/unit/infra/logging/LoggingStructuredFormatterTest.cpp、tests/integration/infra/logging/LoggingFacadeRedactionIntegrationTest.cpp | cmake --build build-ci --target dasall_logging_structured_formatter_unit_test dasall_logging_redaction_filter_unit_test dasall_logging_facade_redaction_integration_test && ctest --test-dir build-ci -R LoggingStructuredFormatterTest --output-on-failure && ctest --test-dir build-ci -R LoggingRedactionFilterTest --output-on-failure && ctest --test-dir build-ci -R LoggingFacadeRedactionIntegrationTest --output-on-failure | 规则集版本与 golden fixture 已由 INF-LOG-FIX-002 冻结 |
 | sink 故障降级 | 新增 fallback + degraded 状态机 | 保证写入失败可恢复 | infra/src/logging/LoggingRecovery.cpp | tests/integration/infra/logging/SinkFailureRecoveryIntegrationTest.cpp | cmake --build build-ci --target dasall_integration_tests && ctest --test-dir build-ci -R SinkFailureRecoveryIntegrationTest --output-on-failure | 需故障注入桩 |

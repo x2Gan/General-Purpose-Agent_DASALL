@@ -997,6 +997,12 @@ dasall_register_logging_unit_test(
 )
 
 dasall_register_logging_unit_test(
+  dasall_file_log_sink_unit_test
+  FileLogSinkTest
+  logging/FileLogSinkTest.cpp
+)
+
+dasall_register_logging_unit_test(
   dasall_sink_dispatcher_unit_test
   SinkDispatcherTest
   logging/SinkDispatcherTest.cpp

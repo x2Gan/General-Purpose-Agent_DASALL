@@ -116,6 +116,7 @@ set(DASALL_INFRA_METRICS_PRIVATE_HEADERS
 set(DASALL_INFRA_LOGGING_SOURCES
   src/logging/AsyncQueueController.cpp
   src/logging/AuditLinkAdapter.cpp
+  src/logging/FileLogSink.cpp
   src/logging/LoggingConfigAdapter.cpp
   src/logging/LoggingFacade.cpp
   src/logging/LoggingHealthProbe.cpp
@@ -356,7 +357,9 @@ set(DASALL_INFRA_PUBLIC_HEADERS
   include/diagnostics/IDiagnosticsService.h
   include/logging/IAuditLinkAdapter.h
   include/logging/ILogConfigurator.h
+  include/logging/ILogSink.h
   include/logging/ILogger.h
+  include/logging/FileLogSink.h
   include/logging/LoggingErrors.h
   include/logging/LogTypes.h
   include/logging/RedactionFilter.h

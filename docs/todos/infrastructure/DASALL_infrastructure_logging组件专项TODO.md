@@ -11,6 +11,7 @@
 3. 后续若要宣称 production / installed ready，必须同时满足 matrix 中的 gate 与 local installed authoritative evidence；不得再把早期 unit/contract/fixture 结果直接上卷成 production 结论。
 4. 截至 2026-05-27，`INF-LOG-FIX-002` 已把 `StructuredFormatter` / `RedactionFilter` / `LoggingFacade` 默认主链、`dasall.logging.event.v1` schema 与 deny-by-default redaction pattern 冻结为 L2 focused evidence；后续若扩展字段或规则，必须沿 matrix 新开任务，不得覆盖当前 frozen tuple。
 5. 截至 2026-05-27，`BLK-INF-LOG-003` 已冻结 writable path / permission policy：`DASALL_STATE_ROOT` 是唯一 state_root override，build-tree focused 仍使用 `logs/runtime.log`，installed authoritative path 固定为 `state_root/logging/runtime.log`，其他不可写路径必须 fail-closed，不得 silently fallback 到 repo 根、`/tmp` 或 qemu guest-side 路径。
+6. 截至 2026-05-27，`INF-LOG-FIX-003` 已通过 `ILogSink` / `FileLogSink` / `SinkDispatcher` 闭合 build-tree file persistence、rotation 与 fail-closed focused evidence；默认未注入 sink 的 dispatcher 仍只保留 skeleton 行为，不直接宣称 live composition / installed ready。
 
 ## 1. 文档头
 

@@ -1,3 +1,43 @@
+## 记录 #836
+
+- 日期：2026-05-27
+- 阶段：infrastructure / logging file rotating sink adapter
+- 任务：推进 `INF-LOG-FIX-003`，实现 `ILogSink` / `FileLogSink` 与 `SinkDispatcher` route->sink adapter
+- 状态：已完成（L2/L3 build-tree sink adapter evidence 已闭合；本轮不使用 qemu / kvm）
+
+### 执行前提
+
+1. 用户要求在 `BLK-INF-LOG-003` 单独关闭并推送后，继续按 `project-implementation-cycle` 串行推进 `INF-LOG-FIX-003`，并在完成后再次单独提交推送。
+2. 近端核验确认：`SinkDispatcher` 仍只做 route + queue skeleton，仓库和系统都没有现成 `spdlog` 依赖，因此本轮必须先用 backend-neutral sink seam 闭合 file/rotation/fail-closed 行为，而不是把任务扩成依赖治理。
+3. 前置 blocker 已满足：`BLK-INF-LOG-001` 和 `BLK-INF-LOG-003` 均已 Closed，path/permission policy 与 primary backend policy 已冻结。
+
+### 改动
+
+1. 新增 `infra/include/logging/ILogSink.h`、`infra/include/logging/FileLogSink.h` 与 `infra/src/logging/FileLogSink.cpp`，引入 backend-neutral `ILogSink` seam，并实现 build-tree/state_root path 解析、rotation family 与 fail-closed sink IO failure。
+2. 更新 `infra/src/logging/SinkDispatcher.h`、`infra/src/logging/SinkDispatcher.cpp` 与 `infra/CMakeLists.txt`，使 dispatcher 支持按 route 注入 basic/audit sinks，同时保留 queue bookkeeping 与未注入 sink 时的 skeleton 行为。
+3. 新增 `tests/unit/infra/logging/FileLogSinkTest.cpp`、`tests/integration/infra/logging/SinkDispatcherRouteIntegrationTest.cpp`、`tests/integration/infra/logging/LoggingSinkFailureInjectionTest.cpp`，并更新 `tests/unit/CMakeLists.txt`、`tests/unit/infra/CMakeLists.txt`、`tests/integration/CMakeLists.txt`、`tests/integration/infra/logging/CMakeLists.txt` 完成注册。
+4. 更新 `docs/ssot/LoggingProductionAcceptanceMatrix.md`、`docs/architecture/DASALL_infra_logging模块详细设计.md`、`docs/todos/infrastructure/DASALL_infrastructure_logging组件专项TODO.md` 与 `docs/todos/DASALL_子系统查漏补缺专项记录.md`，回写 `INF-LOG-FIX-003` 的 adapter/rotation/fail-closed 结论并将任务标记为 Done。
+5. 新增 `docs/todos/infrastructure/deliverables/INF-LOG-FIX-003-file-rotating-sink-adapter收口.md`，沉淀本轮 closeout 与非外推边界。
+
+### 验证
+
+1. `Build_CMakeTools(buildTargets=["dasall_file_log_sink_unit_test","dasall_sink_dispatcher_unit_test","dasall_sink_dispatcher_route_integration_test","dasall_logging_sink_failure_injection_test"])`
+   - 结果：通过。
+2. `RunCtest_CMakeTools(tests=["FileLogSinkTest","SinkDispatcherTest","SinkDispatcherRouteIntegrationTest","LoggingSinkFailureInjectionTest"])`
+   - 结果：命中仓库既有泛化 `生成失败`。
+3. fallback 直接执行：
+   - `./build/vscode-linux-ninja/tests/unit/infra/dasall_file_log_sink_unit_test`
+   - `./build/vscode-linux-ninja/tests/unit/infra/dasall_sink_dispatcher_unit_test`
+   - `./build/vscode-linux-ninja/tests/integration/infra/logging/dasall_sink_dispatcher_route_integration_test`
+   - `./build/vscode-linux-ninja/tests/integration/infra/logging/dasall_logging_sink_failure_injection_test`
+   - 结果：4/4 通过。
+
+### 结果
+
+1. `INF-LOG-FIX-003` 已闭合：logging 现具备 backend-neutral `ILogSink` / `FileLogSink` seam、route-specific sink 注入、可复验 rotation，以及显式不可写路径的 fail-closed 上报行为。
+2. 当前结论只到 L2/L3 build-tree evidence；async worker、flush deadline、live composition config 与 installed package proof 继续留给 `INF-LOG-FIX-004~011`。
+3. 本轮没有把 qemu / kvm 重新带回 owner 验收口径；installed authoritative evidence 仍以后续 local installed package proof 为准。
+
 ## 记录 #835
 
 - 日期：2026-05-27

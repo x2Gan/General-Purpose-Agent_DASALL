@@ -1,6 +1,7 @@
 #include "SinkDispatcher.h"
 
 #include <string>
+#include <utility>
 
 namespace dasall::infra::logging {
 
@@ -16,10 +17,19 @@ bool has_audit_link_attr(const LogEvent& event) {
 
 }  // namespace
 
-SinkDispatcher::SinkDispatcher() = default;
+SinkDispatcher::SinkDispatcher() : SinkDispatcher(SinkDispatcherOptions{}) {}
 
 SinkDispatcher::SinkDispatcher(AsyncQueueOptions queue_options)
-    : queue_controller_(queue_options) {}
+  : SinkDispatcher(SinkDispatcherOptions{
+      .queue_options = queue_options,
+      .basic_sink = nullptr,
+      .audit_sink = nullptr,
+    }) {}
+
+SinkDispatcher::SinkDispatcher(SinkDispatcherOptions options)
+  : queue_controller_(options.queue_options),
+    basic_sink_(std::move(options.basic_sink)),
+    audit_sink_(std::move(options.audit_sink)) {}
 
 std::size_t SinkDispatcher::dispatched_record_count(SinkRoute route) const {
   switch (route) {
@@ -51,6 +61,13 @@ LogWriteResult SinkDispatcher::dispatch(const LogEvent& event) {
     return result;
   }
 
+  if (const auto sink = sink_for_route(record.route); sink != nullptr) {
+    const auto sink_result = sink->write(record.event);
+    if (!sink_result.ok) {
+      return sink_result;
+    }
+  }
+
   last_record_ = record;
   ++dispatched_record_count_;
   if (record.route == SinkRoute::Audit) {
@@ -63,7 +80,26 @@ LogWriteResult SinkDispatcher::dispatch(const LogEvent& event) {
 }
 
 LogWriteResult SinkDispatcher::flush(const LogFlushDeadline& deadline) {
-  return queue_controller_.flush(deadline);
+  const auto queue_result = queue_controller_.flush(deadline);
+  if (!queue_result.ok) {
+    return queue_result;
+  }
+
+  if (basic_sink_ != nullptr) {
+    const auto basic_result = basic_sink_->flush(deadline);
+    if (!basic_result.ok) {
+      return basic_result;
+    }
+  }
+
+  if (audit_sink_ != nullptr && audit_sink_ != basic_sink_) {
+    const auto audit_result = audit_sink_->flush(deadline);
+    if (!audit_result.ok) {
+      return audit_result;
+    }
+  }
+
+  return LogWriteResult::success();
 }
 
 SinkRoute SinkDispatcher::select_route(const LogEvent& event) {
@@ -72,6 +108,14 @@ SinkRoute SinkDispatcher::select_route(const LogEvent& event) {
   }
 
   return SinkRoute::BasicFile;
+}
+
+std::shared_ptr<ILogSink> SinkDispatcher::sink_for_route(SinkRoute route) const {
+  if (route == SinkRoute::Audit) {
+    return audit_sink_ != nullptr ? audit_sink_ : basic_sink_;
+  }
+
+  return basic_sink_;
 }
 
 }  // namespace dasall::infra::logging
