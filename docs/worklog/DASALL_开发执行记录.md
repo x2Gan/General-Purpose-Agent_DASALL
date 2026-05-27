@@ -1,3 +1,29 @@
+## 记录 #826
+
+- 日期：2026-05-27
+- 阶段：runtime_support/专项总账 closeout
+- 任务：RTSUP-FIX-002 接入 production observability 与 health sinks
+- 状态：已完成（总账同步、closeout 落盘与 focused 复验已完成）
+
+### 改动
+
+1. 新增 `docs/todos/runtime/deliverables/RTSUP-FIX-002-production-observability-health-closeout.md`，把 `RTSUP-FIX-002` 的任务边界、authoritative 证据源、Design -> Build 映射与本轮验证口径单独落盘。
+2. 更新 `docs/todos/DASALL_子系统查漏补缺专项记录.md`：将 `RTSUP-GAP-002` 与 `RTSUP-FIX-002` 从历史 `Todo` 状态同步为已闭合 / Done，并回链 closeout 文档。
+3. 本轮未改动产品代码；authoritative 实现仍以 `docs/todos/runtime/DASALL_runtime_support组件专项TODO.md` 的 `RTSUP-TODO-006` 与记录 #647 为准，当前 round 只负责系统总账 traceability 收口。
+
+### 验证
+
+1. `RunCtest_CMakeTools(tests=["ToolObservabilityIntegrationTest","ToolProductionObservabilityIntegrationTest","RuntimeProductionHealthCompositionTest","DaemonRuntimeLiveDependencyCompositionTest","GatewayRuntimeLiveDependencyCompositionTest"])`
+   - 结果：继续命中仓库已知泛化 `生成失败`。
+2. `./build/vscode-linux-ninja/tests/integration/tools/dasall_tool_observability_integration_test && ./build/vscode-linux-ninja/tests/integration/tools/dasall_tool_production_observability_integration_test && ./build/vscode-linux-ninja/tests/integration/access/dasall_access_runtime_production_health_composition_integration_test && ./build/vscode-linux-ninja/tests/integration/access/dasall_access_daemon_runtime_live_dependency_composition_integration_test && ./build/vscode-linux-ninja/tests/integration/access/dasall_access_gateway_runtime_live_dependency_composition_integration_test && printf '%s\n' PASS`
+   - 结果：`PASS`。
+
+### 结果
+
+1. `RTSUP-FIX-002` 已在系统总记录闭合：shared helper 的 production observability / health 接线不再停留在专项 TODO 内部，而是与总账状态保持一致。
+2. 当前 authoritative 结论仍停留在 build-tree focused evidence；本轮没有把结果外推为 installed / qemu / release-ready。
+3. runtime_support 下一步聚焦 `RTSUP-FIX-003` 的 knowledge optional degraded semantics 与 installed positive probe closeout。
+
 # 记录 #825
 
 - 日期：2026-05-26
