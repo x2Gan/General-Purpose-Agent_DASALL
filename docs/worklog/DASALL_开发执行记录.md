@@ -1,3 +1,29 @@
+## 记录 #827
+
+- 日期：2026-05-27
+- 阶段：runtime_support/专项总账 closeout
+- 任务：RTSUP-FIX-003 收口 knowledge optional degraded semantics 与 installed positive probe
+- 状态：已完成（总账同步、closeout 落盘与 focused 复验已完成）
+
+### 改动
+
+1. 新增 `docs/todos/runtime/deliverables/RTSUP-FIX-003-knowledge-degraded-installed-probe-closeout.md`，把 knowledge optional port 的任务边界、helper marker 语义、installed positive probe 与本轮验证口径单独落盘。
+2. 更新 `docs/todos/DASALL_子系统查漏补缺专项记录.md`：将 `RTSUP-GAP-003` 与 `RTSUP-FIX-003` 从历史 `Todo` 状态同步为已闭合 / Done，并回链 closeout 文档。
+3. 本轮未改动产品代码；authoritative 实现仍以 `docs/todos/runtime/DASALL_runtime_support组件专项TODO.md` 的 `RTSUP-TODO-007` 与记录 #648 为准，当前 round 只负责系统总账 traceability 收口。
+
+### 验证
+
+1. `RunCtest_CMakeTools(tests=["KnowledgeInstalledAssetProbeIntegrationTest","DaemonRuntimeLiveDependencyCompositionTest","GatewayRuntimeLiveDependencyCompositionTest"])`
+   - 结果：继续命中仓库已知泛化 `生成失败`。
+2. `./build/vscode-linux-ninja/tests/integration/knowledge/dasall_knowledge_installed_asset_probe_integration_test && ./build/vscode-linux-ninja/tests/integration/access/dasall_access_daemon_runtime_live_dependency_composition_integration_test && ./build/vscode-linux-ninja/tests/integration/access/dasall_access_gateway_runtime_live_dependency_composition_integration_test && printf '%s\n' PASS`
+   - 结果：`PASS`。
+
+### 结果
+
+1. `RTSUP-FIX-003` 已在系统总记录闭合：knowledge optional port 的 ready / degraded / unavailable 语义不再只停留在专项 TODO，而是与系统总账保持一致。
+2. 当前 authoritative 结论仍停留在 build-tree focused evidence；本轮没有把结果外推为 installed / qemu / release-ready。
+3. runtime_support 下一步聚焦 `RTSUP-FIX-004` 的 owner / fail-closed / marker regression matrix closeout。
+
 ## 记录 #826
 
 - 日期：2026-05-27
