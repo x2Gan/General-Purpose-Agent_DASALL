@@ -344,6 +344,7 @@ key 域冻结规则：
 | logging_flush_latency_ms | Histogram | ms | flush | flush 延迟分布 |
 
 3. 标签约束：复用 metrics::MetricLabels 五元组，module 固定 logging，stage 仅允许 write、queue、flush、recovery，profile 缺失填 unknown，outcome 仅允许 success、failure、degraded，error_code 仅允许 none 或四个 LOG_E_*。
+4. `INF-LOG-FIX-007` 必须继续沿这五个 frozen metric family 推进主链，不允许把 redacted path 再拆出第六个指标族；redaction 只代表 accepted sample 来自默认 `enrich -> redact -> format -> dispatch` 主链，而不是另一套 metrics taxonomy。
 4. 指标桥接失败只允许把 LoggingMetricsBridge 标记为 degraded，并通过 health/audit 或非递归 failure hook 暴露；不得递归调用 LoggingFacade 再写失败日志。
 5. 追踪：记录 trace_id/span_id 兼容字段（若可获得 span_id 则写入）。
 6. 审计协同：关键动作日志需附 evidence_ref，并通过 IAuditLinkAdapter 关联至 infra/audit。
@@ -362,6 +363,8 @@ key 域冻结规则：
 | Unhealthy 条件 | 主/降级写入链都不可用，或存在未恢复的不可恢复失败 |
 | timeout 语义 | `probe()` 只做本地只读采样；若无法在 `timeout_ms` 内完成，返回结构化失败 `ProbeResult`，不得阻塞 LoggingFacade 主链 |
 | detail_ref 约束 | 统一落到 `diag://infra/logging/health/...` 命名空间，供 diagnostics/log query 后续复用 |
+
+补充冻结细节：`queue_high_watermark = max(1, active_logging_config.queue_size)`；direct-dispatch path 仍固定 `queue_high_watermark=1` 且 `queue_depth=0`。`dropped_total_delta >= 1`、`fallback_active=true`、`recovery_degraded=true`、`metrics_bridge_degraded=true` 或 `queue_depth >= queue_high_watermark` 一律视为 `Degraded`；只有 `unrecoverable_failure_total >= 1` 时才允许升级到 `Unhealthy`。sink unavailable 若已通过 degraded fallback 持久化，只能维持 `Degraded`，不得越权提升为 runtime recovery 结论。
 
 冻结结果：LOG-BLK-003 只需要 logging 侧补齐 descriptor、状态映射和 timeout 语义文档，不需要再等待 health 子域补新的接口对象。
 

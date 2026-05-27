@@ -144,6 +144,15 @@
 4. focused 证据固定为 `LoggingSinkFallbackTest`、`LoggingQueueFailureSignalTest` 与 `LoggingRecoveryIntegrationTest`；其中 `LoggingSinkFallbackTest` 现同时覆盖 direct dispatch failure 与 formatter failure fallback。相邻回归继续使用 `LoggingRecoveryTest`、`LoggingFacadeTest`、`LoggingFlushDeadlineTest` 与 `LoggingSinkFailureInjectionTest` 守住既有 deterministic queue / sink failure 语义。`RunCtest_CMakeTools` 仍命中仓库既有泛化 `生成失败`，因此 authoritative evidence 继续采用 `Build_CMakeTools` + direct-binary fallback。
 5. 本轮结论仍只到 L3 build-tree degraded/fallback evidence；metrics/health、diagnostics artifact 与 installed package proof 继续留给 `INF-LOG-FIX-007~011`。
 
+### 6.6 BLK-INF-LOG-006 metric family / health threshold freeze
+
+1. `LoggingMetricsBridge` v1 main chain 只允许沿既有五个 frozen metric family 发射样本：`logging_write_total`、`logging_write_fail_total`、`logging_drop_total`、`logging_queue_depth`、`logging_flush_latency_ms`。`StructuredFormatter` / `RedactionFilter` 默认主链已经在 `INF-LOG-FIX-002` 冻结，因此 redacted write path 只能记入已脱敏后的 accepted write sample，不新增 redaction 专用第六指标族。
+2. label cardinality 在本轮正式冻结：`module=logging` 固定；`stage` 只允许 `write`、`queue`、`flush`、`recovery`；`outcome` 只允许 `success`、`failure`、`degraded`；`error_code` 只允许 `none`、`LOG_E_QUEUE_FULL`、`LOG_E_SINK_IO`、`LOG_E_FORMAT_INVALID`、`LOG_E_CONFIG_INVALID`；`profile` 缺失时固定回填 `unknown`。后续不得按 sink path、event name、route、request id 或 redaction rule 扩写高基数 label。
+3. `INF-LOG-FIX-007` 的 main-chain outcome -> metric family 映射固定如下：accepted/redacted record 进入 `logging_write_total(stage=write,outcome=success)`；formatter/dispatch/recovery write failure 进入 `logging_write_fail_total(stage=write|recovery,outcome=failure)`；queue saturation 或 drop advisory 进入 `logging_drop_total(stage=queue,outcome=degraded|failure)`；每次 enqueue/drop/flush/recovery 结束后都要刷新 `logging_queue_depth(stage=queue)`；每次 flush 尝试都要记录 `logging_flush_latency_ms(stage=flush,outcome=success|failure|degraded)`。
+4. `LoggingHealthProbe` 的 degraded/unhealthy 阈值在本轮正式冻结：`queue_high_watermark = max(1, active_logging_config.queue_size)`；direct-dispatch path 仍沿该公式固定 `queue_high_watermark=1` 且 `queue_depth=0`。当 `fallback_active=true`、`recovery_degraded=true`、`metrics_bridge_degraded=true`、`dropped_total_delta >= 1` 或 `queue_depth >= queue_high_watermark` 时返回 `Degraded`；当 `unrecoverable_failure_total >= 1` 时返回 `Unhealthy`。
+5. sink unavailable 的 health 语义同样固定：primary sink failure 若已通过 degraded fallback 持久化，只能保持 `Degraded`；只有 primary 与 fallback 都不可用并把 `unrecoverable_failure_total` 提升到至少 1 时，`LoggingHealthProbe` 才允许升级为 `Unhealthy`。这一结论只用于 build-tree/live composition health owner，不外推为 installed / qemu / kvm 结论。
+6. `HealthMonitorFacade` 注册口径在本轮冻结为：`compose_live_observability()` 必须在 logger、metrics provider 与 health monitor 均成功初始化后注册 `probe_name=infra.logging.pipeline`、`probe_group=readiness` 的 logging probe，并把注册失败视为 live composition fail-closed，而不是静默跳过 health wiring。
+
 ## 7. industry practice alignment
 
 1. OpenTelemetry Logs：把 `TraceId / SpanId / Resource` 作为 top-level correlation 对齐点，把 request-scoped 附加信息保留在 structured attributes；DASALL 只吸收字段契约，不在本轮引入 OTel SDK 直连。

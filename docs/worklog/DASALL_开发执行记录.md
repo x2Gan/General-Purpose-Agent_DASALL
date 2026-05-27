@@ -1,3 +1,40 @@
+## 记录 #840
+
+- 日期：2026-05-27
+- 阶段：infrastructure / logging metrics and health threshold freeze
+- 任务：先行关闭 `BLK-INF-LOG-006`，冻结 `INF-LOG-FIX-007` 所需的 metric family、label cardinality 与 health degradation threshold
+- 状态：已完成（L1 design / SSOT freeze 已闭合；本轮不使用 qemu / kvm）
+
+### 执行前提
+
+1. 用户要求继续按 `project-implementation-cycle` 串行推进 `INF-LOG-FIX-007`，若存在前置 BLOCK 则需先完成 BLOCK 解组原子任务并单独提交推送。
+2. 近端核验确认：`LoggingMetricsBridge` 与 `LoggingHealthProbe` 已分别具备 frozen skeleton，但 `docs/ssot/LoggingProductionAcceptanceMatrix.md` 还没有把五个 metric family、label cardinality、`queue_high_watermark` / `unrecoverable_failure_total` 阈值，以及 live composition probe 注册口径写成当前 owner SSOT。
+3. 由于 `INF-LOG-FIX-007` 的 code goal 明确依赖 `record_*()` main-chain mapping 与 `HealthMonitorFacade::register_probe()`，本轮必须先把 blocker 口径写实，否则后续实现会继续在 redacted path 是否新增第六指标族、queue saturation 何时 degraded、sink unavailable 何时 unhealthy 这些点上漂移。
+
+### 改动
+
+1. 更新 `docs/ssot/LoggingProductionAcceptanceMatrix.md`，新增 `6.6 BLK-INF-LOG-006 metric family / health threshold freeze`，正式冻结五个 frozen metric family、label cardinality、main-chain outcome -> metric family 映射、`queue_high_watermark = max(1, active_logging_config.queue_size)` 以及 `unrecoverable_failure_total >= 1` 的 unhealthy 阈值。
+2. 更新 `docs/architecture/DASALL_infra_logging模块详细设计.md`，把“不新增 redaction 第六指标族”与 logging probe 的 degraded/unhealthy 细节回链到详设 6.10 / 6.10.1，避免后续实现绕开当前 SSOT。
+3. 更新 `docs/todos/DASALL_子系统查漏补缺专项记录.md`，将 `BLK-INF-LOG-006` 标记为 Closed，并在 `INF-LOG-FIX-007` 行内显式记录 blocker 已闭合及冻结后的阈值口径。
+4. 更新 `tests/contract/smoke/LoggingProductionAcceptanceContractTest.cpp`，让 acceptance contract 直接扫描五个 metric family、`queue_high_watermark` 阈值、`unrecoverable_failure_total >= 1` 语义与 live composition probe 注册 wording。
+5. 新增 `docs/todos/infrastructure/deliverables/BLK-INF-LOG-006-logging-metrics-health-threshold冻结.md`，沉淀本轮 blocker closeout 与非外推边界。
+
+### 验证
+
+1. `Build_CMakeTools(buildTargets=["dasall_logging_production_acceptance_contract_test"])`
+   - 结果：通过。
+2. `RunCtest_CMakeTools(tests=["LoggingProductionAcceptanceContractTest"])`
+   - 结果：命中仓库既有泛化 `生成失败`。
+3. fallback 直接执行：
+   - `./build/vscode-linux-ninja/tests/contract/dasall_logging_production_acceptance_contract_test`
+   - 结果：通过。
+
+### 结果
+
+1. `BLK-INF-LOG-006` 已解阻：`INF-LOG-FIX-007` 现在有了正式 SSOT 可依赖的 metric family、label cardinality 与 `Degraded` / `Unhealthy` 阈值，不再需要在实现轮次中重新定义这些 owner 规则。
+2. 当前结论仍只到 L1 design / SSOT freeze；真正的 metrics/health main-chain wiring、health monitor 注册与 build-tree integrated evidence 继续留给下一轮 `INF-LOG-FIX-007`。
+3. 本轮继续坚持 installed authoritative evidence 为后续 owner 验收标准，没有把 qemu / kvm 回流成 logging 当前 blocker。
+
 ## 记录 #839
 
 - 日期：2026-05-27
