@@ -1,3 +1,44 @@
+## 记录 #830
+
+- 日期：2026-05-27
+- 阶段：access / authority closeout
+- 任务：推进 `ACC-FIX-003`，收口 receipt authority / multi-instance 口径
+- 状态：已完成（v1 single-daemon / in-memory authority 边界已冻结；本轮未使用 qemu / kvm）
+
+### 执行前提
+
+1. 用户要求按 `project-implementation-cycle` 串行推进 `docs/todos/DASALL_子系统查漏补缺专项记录.md` 中的 `ACC-FIX-003~005`，每轮单独提交并推送，同时删除 qemu / kvm 作为当前验收依据。
+2. 近端核验确认：`AsyncTaskRegistry` 当前实现是 per-composition-root 的内存 registry；任务出口允许“新增 receipt store/provider seam”或“明确 v1 single-daemon authority”二选一。为守住最小原子任务，本轮选择后者。
+3. 前置 blocker 复核：无独立 BLOCK 需要先解。`DaemonReceiptTtlCleanupIntegrationTest` 与 `DaemonReceiptFlowIntegrationTest` 已存在，只缺一条能直接证明 sibling daemon / restart 不共享 authority 的 focused regression。
+
+### 改动
+
+1. 新增 `tests/integration/access/AccessReceiptAuthorityIntegrationTest.cpp`，使用两个独立 `DaemonInProcessFixture + AsyncTaskRegistry` 组合根验证：
+   - issuing daemon 产生的 receipt 在 sibling daemon 上查询返回 `status_missing`；
+   - fresh registry restart 后，对 pre-restart receipt 的查询继续返回 `status_missing`；
+   - 两个场景都复用同一 ownership secret，避免把“secret 不同”误当成 authority 边界证据。
+2. 更新 `tests/integration/access/CMakeLists.txt`，注册 `dasall_access_receipt_authority_integration_test` 与 `AccessReceiptAuthorityIntegrationTest`，使该边界进入 focused integration discoverability。
+3. 新增 `docs/todos/access/deliverables/ACC-FIX-003-receipt-authority-single-daemon-scope收口.md`，把任务边界、设计回链、Design -> Build 映射、验证与完成判定逐项落盘。
+4. 更新 `docs/architecture/DASALL_access子系统详细设计.md`、`docs/todos/access/DASALL_access子系统专项TODO.md` 与 `docs/todos/DASALL_子系统查漏补缺专项记录.md`：统一冻结 `AsyncTaskRegistry` 的 v1 authority scope 为 single-daemon / in-memory，并明确 installed async receipt evidence 不外推为 shared receipt authority。
+
+### 验证
+
+1. `Build_CMakeTools(buildTargets=["dasall_access_receipt_authority_integration_test"])`
+   - 结果：通过。
+2. `RunCtest_CMakeTools(tests=["AccessReceiptAuthorityIntegrationTest","DaemonReceiptTtlCleanupIntegrationTest","DaemonReceiptFlowIntegrationTest"])`
+   - 结果：命中仓库既有泛化错误 `生成失败`。
+3. 直接执行 fallback binaries 时，`DaemonReceiptFlowIntegrationTest` 首次暴露环境性缺口：旧 test binary 内的 CLI binary path 未刷新，运行期 `execv: No such file or directory`。
+4. `Build_CMakeTools(buildTargets=["dasall_access_daemon_receipt_flow_integration_test"])`
+   - 结果：通过；刷新 `DASALL_CLI_BINARY_PATH` compile definition 后，环境性缺口消失。
+5. `./build/vscode-linux-ninja/tests/integration/access/dasall_access_receipt_authority_integration_test && ./build/vscode-linux-ninja/tests/integration/access/dasall_access_daemon_receipt_ttl_cleanup_integration_test && ./build/vscode-linux-ninja/tests/integration/access/dasall_access_daemon_receipt_flow_integration_test`
+   - 结果：3/3 通过。
+
+### 结果
+
+1. `ACC-FIX-003` 已闭合：Access 不再把本地 `AsyncTaskRegistry` 暗示为跨实例 / 重启共享 authority，当前事实被明确定义为 single-daemon / in-memory scope。
+2. TTL cleanup、ownership token、cancel forwarding 与 active/completed 状态流在同轮回归中保持稳定，没有因口径收口而回退。
+3. Access 剩余缺口继续收敛到 streaming lifecycle 与 installed security hardening；如果未来要宣称 multi-instance / restart shared authority，需要单开 receipt store/provider seam，而不是外推本轮 focused 结果。
+
 ## 记录 #829
 
 - 日期：2026-05-27

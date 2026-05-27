@@ -1234,12 +1234,12 @@ flowchart LR
 ##### AsyncTaskRegistry
 
 1. 职责：为 accepted async 请求管理 receipt、query token、ownership proof、状态推进和 TTL，向 query/replay path 提供稳定的异步受理索引。
-2. 非职责边界：不拥有业务执行结果主语义；不替代 Runtime queue；不做长期持久化；不承担 stream session 管理；不在未校验 ownership 的情况下泄露结果状态。
+2. 非职责边界：不拥有业务执行结果主语义；不替代 Runtime queue；不做长期持久化；不承担 stream session 管理；不在未校验 ownership 的情况下泄露结果状态。v1 authority scope 明确固定为单 daemon 实例内的 in-memory registry：重启或多实例不自动共享 receipt authority。
 3. 核心数据定义：围绕 `AsyncTaskReceipt`、`AsyncTaskState`、`AsyncTaskRecord`、`ReceiptOwnershipProof`、`ReceiptQueryResult`、`ExpirySweepStats` 建模；状态机建议至少区分 `Accepted`、`Running`、`Completed`、`FailedToPublish`、`Expired`。
 4. 公共/内部接口：保持 internal 级别；建议接口为 `register_async_accept()`、`bind_result()`、`query_receipt()`、`mark_publish_failed()`、`expire_due_records()`、`validate_ownership()`；结果体本身继续通过 `ResultReplayCache` 或 publisher sidecar 提供，而不是在 registry 内复制一份完整 payload。
-5. 关键执行流：当 RuntimeBridge 返回 `AcceptedAsync` 时，registry 生成 receipt 并绑定 `actor_ref/request_id/session_id/expires_at`；后续 runtime 或 publisher 完成结果回填时更新 task state 和 replay ref；query path 根据 receipt 或 request id 查找记录，先校验 ownership，再返回 pending/completed/expired 视图；定时 sweep 负责 TTL 过期和索引清理。
-6. 失败与回退语义：owner mismatch、receipt 过期、记录损坏都必须 fail-closed；query 未命中不能推断任务不存在，应返回明确 not found/expired 语义；registry 写入失败时，gateway 不得伪称 async accepted 成功；任何回放都需要先通过 ownership proof。
-7. 测试与验收出口：推荐单测为 `AsyncTaskRegistryTest.cpp`、`AsyncTaskRegistryOwnershipTest.cpp`、`AsyncTaskRegistryExpiryTest.cpp`；集成验收以 `AccessAsyncReceiptIntegrationTest.cpp` 为主出口，并补至少一个 owner mismatch failure case。
+5. 关键执行流：当 RuntimeBridge 返回 `AcceptedAsync` 时，registry 生成 receipt 并绑定 `actor_ref/request_id/session_id/expires_at`；后续 runtime 或 publisher 完成结果回填时更新 task state 和 replay ref；query path 根据 receipt 或 request id 查找记录，先校验 ownership，再返回 pending/completed/expired 视图；定时 sweep 负责 TTL 过期和索引清理。只有 issuing daemon 当前持有的 registry 可以 authoritative 地回答该 receipt；fresh registry 只允许返回 not found/expired。
+6. 失败与回退语义：owner mismatch、receipt 过期、记录损坏都必须 fail-closed；query 未命中不能推断任务不存在，应返回明确 not found/expired 语义；registry 写入失败时，gateway 不得伪称 async accepted 成功；任何回放都需要先通过 ownership proof。即便多个 daemon 复用相同 ownership secret，没有共享 receipt record 时也不得把查询升级为 authoritative hit。
+7. 测试与验收出口：推荐单测为 `AsyncTaskRegistryTest.cpp`、`AsyncTaskRegistryOwnershipTest.cpp`、`AsyncTaskRegistryExpiryTest.cpp`；集成验收以 `AccessAsyncReceiptIntegrationTest.cpp` 为主出口，并补至少一个 owner mismatch failure case。`AccessReceiptAuthorityIntegrationTest.cpp` 进一步锁定 sibling daemon / restart 返回 `status_missing` 的 v1 single-daemon authority 语义。
 
 AsyncTaskRegistry 数据流如下：
 
