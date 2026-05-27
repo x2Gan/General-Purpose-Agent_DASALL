@@ -405,6 +405,16 @@ key 域冻结规则：
 3. `RedactionFilter` 的 deny-by-default key fragments 固定为 `token`、`secret`、`password`、`authorization`、`api_key`、`apikey`；message/exception 文本模式最低必拦截集合固定为 `bearer `、`token=`、`token:`、`secret=`、`secret:`、`password=`、`password:`、`authorization=`、`authorization:`、`api_key=`、`apikey=`。
 4. focused golden 证据固定为 `LoggingStructuredFormatterTest`、`LoggingRedactionFilterTest` 与 `LoggingFacadeRedactionIntegrationTest`；这些用例只证明 L2 focused schema/主链闭合，不外推为 sink/installed ready。
 
+### 6.10.5 Installed / runtime log path 与权限策略冻结补充
+
+`INF-LOG-FIX-003` 开始前，`BLK-INF-LOG-003` 必须先把 writable path / permission policy 冻结到 SSOT，防止 build-tree 临时路径和 installed authoritative path 再次混写：
+
+1. `DASALL_STATE_ROOT` 是唯一允许的 state_root override；若设置该环境变量，installed/local-authoritative runtime log path 必须改写为 `${DASALL_STATE_ROOT}/logging/runtime.log`，不得另起 repo-relative pseudo install path。
+2. build-tree focused slice 允许继续使用默认相对路径 `logs/runtime.log`，并将其解析到当前 build/test working directory；该路径只代表 L2/L3 build-tree evidence，不能回写成 installed/package smoke authoritative path。
+3. installed authoritative runtime log path 固定为 `state_root/logging/runtime.log`；packaged canonical path 因 `InstallLayout.state_root=/var/lib/dasall` 而冻结为 `/var/lib/dasall/logging/runtime.log`，rotation family 固定在同目录 `runtime.log.<n>`。
+4. primary file sink 只允许自动创建 build-tree `logs/` 与 installed/local-authoritative `state_root/logging/` 两类父目录；若遇到其他不可写、越界或权限拒绝路径，必须 fail-closed 返回 sink IO failure，不得 silently fallback 到 repo 根、`/tmp` 或 qemu guest-side 路径。
+5. package smoke 与后续 installed proof 只接受 `state_root/logging/runtime.log` 及其 rotation family 作为 authoritative evidence；machine-isolated qemu / kvm rerun 只属于 packaging / release handoff，不进入当前 logging owner 验收。
+
 ---
 
 ## 7. Design -> Build 映射（建议级）

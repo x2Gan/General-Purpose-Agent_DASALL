@@ -48,6 +48,9 @@ void test_ssot_matrix_freezes_backend_levels_and_artifacts() {
           "L5 packaging / release handoff",
           "spdlog-backed file / rotating sink",
           "/var/lib/dasall/logging/runtime.log",
+          "DASALL_STATE_ROOT",
+          "fail-closed 返回 sink IO failure",
+          "不得 silently fallback 到 repo 根、`/tmp` 或 qemu guest-side 路径",
           "logging-installed-proof.json",
           "logging-runtime-proof.json",
           "INF-LOG-GATE-001",
@@ -67,6 +70,8 @@ void test_logging_design_points_to_frozen_matrix_and_backend_policy() {
           "LoggingProductionAcceptanceMatrix",
           "spdlog-backed file / rotating sink",
           "state_root/logging/runtime.log",
+          "DASALL_STATE_ROOT",
+          "fail-closed 返回 sink IO failure",
           "OpenTelemetry Logs",
           "TraceId / SpanId / Resource",
           "local installed authoritative evidence",
@@ -99,6 +104,8 @@ void test_system_gap_todo_marks_inf_log_fix_001_done_and_blocker_closed() {
       {
           "| INF-LOG-FIX-001 | Done | 冻结 logging production acceptance matrix |",
           "| BLK-INF-LOG-001 | Closed |",
+            "| BLK-INF-LOG-003 | Closed |",
+            "`DASALL_STATE_ROOT` 是唯一 state_root override",
           "本轮不使用 qemu / kvm",
       },
       "subsystem gap ledger");

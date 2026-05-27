@@ -1,3 +1,35 @@
+## 记录 #835
+
+- 日期：2026-05-27
+- 阶段：infrastructure / logging installed path permission freeze
+- 任务：先行关闭 `BLK-INF-LOG-003`，冻结 installed/runtime writable log path 与权限策略
+- 状态：已完成（L1 path/permission freeze 已闭合；本轮不使用 qemu / kvm）
+
+### 执行前提
+
+1. 用户要求继续按 `project-implementation-cycle` 串行推进 `INF-LOG-FIX-003`，若存在前置 BLOCK 则需先完成 BLOCK 原子任务并单独提交推送。
+2. 近端核验确认：`BLK-INF-LOG-003` 仍处于 Open，真实缺口是 installed/runtime writable path、`DASALL_STATE_ROOT` override、package smoke authoritative evidence 与 fail-closed permission policy 尚未冻结，而不是 file sink 代码本身缺乏实现入口。
+3. 额外判别确认：仓库与系统当前都没有现成 `spdlog` 依赖，因此本轮先冻结 path/permission owner 规则，再进入 backend-neutral sink adapter 实现，是最小且可证伪的推进路径。
+
+### 改动
+
+1. 更新 `docs/ssot/LoggingProductionAcceptanceMatrix.md`，补充 `DASALL_STATE_ROOT` 作为唯一 state_root override、build-tree `logs/runtime.log` 与 installed `state_root/logging/runtime.log` 的分层，以及其他不可写路径必须 fail-closed 的规则。
+2. 更新 `docs/architecture/DASALL_infra_logging模块详细设计.md`、`docs/todos/infrastructure/DASALL_infrastructure_logging组件专项TODO.md` 与 `docs/todos/DASALL_子系统查漏补缺专项记录.md`，同步关闭 `BLK-INF-LOG-003`，并将 package smoke authoritative evidence 限定到 `state_root/logging/runtime.log` 与 rotation family。
+3. 更新 `tests/contract/smoke/LoggingProductionAcceptanceContractTest.cpp`，把 path/permission freeze 纳入现有 logging acceptance wording guard。
+4. 新增 `docs/todos/infrastructure/deliverables/BLK-INF-LOG-003-installed-runtime-log-path权限策略冻结.md`，沉淀本轮 blocker closeout。
+
+### 验证
+
+1. `Build_CMakeTools(buildTargets=["dasall_logging_production_acceptance_contract_test"])`
+2. `RunCtest_CMakeTools(tests=["LoggingProductionAcceptanceContractTest"])`
+3. 若命中仓库既有泛化 `生成失败`，fallback 直接执行 `./build/vscode-linux-ninja/tests/contract/dasall_logging_production_acceptance_contract_test`
+
+### 结果
+
+1. `BLK-INF-LOG-003` 已解阻：installed/runtime writable path、唯一 state_root override 与 fail-closed permission policy 已写成正式 SSOT/详设/总账口径。
+2. 后续 `INF-LOG-FIX-003` 可以只聚焦 file / rotating sink adapter 行为闭合，不再重新争论 path owner 与 package smoke authoritative evidence。
+3. 本轮结论仍停留在 L1 design / SSOT freeze；真实 sink 落盘、rotation 与 failure injection 证据留给 `INF-LOG-FIX-003`。
+
 ## 记录 #834
 
 - 日期：2026-05-27

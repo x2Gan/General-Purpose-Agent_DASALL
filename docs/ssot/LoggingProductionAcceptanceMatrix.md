@@ -44,6 +44,10 @@
 3. rotation family 固定与 primary file sink 同目录：`/var/lib/dasall/logging/runtime.log.<n>`。
 4. diagnostics query artifact 继续复用 `diag://infra/logging/query/<query_id>` 命名空间；本地导出文件属于 diagnostics artifact，不等于 primary runtime log owner。
 5. installed package proof artifact 名称冻结为 `logging-installed-proof.json` 与 `logging-runtime-proof.json`；两者都必须是 redacted artifact，不允许回写明文 secret/token/password/auth value。
+6. `DASALL_STATE_ROOT` 是唯一允许的 state_root override；若设置该环境变量，installed/local-authoritative sink path 必须改写为 `${DASALL_STATE_ROOT}/logging/runtime.log`，不得各子系统再引入第二套 repo-relative pseudo install path。
+7. build-tree focused tests 允许继续把默认相对路径 `logs/runtime.log` 解析到当前 build/test working directory；installed / package smoke 不允许复用该 repo-relative 相对路径冒充 authoritative path。
+8. primary file sink 只允许自动创建两类父目录：build-tree focused 路径下的 `logs/`，以及 installed/local-authoritative `state_root/logging/`；对其他不可写/越界/权限拒绝路径必须 fail-closed 返回 sink IO failure，不得 silently fallback 到 repo 根、`/tmp` 或 qemu guest-side 路径。
+9. package smoke proof 只接受来自 `state_root/logging/runtime.log` 与同目录 rotation family 的证据；任何 qemu / kvm / guest-side rerun 路径都不参与当前 owner 验收。
 
 ## 3. production chain 与 owner boundary
 
