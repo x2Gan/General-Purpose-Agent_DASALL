@@ -122,7 +122,9 @@ set(DASALL_INFRA_LOGGING_SOURCES
   src/logging/LogQueryService.cpp
   src/logging/LoggingMetricsBridge.cpp
   src/logging/LoggingRecovery.cpp
+  src/logging/RedactionFilter.cpp
   src/logging/SinkDispatcher.cpp
+  src/logging/StructuredFormatter.cpp
 )
 
 set(DASALL_INFRA_SECRET_SOURCES
@@ -357,6 +359,8 @@ set(DASALL_INFRA_PUBLIC_HEADERS
   include/logging/ILogger.h
   include/logging/LoggingErrors.h
   include/logging/LogTypes.h
+  include/logging/RedactionFilter.h
+  include/logging/StructuredFormatter.h
   ${DASALL_INFRA_OTA_PUBLIC_HEADERS}
   ${DASALL_INFRA_PLUGIN_PUBLIC_HEADERS}
   ${DASALL_INFRA_SECRET_PUBLIC_HEADERS}

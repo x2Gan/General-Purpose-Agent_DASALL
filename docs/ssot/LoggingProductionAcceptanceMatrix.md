@@ -93,6 +93,18 @@
 | INF-LOG-FIX-010 | key subsystem field/correlation matrix | cross-subsystem live composition logging pipeline | runtime/llm/memory/profiles/tools production logging tests | L3 shared sink/query evidence |
 | INF-LOG-FIX-011 | installed package proof schema | package smoke / release local soak logging slice | installed package logging smoke、local soak logging slice | L4 `logging-installed-proof.json`、`logging-runtime-proof.json`；L5 handoff summary |
 
+### 6.1 INF-LOG-FIX-002 structured/redaction schema freeze
+
+1. `StructuredFormatter` 的 frozen schema version 固定为 `dasall.logging.event.v1`；首版仍复用 `LogEvent` 外形，不新增 top-level contracts 字段，只把结构化 JSON envelope 写入 `LogEvent.message`。
+2. formatter 必须在 attrs 中补齐 `schema_version`、`correlation_id`、`idempotency_key` 三个 canonical 字段。
+3. `correlation_id` 的选择优先级固定为 `trace_id -> request_id -> session_id -> task_id -> unknown`。
+4. `idempotency_key` 的首版 frozen tuple 固定为 `correlation_id|task_id|module|ts_ms`；后续若要引入 hash/extra dimensions，必须新开 task，不得静默改变当前语义。
+5. `RedactionFilter` 的 deny-by-default sensitive key fragments 固定为 `token`、`secret`、`password`、`authorization`、`api_key`、`apikey`。
+6. message/exception 文本模式的最低必拦截集合固定为 `bearer `、`token=`、`token:`、`secret=`、`secret:`、`password=`、`password:`、`authorization=`、`authorization:`、`api_key=`、`apikey=`；凡命中上述模式的 payload，不允许以明文继续进入 formatter/sink。
+7. owner-safe allowlist 当前固定为 `request_id`、`session_id`、`trace_id`、`task_id`、`parent_task_id`、`lease_id`、`event_name`、`event_kind`、`evidence_ref`、`audit_ref_pending`、`schema_version`、`correlation_id`、`idempotency_key`；这些字段允许保留，但其 value 一旦命中文本模式，仍必须被 redaction。
+8. `INF-LOG-GATE-002` 的 golden 证据固定落在 `LoggingStructuredFormatterTest`、`LoggingRedactionFilterTest` 与 `LoggingFacadeRedactionIntegrationTest`；它们共同证明默认 `LoggingFacade` 主链无法绕过 redaction/formatter，且 golden 输出不含 secret/token/password/auth value。
+9. 本轮结论仍只到 L2 focused evidence：已冻结 redaction schema 与 structured field schema，但尚未宣称真实 sink 落盘、installed artifact 或 package handoff ready。
+
 ## 7. industry practice alignment
 
 1. OpenTelemetry Logs：把 `TraceId / SpanId / Resource` 作为 top-level correlation 对齐点，把 request-scoped 附加信息保留在 structured attributes；DASALL 只吸收字段契约，不在本轮引入 OTel SDK 直连。

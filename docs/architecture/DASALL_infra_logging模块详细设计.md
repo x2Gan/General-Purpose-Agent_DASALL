@@ -396,6 +396,15 @@ key 域冻结规则：
 
 冻结补充结论：本轮不把 qemu / kvm 作为 logging owner 当前验收前置；若后续存在 machine-isolated rerun，也只属于 packaging / release handoff，不改变 local installed authoritative evidence 的 owner 地位。
 
+### 6.10.4 StructuredFormatter / RedactionFilter schema 冻结补充
+
+`INF-LOG-FIX-002` 已把 logging 的 L2 focused schema 冻结到 `docs/ssot/LoggingProductionAcceptanceMatrix.md`：
+
+1. `LoggingFacade` 默认主链固定为 `enrich -> redact -> format -> dispatch`；redaction/filter/formatter 不允许通过调用方可选分支绕过。
+2. `StructuredFormatter` 首版固定 `schema_version=dasall.logging.event.v1`，并在 attrs 中补齐 `schema_version`、`correlation_id`、`idempotency_key`；`correlation_id` 优先级为 `trace_id -> request_id -> session_id -> task_id -> unknown`，`idempotency_key` tuple 固定为 `correlation_id|task_id|module|ts_ms`。
+3. `RedactionFilter` 的 deny-by-default key fragments 固定为 `token`、`secret`、`password`、`authorization`、`api_key`、`apikey`；message/exception 文本模式最低必拦截集合固定为 `bearer `、`token=`、`token:`、`secret=`、`secret:`、`password=`、`password:`、`authorization=`、`authorization:`、`api_key=`、`apikey=`。
+4. focused golden 证据固定为 `LoggingStructuredFormatterTest`、`LoggingRedactionFilterTest` 与 `LoggingFacadeRedactionIntegrationTest`；这些用例只证明 L2 focused schema/主链闭合，不外推为 sink/installed ready。
+
 ---
 
 ## 7. Design -> Build 映射（建议级）
@@ -406,7 +415,7 @@ key 域冻结规则：
 | 结构化记录模型 | 新增 LogEvent/LogContext/AuditRef | 统一字段语义，防止调用方各自拼接 | infra/include/logging/LogTypes.h | tests/unit/infra/logging/LogTypesTest.cpp | cmake --build build-ci --target dasall_unit_tests && ctest --test-dir build-ci -R LogTypesTest --output-on-failure | 依赖 contracts 标识字段语义 |
 | 异步多 sink | 新增 SinkDispatcher + AsyncQueueController | 满足高并发与可配置溢出策略 | infra/src/logging/SinkDispatcher.cpp, AsyncQueueController.cpp | tests/unit/infra/logging/AsyncQueueControllerTest.cpp | cmake --build build-ci --target dasall_unit_tests && ctest --test-dir build-ci -R AsyncQueueControllerTest --output-on-failure | 依赖 third_party/spdlog |
 | 审计协同 | 新增 AuditLinkAdapter 对接路径 | 明确 logging 不重复建设审计存储 | infra/src/logging/AuditLinkAdapter.cpp | tests/integration/infra/logging/AuditLinkIntegrationTest.cpp | cmake --build build-ci --target dasall_integration_tests && ctest --test-dir build-ci -R AuditLinkIntegrationTest --output-on-failure | 依赖 infra/audit IAuditLogger |
-| 脱敏治理 | 新增 RedactionFilter 与规则配置 | 防止敏感数据明文落盘 | infra/src/logging/RedactionFilter.cpp | tests/unit/infra/logging/RedactionFilterTest.cpp | cmake --build build-ci --target dasall_unit_tests && ctest --test-dir build-ci -R RedactionFilterTest --output-on-failure | 需规则样例 |
+| 脱敏治理 | 新增 RedactionFilter 与 StructuredFormatter 主链 | 防止敏感数据明文落盘并固定结构化 schema | infra/src/logging/RedactionFilter.cpp、StructuredFormatter.cpp | tests/unit/infra/logging/LoggingRedactionFilterTest.cpp、tests/unit/infra/logging/LoggingStructuredFormatterTest.cpp、tests/integration/infra/logging/LoggingFacadeRedactionIntegrationTest.cpp | cmake --build build-ci --target dasall_logging_structured_formatter_unit_test dasall_logging_redaction_filter_unit_test dasall_logging_facade_redaction_integration_test && ctest --test-dir build-ci -R LoggingStructuredFormatterTest --output-on-failure && ctest --test-dir build-ci -R LoggingRedactionFilterTest --output-on-failure && ctest --test-dir build-ci -R LoggingFacadeRedactionIntegrationTest --output-on-failure | 规则集版本与 golden fixture 已由 INF-LOG-FIX-002 冻结 |
 | sink 故障降级 | 新增 fallback + degraded 状态机 | 保证写入失败可恢复 | infra/src/logging/LoggingRecovery.cpp | tests/integration/infra/logging/SinkFailureRecoveryIntegrationTest.cpp | cmake --build build-ci --target dasall_integration_tests && ctest --test-dir build-ci -R SinkFailureRecoveryIntegrationTest --output-on-failure | 需故障注入桩 |
 | 四层配置覆盖 | 接入 ILogConfigurator + ConfigCenter | 与 infra/config 一致，并由 logging 本地守住 audit 主链与 per-key 层级接受规则 | infra/include/logging/ILogConfigurator.h; infra/src/logging/LoggingConfigAdapter.cpp | tests/unit/infra/logging/LoggingConfigMergeTest.cpp; tests/contract/smoke/LogConfiguratorBoundaryContractTest.cpp | cmake --build build-ci --target dasall_unit_tests dasall_contract_tests && ctest --test-dir build-ci -R "(LoggingConfigMergeTest|LogConfiguratorBoundaryContractTest)" --output-on-failure | 依赖 infra/config 接口 |
 | 可观测指标桥接 | 新增 LoggingMetricsBridge | 保证 logging 自可观测 | infra/src/logging/LoggingMetricsBridge.cpp | tests/unit/infra/logging/LoggingMetricsBridgeTest.cpp | cmake --build build-ci --target dasall_unit_tests && ctest --test-dir build-ci -R LoggingMetricsBridgeTest --output-on-failure | 依赖 infra/metrics 接口 |

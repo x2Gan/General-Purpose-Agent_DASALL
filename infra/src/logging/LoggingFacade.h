@@ -8,6 +8,8 @@
 #include "IInfrastructureService.h"
 #include "logging/ILogger.h"
 #include "logging/LogTypes.h"
+#include "logging/RedactionFilter.h"
+#include "logging/StructuredFormatter.h"
 
 namespace dasall::infra::logging {
 
@@ -73,6 +75,8 @@ class LoggingFacade final : public ILogger {
   LifecycleState lifecycle_state_ = LifecycleState::Created;
   LogContext current_context_{};
   LogLevel current_level_ = LogLevel::Info;
+  RedactionFilter redaction_filter_{};
+  StructuredFormatter structured_formatter_{};
   std::unique_ptr<ILogDispatchBackend> dispatch_backend_;
   std::optional<LogEvent> last_dispatched_event_;
   std::size_t dispatched_record_count_ = 0;

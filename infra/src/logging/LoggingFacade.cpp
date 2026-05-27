@@ -85,9 +85,11 @@ LogWriteResult LoggingFacade::log(const LogEvent& event) {
   }
 
   auto enriched_event = enrich_event(event);
-  const auto result = dispatch_backend_->dispatch(enriched_event);
+  auto redacted_event = redaction_filter_.apply(enriched_event);
+  auto formatted_event = structured_formatter_.format(redacted_event);
+  const auto result = dispatch_backend_->dispatch(formatted_event);
   if (result.ok) {
-    last_dispatched_event_ = std::move(enriched_event);
+    last_dispatched_event_ = std::move(formatted_event);
     ++dispatched_record_count_;
   }
 

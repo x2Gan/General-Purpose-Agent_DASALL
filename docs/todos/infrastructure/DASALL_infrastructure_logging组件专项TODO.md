@@ -9,6 +9,7 @@
 1. 本文档中的 `LOG-TODO-001~019` 完成状态，当前只代表接口/骨架/focused evidence 已落盘，不等于 production-ready。
 2. logging production acceptance 已统一迁入 `docs/ssot/LoggingProductionAcceptanceMatrix.md`，并由 `INF-LOG-FIX-001~011` 管理 evidence level、installed artifact、owner boundary 与 non-extrapolation 规则。
 3. 后续若要宣称 production / installed ready，必须同时满足 matrix 中的 gate 与 local installed authoritative evidence；不得再把早期 unit/contract/fixture 结果直接上卷成 production 结论。
+4. 截至 2026-05-27，`INF-LOG-FIX-002` 已把 `StructuredFormatter` / `RedactionFilter` / `LoggingFacade` 默认主链、`dasall.logging.event.v1` schema 与 deny-by-default redaction pattern 冻结为 L2 focused evidence；后续若扩展字段或规则，必须沿 matrix 新开任务，不得覆盖当前 frozen tuple。
 
 ## 1. 文档头
 
@@ -83,9 +84,9 @@ logging 组件目标固定为：
 
 | 证据对象 | 当前状态 | 结论 |
 |---|---|---|
-| infra/CMakeLists.txt | 已接入 core/audit/plugin/tracing 等真实源码 | logging 公共接口已落盘，但 logging 服务实现尚未接入构建 |
-| infra/include/ | 已形成“根目录共享契约 + 组件目录公共接口”布局，logging/ 子目录已落盘接口与对象 | logging public headers 已冻结，后续差距集中在运行时实现 |
-| infra/src/logging/ | 目录存在但空 | 仅有设计，无实现 |
+| infra/CMakeLists.txt | 已接入 logging facade/sink/query/recovery/formatter/filter 等真实源码 | logging 运行时实现已纳入 `dasall_infra`，当前差距转向真实 sink/async/config/recovery/live composition 深化 |
+| infra/include/ | 已形成“根目录共享契约 + 组件目录公共接口”布局，logging/ 子目录包含 `ILogger`、`ILogConfigurator`、`RedactionFilter`、`StructuredFormatter` 等公共接口 | logging public headers 已冻结，后续新增字段/规则必须遵守 matrix |
+| infra/src/logging/ | `LoggingFacade`、`SinkDispatcher`、`AsyncQueueController`、`AuditLinkAdapter`、`LoggingRecovery`、`LoggingConfigAdapter`、`LoggingMetricsBridge`、`LoggingHealthProbe`、`LogQueryService`、`RedactionFilter`、`StructuredFormatter` 均已落盘 | 当前不再是“无实现”，而是生产 sink / installed evidence / 子系统接入尚未闭合 |
 | tests/CMakeLists.txt | 已接入 mocks/unit/contract/integration 并提供 dasall_integration_tests 聚合入口 | integration 拓扑已接入顶层，后续只需补 logging 具体集成用例 |
 | tests/unit/CMakeLists.txt | 已注册 infra 子目录 | logging unit 发现性已建立，后续只需补具体用例 |
 | tests/contract/CMakeLists.txt | 已有 centralized registration 机制 | 可复用为 logging contract 边界校验入口 |
@@ -120,7 +121,7 @@ logging 组件目标固定为：
 | AuditEvent | logging 设计 6.5、6.10 | L2 | 字段列表、审计回放约束 | side_effects 子结构模型 | 直接拆数据结构任务 |
 | SinkDispatcher | logging 设计 6.2、6.4、6.7 | L2 | 路由职责、调用链位置 | 具体 sink 选择策略与对象签名 | 先实现路由骨架，不绑定实现细节 |
 | AsyncQueueController | logging 设计 6.2、6.8、6.9 | L2 | 队列容量与溢出策略配置项 | 线程池参数、统计采样窗口 | 直接拆控制器骨架 + 队列策略测试 |
-| RedactionFilter | logging 设计 6.2、6.3、6.9 | L2 | 脱敏职责、规则配置项 | 规则 DSL/模式库定义 | 先落规则集版本与最小匹配策略 |
+| RedactionFilter | logging 设计 6.2、6.3、6.9 | L2 | 脱敏职责、规则配置项、`dasall.logging.event.v1` 配套 deny-by-default pattern | 更丰富的规则 DSL/模式库定义 | 当前先保持 frozen key/message pattern 与 golden fixture，后续 DSL 扩展另开任务 |
 | LoggingMetricsBridge | logging 设计 6.2、6.10；metrics 设计 6.6.1、6.8.1 | L2 | 指标名清单、IMeter::record(MetricSample) 导出协议、MetricLabels 五元组与 non-recursive failure 语义已冻结 | health bridge 接口签名仍待 LOG-BLK-003 | 直接拆 bridge 骨架 + unit/contract 边界测试 |
 | LoggingHealthProbe | logging 设计 6.2、6.8、6.10.1；health 设计 6.5、6.6 | L2 | degraded 语义、`IHealthProbe`/`ProbeResult` 通用契约、descriptor 固定值 | logging 本地状态 provider 与阈值实现尚未落盘 | 直接拆 `LoggingHealthProbe` 骨架任务 |
 | LogQueryService | logging 设计 6.9、6.10.2、8.3；架构 13.3 | L2 | `LogQueryRequest` / `LogQueryAccessContext` / `LogQueryResult`、`enable_diag_pull` gate、local artifact 约束已冻结 | 本地索引增量维护、artifact retention/清理策略 | 直接拆 LogQueryService 骨架 + unit/integration 边界测试 |

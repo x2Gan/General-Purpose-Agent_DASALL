@@ -18,6 +18,8 @@ set(DASALL_LOGGING_UNIT_TEST_EXECUTABLE_TARGETS
 	dasall_logger_interface_unit_test
 	dasall_logging_errors_unit_test
 	dasall_logging_facade_unit_test
+	dasall_logging_structured_formatter_unit_test
+	dasall_logging_redaction_filter_unit_test
 	dasall_sink_dispatcher_unit_test
 	dasall_async_queue_controller_unit_test
 	dasall_audit_link_adapter_unit_test

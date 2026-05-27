@@ -1,3 +1,46 @@
+## 记录 #834
+
+- 日期：2026-05-27
+- 阶段：infrastructure / logging structured redaction main chain
+- 任务：推进 `INF-LOG-FIX-002`，实现 `StructuredFormatter` 与 `RedactionFilter` 主链
+- 状态：已完成（L2 focused structured/redaction main chain 已闭合；本轮不使用 qemu / kvm）
+
+### 执行前提
+
+1. 用户要求按 `project-implementation-cycle` 串行推进 `docs/todos/DASALL_子系统查漏补缺专项记录.md` 中的 `INF-LOG-FIX-002`，必要时回链 logging 详设与相关文档，并在完成后提交推送。
+2. 近端核验确认：现有 `LoggingFacade` 只做 context enrich 后直接 dispatch；`StructuredFormatter` / `RedactionFilter` 代码和测试 target 尚不存在，但 `LogEvent::redacted_attrs()` 已提供 key-based redaction 基础。
+3. blocker 复核：`BLK-INF-LOG-002` 的真实缺口是 structured field schema、deny-by-default key/message pattern 与 golden fixture 未冻结。本轮可在同一原子任务内同步解阻，不需要拆成独立 round。
+
+### 改动
+
+1. 新增 `infra/include/logging/StructuredFormatter.h`、`infra/include/logging/RedactionFilter.h`、`infra/src/logging/StructuredFormatter.cpp`、`infra/src/logging/RedactionFilter.cpp`，冻结 `dasall.logging.event.v1` schema、`schema_version/correlation_id/idempotency_key` canonical attrs 与 deny-by-default key/message redaction patterns。
+2. 更新 `infra/src/logging/LoggingFacade.h`、`infra/src/logging/LoggingFacade.cpp` 与 `infra/CMakeLists.txt`，将默认主链固定为 `enrich -> redact -> format -> dispatch`，并把 formatter/filter 接入 `dasall_infra` 构建图。
+3. 新增 `tests/unit/infra/logging/LoggingStructuredFormatterTest.cpp`、`tests/unit/infra/logging/LoggingRedactionFilterTest.cpp`、`tests/integration/infra/logging/LoggingFacadeRedactionIntegrationTest.cpp`，并更新 `tests/unit/CMakeLists.txt`、`tests/unit/infra/CMakeLists.txt`、`tests/integration/infra/logging/CMakeLists.txt`、`tests/integration/CMakeLists.txt` 完成注册。
+4. 更新 `docs/ssot/LoggingProductionAcceptanceMatrix.md`、`docs/architecture/DASALL_infra_logging模块详细设计.md`、`docs/todos/infrastructure/DASALL_infrastructure_logging组件专项TODO.md` 与 `docs/todos/DASALL_子系统查漏补缺专项记录.md`，冻结 schema/pattern/golden 规则并将 `INF-LOG-FIX-002` / `BLK-INF-LOG-002` 回写为 Done / Closed。
+5. 新增 `docs/todos/infrastructure/deliverables/INF-LOG-FIX-002-structured-redaction-mainchain收口.md`，沉淀本轮 closeout、schema freeze、golden fixture 与验证结果。
+
+### 验证
+
+1. `Build_CMakeTools(buildTargets=["dasall_logging_structured_formatter_unit_test","dasall_logging_redaction_filter_unit_test","dasall_logging_facade_redaction_integration_test"])`
+   - 结果：通过。
+2. `RunCtest_CMakeTools(tests=["LoggingStructuredFormatterTest","LoggingRedactionFilterTest","LoggingFacadeRedactionIntegrationTest"])`
+   - 结果：命中仓库既有泛化错误 `生成失败`。
+3. fallback 直接执行：
+   - `./build/vscode-linux-ninja/tests/unit/infra/dasall_logging_structured_formatter_unit_test`
+   - `./build/vscode-linux-ninja/tests/unit/infra/dasall_logging_redaction_filter_unit_test`
+   - `./build/vscode-linux-ninja/tests/integration/infra/logging/dasall_logging_facade_redaction_integration_test`
+   - 结果：3/3 通过。
+4. 邻近回归补充：
+   - `Build_CMakeTools(buildTargets=["dasall_logging_facade_unit_test","dasall_logging_pipeline_integration_test","dasall_logging_audit_link_integration_test"])`
+   - 直接执行 `./build/vscode-linux-ninja/tests/unit/infra/dasall_logging_facade_unit_test`、`./build/vscode-linux-ninja/tests/integration/infra/logging/dasall_logging_pipeline_integration_test`、`./build/vscode-linux-ninja/tests/integration/infra/logging/dasall_logging_audit_link_integration_test`
+   - 结果：3/3 通过。
+
+### 结果
+
+1. `INF-LOG-FIX-002` 已闭合：默认 logging 主链现已统一经过 redaction/formatter，focused golden 输出不再泄漏 `secret/token/password/auth` value。
+2. `BLK-INF-LOG-002` 已解阻：`dasall.logging.event.v1` schema、deny-by-default key/message pattern 与 golden fixture 已写入 SSOT/详设/总账/closeout。
+3. 本轮结论只到 L2 focused evidence；真实 sink/rotation/path/installed package proof 继续留给 `INF-LOG-FIX-003~011`。
+
 ## 记录 #833
 
 - 日期：2026-05-27

@@ -985,6 +985,18 @@ dasall_register_logging_unit_test(
 )
 
 dasall_register_logging_unit_test(
+  dasall_logging_structured_formatter_unit_test
+  LoggingStructuredFormatterTest
+  logging/LoggingStructuredFormatterTest.cpp
+)
+
+dasall_register_logging_unit_test(
+  dasall_logging_redaction_filter_unit_test
+  LoggingRedactionFilterTest
+  logging/LoggingRedactionFilterTest.cpp
+)
+
+dasall_register_logging_unit_test(
   dasall_sink_dispatcher_unit_test
   SinkDispatcherTest
   logging/SinkDispatcherTest.cpp
