@@ -1,3 +1,31 @@
+## 记录 #828
+
+- 日期：2026-05-27
+- 阶段：runtime_support/专项总账 closeout
+- 任务：RTSUP-FIX-004 建立 owner / fail-closed / marker regression matrix
+- 状态：已完成（测试范围收敛、总账同步、closeout 落盘与 focused 复验已完成）
+
+### 改动
+
+1. 更新 `tests/integration/access/RuntimeLiveCompositionFailureMatrixTest.cpp`：将 failure matrix 收回 `RTSUP-FIX-004` 原始的 owner / fail-closed / marker contract，移除已由专门 knowledge focused tests 覆盖的 hybrid canary positive/negative 与 automation fallback 子面，避免 004 的 gate 被后续能力误绑。
+2. 新增 `docs/todos/runtime/deliverables/RTSUP-FIX-004-failure-matrix-closeout.md`，把 regression matrix 的任务边界、scope 收敛理由、验证口径与结果单独落盘。
+3. 更新 `docs/todos/DASALL_子系统查漏补缺专项记录.md`：将 `RTSUP-GAP-004` 与 `RTSUP-FIX-004` 从历史 `Todo` 状态同步为已闭合 / Done，并回链 closeout 文档。
+
+### 验证
+
+1. `RunCtest_CMakeTools(tests=["DaemonRuntimeLiveDependencyCompositionTest","GatewayRuntimeLiveDependencyCompositionTest","MultiAgentDisabledByProfileIntegrationTest","RuntimeLiveCompositionFailureMatrixTest"])`
+   - 结果：继续命中仓库已知泛化 `生成失败`。
+2. `Build_CMakeTools(buildTargets=["dasall_access_daemon_runtime_live_dependency_composition_integration_test","dasall_access_gateway_runtime_live_dependency_composition_integration_test","dasall_access_runtime_live_composition_failure_matrix_integration_test","dasall_multi_agent_disabled_by_profile_integration_test"])`
+   - 结果：通过；本轮额外重建 `dasall_access_runtime_live_composition_failure_matrix_integration_test`，确认 scope 收窄后的 target 仍可链接。
+3. `./build/vscode-linux-ninja/tests/integration/access/dasall_access_daemon_runtime_live_dependency_composition_integration_test && ./build/vscode-linux-ninja/tests/integration/access/dasall_access_gateway_runtime_live_dependency_composition_integration_test && ./build/vscode-linux-ninja/tests/integration/access/dasall_access_runtime_live_composition_failure_matrix_integration_test && ./build/vscode-linux-ninja/tests/integration/multi_agent/dasall_multi_agent_disabled_by_profile_integration_test && printf '%s\n' PASS`
+   - 结果：`PASS`。
+
+### 结果
+
+1. `RTSUP-FIX-004` 已在系统总记录闭合：shared helper 的 owner symmetry、required-missing fail-closed、knowledge degraded marker stratification 与 multi-agent disabled seam 现在有稳定 focused regression gate。
+2. `RuntimeLiveCompositionFailureMatrixTest` 已重新与 004 的任务边界对齐；positive hybrid canary 与 automation 子面继续留在各自的专门 knowledge focused tests，不再作为 004 closeout blocker。
+3. runtime_support 下一步聚焦 `RTSUP-FIX-005` 的 build-tree release-preflight / installed / qemu composition gate 与环境 blocker 边界。
+
 ## 记录 #827
 
 - 日期：2026-05-27
