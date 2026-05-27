@@ -471,6 +471,7 @@ key 域冻结规则：
 4. `IAuditLogger::write_audit()` 仍是 audit owner handoff 的唯一持久化入口；`actor`、`action`、`target`、`outcome`、`side_effects` 等完整 audit payload 必须继续停留在 audit owner persistence。logging 侧只保留 redacted message 与 correlation attrs，不对 audit 主存储开放 join/export 旁路。
 5. 与 `docs/architecture/DASALL_infra_audit模块详细设计.md` 6.5 对齐，`target`、`evidence_ref.ref`、`side_effects` 在 v1 只承接结构化标识或 effect 名称，不得承载 access token、password、session id、原始文件路径或其他高敏感原文。即便某个 audit anchor attr 属于 allowlist，只要 value 命中 logging redaction 文本模式，仍必须保持 redacted。
 6. `SinkDispatcher::select_route()` 后续只允许根据 `category==audit` 或完整 audit anchor attrs 做 route 判定；route selection 可以消费 `audit_ref_pending`/`evidence_ref` 这些 frozen anchor，但不能据此反向拼装 audit payload，更不能把 route 语义扩写成 audit persistence 已完成。
+7. `LoggingFacade::log()` 的 build-track 实现现已固定为：ordinary log 先完成 `enrich -> redact -> format`，随后在 dispatch 前对 high-risk event fail-closed 执行 `IAuditLogger::write_audit()` handoff；`compose_live_observability()` 负责 attach concrete audit owner。`AuditLinkAdapter` 与 `SinkDispatcher` 继续只承担 correlation attrs 与 route 选择，不接管 audit payload persistence。
 
 ---
 

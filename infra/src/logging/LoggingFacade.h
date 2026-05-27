@@ -17,6 +17,10 @@
 #include "logging/RedactionFilter.h"
 #include "logging/StructuredFormatter.h"
 
+namespace dasall::infra::audit {
+class IAuditLogger;
+}
+
 namespace dasall::infra::logging {
 
 class ILogDispatchBackend {
@@ -38,6 +42,7 @@ class LoggingFacade final : public ILogger,
   InfraOperationResult init(const LogContext& context = {});
   InfraOperationResult stop();
 
+  void attach_audit_logger(std::shared_ptr<audit::IAuditLogger> audit_logger);
   void attach_metrics_bridge(std::shared_ptr<LoggingMetricsBridge> metrics_bridge,
                              std::uint32_t queue_high_watermark);
 
@@ -124,7 +129,13 @@ class LoggingFacade final : public ILogger,
   [[nodiscard]] static LogContext normalize_context(LogContext context);
   [[nodiscard]] static bool is_enabled_for_level(LogLevel event_level,
                                                  LogLevel current_level);
+  [[nodiscard]] static bool requires_audit_handoff(const LogEvent& event);
+  [[nodiscard]] static bool has_complete_audit_anchor_attrs(
+      const LogEvent& event);
   [[nodiscard]] LogEvent enrich_event(const LogEvent& event) const;
+  [[nodiscard]] AuditContext make_audit_context(const LogEvent& event) const;
+  [[nodiscard]] AuditEvent make_audit_event(const LogEvent& event);
+  [[nodiscard]] LogWriteResult persist_audit_record(const LogEvent& event);
     [[nodiscard]] static std::int64_t current_time_unix_ms();
     [[nodiscard]] static std::int64_t current_steady_time_ms();
     [[nodiscard]] std::uint32_t current_queue_depth() const;
@@ -158,6 +169,7 @@ class LoggingFacade final : public ILogger,
   RedactionFilter redaction_filter_{};
   StructuredFormatter structured_formatter_{};
   std::unique_ptr<ILogDispatchBackend> dispatch_backend_;
+  std::shared_ptr<audit::IAuditLogger> audit_logger_;
   std::shared_ptr<ILogRecoverySink> fallback_sink_;
   std::unique_ptr<LoggingRecovery> recovery_;
   std::shared_ptr<LoggingMetricsBridge> metrics_bridge_;
@@ -167,6 +179,7 @@ class LoggingFacade final : public ILogger,
   std::uint32_t queue_high_watermark_ = 1U;
   std::uint64_t unrecoverable_failure_total_ = 0U;
   std::uint64_t last_observed_dropped_total_ = 0U;
+  std::uint64_t next_audit_event_sequence_ = 1U;
 };
 
 }  // namespace dasall::infra::logging

@@ -24,7 +24,10 @@ dasall::infra::logging::LogEvent make_high_risk_event() {
       .level = dasall::infra::logging::LogLevel::Error,
       .module = std::string("runtime"),
       .message = std::string("audit link adapter high-risk path"),
-      .attrs = {{"request_id", "req-log-009"}},
+      .attrs = {
+          {"request_id", "req-log-009"},
+          {"event_kind", "high_risk"},
+      },
       .ts = 1711968609000,
   };
 }

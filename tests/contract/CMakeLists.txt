@@ -270,6 +270,12 @@ dasall_register_logging_contract_test(
   smoke/AuditLinkAdapterBoundaryContractTest.cpp
 )
 
+dasall_register_logging_contract_test(
+  dasall_audit_log_correlation_contract_test
+  AuditLogCorrelationContractTest
+  smoke/AuditLogCorrelationContractTest.cpp
+)
+
 target_include_directories(dasall_contract_audit_link_adapter_boundary_test
   PRIVATE
     ${CMAKE_SOURCE_DIR}/infra/include
@@ -280,6 +286,18 @@ target_link_libraries(dasall_contract_audit_link_adapter_boundary_test
   PRIVATE
     dasall_infra
 )
+
+target_include_directories(dasall_audit_log_correlation_contract_test
+  PRIVATE
+    ${CMAKE_SOURCE_DIR}/infra/include
+    ${CMAKE_SOURCE_DIR}/infra/src
+)
+
+target_link_libraries(dasall_audit_log_correlation_contract_test
+  PRIVATE
+    dasall_infra
+)
+
 
 dasall_register_audit_contract_test(
   dasall_contract_audit_event_boundary_test

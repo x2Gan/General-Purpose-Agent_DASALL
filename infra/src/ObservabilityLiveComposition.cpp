@@ -384,6 +384,8 @@ ObservabilityLiveCompositionResult compose_live_observability(
     };
   }
 
+  logger->attach_audit_logger(audit_logger);
+
   auto metrics_provider = std::make_shared<metrics::MetricsFacade>();
   const auto metrics_init = metrics_provider->init(make_metrics_config(options));
   if (!metrics_init.ok) {

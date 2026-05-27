@@ -9,10 +9,17 @@ namespace {
 
 constexpr std::string_view kSinkDispatcherSourceRef = "SinkDispatcher";
 
-bool has_audit_link_attr(const LogEvent& event) {
-  return event.attrs.contains("audit_ref") ||
-         event.attrs.contains("audit_ref_pending") ||
-         event.attrs.contains("evidence_ref");
+bool has_complete_audit_link_attr(const LogEvent& event) {
+  const auto evidence_kind = event.attrs.find("evidence_kind");
+  return event.attrs.contains("audit_ref_pending") &&
+         event.attrs.at("audit_ref_pending") == "true" &&
+         event.attrs.contains("evidence_ref") &&
+         evidence_kind != event.attrs.end() &&
+         (evidence_kind->second == "tool_result" ||
+          evidence_kind->second == "recovery_outcome" ||
+          evidence_kind->second == "worker_task") &&
+         event.attrs.contains("audit_trace_id") &&
+         event.attrs.contains("audit_task_id");
 }
 
 }  // namespace
@@ -112,7 +119,7 @@ LogWriteResult SinkDispatcher::flush(const LogFlushDeadline& deadline) {
 }
 
 SinkRoute SinkDispatcher::select_route(const LogEvent& event) {
-  if (event.category() == "audit" || has_audit_link_attr(event)) {
+  if (event.category() == "audit" || has_complete_audit_link_attr(event)) {
     return SinkRoute::Audit;
   }
 

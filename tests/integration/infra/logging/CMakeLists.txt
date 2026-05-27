@@ -33,6 +33,12 @@ dasall_register_logging_integration_test(
 )
 
 dasall_register_logging_integration_test(
+  dasall_logging_audit_route_integration_test
+  LoggingAuditRouteIntegrationTest
+  LoggingAuditLinkIntegrationTest.cpp
+)
+
+dasall_register_logging_integration_test(
   dasall_logging_facade_redaction_integration_test
   LoggingFacadeRedactionIntegrationTest
   LoggingFacadeRedactionIntegrationTest.cpp

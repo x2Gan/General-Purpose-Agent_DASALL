@@ -32,7 +32,10 @@ void test_audit_link_adapter_keeps_audit_fields_inside_attr_surface() {
       .level = dasall::infra::logging::LogLevel::Error,
       .module = std::string("runtime"),
       .message = std::string("audit boundary completeness"),
-      .attrs = {{"request_id", "req-contract-009"}},
+      .attrs = {
+        {"request_id", "req-contract-009"},
+        {"event_kind", "high_risk"},
+      },
       .ts = 1711968609100,
   };
   const AuditRef audit_ref{

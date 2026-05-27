@@ -1,3 +1,49 @@
+## 记录 #843
+
+- 日期：2026-05-27
+- 阶段：infrastructure / logging audit route handoff and correlation
+- 任务：推进 `INF-LOG-FIX-008`，闭合 audit route、`AuditLinkAdapter` correlation attrs、`LoggingFacade -> IAuditLogger::write_audit()` handoff 与 privacy split
+- 状态：已完成（L2 build-tree route / persistence / correlation evidence 已闭合；本轮不使用 qemu / kvm）
+
+### 执行前提
+
+1. 前置 blocker `BLK-INF-LOG-007` 已在上一轮闭合，v1 high-risk classifier、`audit_ref_pending/evidence_ref/evidence_kind/audit_trace_id/audit_task_id` attrs schema 与 ordinary log / audit owner persistence 的 privacy split 已进入 SSOT 与 logging 详设，不再在本轮重新定义。
+2. 近端核验确认：`AuditLinkAdapter` 与 `SinkDispatcher` 只有 attrs-based route skeleton，`LoggingFacade` 尚未把高风险 event handoff 到 audit owner，`compose_live_observability()` 也还没有把 concrete `IAuditLogger` attach 回 logger。
+3. `AuditLoggerInterfaceBoundaryContractTest` 已固定 `IAuditLinkAdapter` 不能暴露 `write_audit()` / `export_audit()`，因此本轮最小实现路径只能把 owner handoff 放在 `LoggingFacade` 私有主链与 live composition wiring 中，而不是扩张 adapter 公共接口。
+
+### 改动
+
+1. 更新 `infra/src/logging/LoggingFacade.h` 与 `infra/src/logging/LoggingFacade.cpp`，新增 `attach_audit_logger()`、high-risk handoff 判定、完整 audit anchor attrs 校验、`AuditContext` / `AuditEvent` 组装与 fail-closed `persist_audit_record()`；当前 ordinary log 仅在 `enrich -> redact -> format` 成功后，才会在 dispatch 前执行 `IAuditLogger::write_audit()` handoff。
+2. 更新 `infra/src/logging/AuditLinkAdapter.cpp` 与 `infra/src/logging/SinkDispatcher.cpp`，把高风险 classifier 与 audit route 条件统一收紧到 `category==audit`、`Fatal` 或显式 `event_kind=high_risk`，并要求 route 只消费完整 frozen audit anchor attrs，不再把普通 `Error` 默认升级为 audit route。
+3. 更新 `infra/src/ObservabilityLiveComposition.cpp`，在 concrete audit logger 初始化成功后显式执行 `logger->attach_audit_logger(audit_logger)`，使 live composition 下的 logging main chain 真正具备 audit owner handoff 能力。
+4. 更新 `tests/integration/infra/logging/LoggingAuditLinkIntegrationTest.cpp` 并在 `tests/integration/infra/logging/CMakeLists.txt`、`tests/integration/CMakeLists.txt` 注册 `LoggingAuditRouteIntegrationTest`；新增 `tests/unit/infra/logging/AuditLinkAdapterPersistenceTest.cpp` 与 `tests/contract/smoke/AuditLogCorrelationContractTest.cpp`，同时更新 `tests/unit/infra/CMakeLists.txt`、`tests/unit/CMakeLists.txt`、`tests/contract/CMakeLists.txt`，闭合 route、owner handoff、privacy split 与 correlation contract 的 focused gate。
+5. 更新 `docs/architecture/DASALL_infra_logging模块详细设计.md`、`docs/ssot/LoggingProductionAcceptanceMatrix.md`、`docs/todos/infrastructure/DASALL_infrastructure_logging组件专项TODO.md` 与系统总账，回写 `LoggingFacade` owner handoff 的当前态、正式 focused gate 名称与 `INF-LOG-FIX-008` 完成结论；新增 `docs/todos/infrastructure/deliverables/INF-LOG-FIX-008-audit-route-handoff收口.md`。
+
+### 验证
+
+1. `Build_CMakeTools(buildTargets=["dasall_logging_audit_link_integration_test"])`
+   - 结果：通过；第一刀实现可编译，触发了本轮 focused validation。
+2. `RunCtest_CMakeTools(tests=["LoggingAuditLinkIntegrationTest"])`
+   - 结果：命中仓库既有泛化 `生成失败`。
+3. fallback 直接执行：
+   - `./build/vscode-linux-ninja/tests/integration/infra/logging/dasall_logging_audit_link_integration_test`
+   - 结果：通过。
+4. `Build_CMakeTools(buildTargets=["dasall_logging_audit_route_integration_test","dasall_audit_link_adapter_persistence_unit_test","dasall_audit_log_correlation_contract_test"])`
+   - 结果：通过。
+5. `RunCtest_CMakeTools(tests=["LoggingAuditRouteIntegrationTest","AuditLinkAdapterPersistenceTest","AuditLogCorrelationContractTest"])`
+   - 结果：命中仓库既有泛化 `生成失败`。
+6. fallback 直接执行：
+   - `./build/vscode-linux-ninja/tests/integration/infra/logging/dasall_logging_audit_route_integration_test`
+   - `./build/vscode-linux-ninja/tests/unit/infra/dasall_audit_link_adapter_persistence_unit_test`
+   - `./build/vscode-linux-ninja/tests/contract/dasall_audit_log_correlation_contract_test`
+   - 结果：三项均通过。
+
+### 结果
+
+1. `INF-LOG-FIX-008` 已闭合：高风险 event 现在会在 ordinary log redaction/format 成功后、dispatch 前 fail-closed handoff 到 audit owner；缺完整 audit anchor attrs 或缺 attached audit logger 时都会阻断 ordinary dispatch。
+2. `AuditLinkAdapter` / `SinkDispatcher` / `LoggingFacade` / `compose_live_observability()` 现已共同守住 `BLK-INF-LOG-007` 冻结的 classifier、audit ref attrs 与 privacy split，普通日志不会回流 `actor`、`action`、`target`、`outcome`、`side_effects` 等 audit payload。
+3. 当前结论只到 L2 build-tree route / persistence / correlation evidence；installed package / release / qemu 级别证据仍留给后续 `INF-LOG-FIX-010` / `INF-LOG-FIX-011`，并继续以 installed authoritative evidence 为 owner 验收标准。
+
 ## 记录 #842
 
 - 日期：2026-05-27

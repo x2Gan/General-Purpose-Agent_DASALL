@@ -50,8 +50,9 @@ void AuditLinkAdapter::report_link_failure(std::string_view reason) {
 }
 
 bool AuditLinkAdapter::is_high_risk_event(const LogEvent& event) {
-  return event.level == LogLevel::Error || event.level == LogLevel::Fatal ||
-         event.category() == "audit";
+  const auto event_kind = event.attrs.find("event_kind");
+  return event.level == LogLevel::Fatal || event.category() == "audit" ||
+         (event_kind != event.attrs.end() && event_kind->second == "high_risk");
 }
 
 std::string AuditLinkAdapter::evidence_kind_name(AuditEvidenceKind kind) {

@@ -13,6 +13,7 @@
 5. 截至 2026-05-27，`BLK-INF-LOG-003` 已冻结 writable path / permission policy：`DASALL_STATE_ROOT` 是唯一 state_root override，build-tree focused 仍使用 `logs/runtime.log`，installed authoritative path 固定为 `state_root/logging/runtime.log`，其他不可写路径必须 fail-closed，不得 silently fallback 到 repo 根、`/tmp` 或 qemu guest-side 路径。
 6. 截至 2026-05-27，`INF-LOG-FIX-003` 已通过 `ILogSink` / `FileLogSink` / `SinkDispatcher` 闭合 build-tree file persistence、rotation 与 fail-closed focused evidence；默认未注入 sink 的 dispatcher 仍只保留 skeleton 行为，不直接宣称 live composition / installed ready。
 7. 截至 2026-05-27，`INF-LOG-FIX-004` 已把 `AsyncQueueController` 推进到 deterministic single-worker queue，并把 `SinkDispatcher` sink write 移入 worker callback；`LoggingFacade::flush()` / `stop()` 现在对 drain success、timeout、worker stuck 给出明确结果，`BLK-INF-LOG-004` 可关闭。
+8. 截至 2026-05-27，`INF-LOG-FIX-008` 已在 build-tree focused 范围内闭合 `AuditLinkAdapter` high-risk correlation、`SinkDispatcher` audit route 选择、`LoggingFacade -> IAuditLogger::write_audit()` handoff 与 `compose_live_observability()` attach audit owner；`LoggingAuditRouteIntegrationTest`、`AuditLinkAdapterPersistenceTest` 与 `AuditLogCorrelationContractTest` 已形成 L2 route/persistence/correlation 证据，但结论仍不外推到 installed / qemu。
 
 ## 1. 文档头
 

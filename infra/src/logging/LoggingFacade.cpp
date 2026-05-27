@@ -1,6 +1,9 @@
 #include "LoggingFacade.h"
 
 #include <chrono>
+#include <string_view>
+
+#include "audit/IAuditLogger.h"
 #include "SinkDispatcher.h"
 
 #include <deque>
@@ -17,6 +20,9 @@ constexpr std::string_view kLoggingFacadeSourceRef = "LoggingFacade";
 constexpr std::uint32_t kLoggingFacadeStopFlushTimeoutMs = 500;
 constexpr std::uint32_t kLoggingRecoveryProbeFlushTimeoutMs = 500;
 constexpr std::size_t kFallbackRingBufferCapacity = 64U;
+constexpr std::string_view kLoggingAuditActor = "infra.logging";
+constexpr std::string_view kLoggingAuditAction = "logging.audit_route";
+constexpr std::string_view kLoggingAuditEventIdPrefix = "logging-audit-event-";
 
 std::unique_ptr<ILogDispatchBackend> make_default_dispatch_backend() {
   return std::make_unique<SinkDispatcher>();
@@ -88,6 +94,110 @@ std::string normalize_identifier(std::string value) {
   return value;
 }
 
+[[nodiscard]] std::optional<std::string_view> find_attr(
+    const LogEvent& event,
+    std::string_view key) {
+  const auto it = event.attrs.find(std::string(key));
+  if (it == event.attrs.end()) {
+    return std::nullopt;
+  }
+
+  return it->second;
+}
+
+[[nodiscard]] bool has_non_empty_attr(const LogEvent& event,
+                                      std::string_view key) {
+  const auto value = find_attr(event, key);
+  return value.has_value() && !value->empty();
+}
+
+[[nodiscard]] bool attr_equals(const LogEvent& event,
+                               std::string_view key,
+                               std::string_view expected) {
+  const auto value = find_attr(event, key);
+  return value.has_value() && *value == expected;
+}
+
+[[nodiscard]] bool is_supported_evidence_kind(std::string_view evidence_kind) {
+  return evidence_kind == "tool_result" ||
+         evidence_kind == "recovery_outcome" ||
+         evidence_kind == "worker_task";
+}
+
+[[nodiscard]] AuditEvidenceKind parse_evidence_kind(std::string_view evidence_kind) {
+  if (evidence_kind == "tool_result") {
+    return AuditEvidenceKind::ToolResult;
+  }
+
+  if (evidence_kind == "recovery_outcome") {
+    return AuditEvidenceKind::RecoveryOutcome;
+  }
+
+  if (evidence_kind == "worker_task") {
+    return AuditEvidenceKind::WorkerTask;
+  }
+
+  return AuditEvidenceKind::Unspecified;
+}
+
+[[nodiscard]] std::string normalized_attr_or(const LogEvent& event,
+                                             std::string_view key,
+                                             std::string_view fallback) {
+  const auto value = find_attr(event, key);
+  if (!value.has_value() || value->empty()) {
+    return std::string(fallback);
+  }
+
+  return std::string(*value);
+}
+
+[[nodiscard]] std::string_view log_level_name(LogLevel level) {
+  switch (level) {
+    case LogLevel::Trace:
+      return "trace";
+    case LogLevel::Debug:
+      return "debug";
+    case LogLevel::Info:
+      return "info";
+    case LogLevel::Warn:
+      return "warn";
+    case LogLevel::Error:
+      return "error";
+    case LogLevel::Fatal:
+      return "fatal";
+    case LogLevel::Unspecified:
+      break;
+  }
+
+  return "unknown";
+}
+
+[[nodiscard]] AuditOutcome audit_outcome_for(const LogEvent& event) {
+  if (event.level == LogLevel::Fatal) {
+    return AuditOutcome::Escalated;
+  }
+
+  if (event.level == LogLevel::Error || attr_equals(event, "event_kind", "high_risk") ||
+      event.category() == "audit") {
+    return AuditOutcome::Failed;
+  }
+
+  return AuditOutcome::Succeeded;
+}
+
+[[nodiscard]] std::string make_audit_target(const LogEvent& event) {
+  std::string target = std::string("log_event:") +
+                       (event.module.empty() ? std::string("unknown") : event.module);
+  const auto event_kind = find_attr(event, "event_kind");
+  if (event_kind.has_value() && !event_kind->empty()) {
+    target += ":" + std::string(*event_kind);
+    return target;
+  }
+
+  target += ":" + std::string(log_level_name(event.level));
+  return target;
+}
+
 }  // namespace
 
 LoggingFacade::LoggingFacade()
@@ -102,6 +212,11 @@ LoggingFacade::LoggingFacade(std::unique_ptr<ILogDispatchBackend> dispatch_backe
                              std::shared_ptr<ILogRecoverySink> fallback_sink)
     : fallback_sink_(std::move(fallback_sink)) {
   set_dispatch_backend(std::move(dispatch_backend));
+}
+
+void LoggingFacade::attach_audit_logger(
+    std::shared_ptr<audit::IAuditLogger> audit_logger) {
+  audit_logger_ = std::move(audit_logger);
 }
 
 void LoggingFacade::attach_metrics_bridge(
@@ -121,6 +236,7 @@ InfraOperationResult LoggingFacade::init(const LogContext& context) {
   current_level_ = LogLevel::Info;
   last_dispatched_event_.reset();
   dispatched_record_count_ = 0;
+  next_audit_event_sequence_ = 1U;
 
   if (!dispatch_backend_) {
     dispatch_backend_ = make_default_dispatch_backend();
@@ -200,6 +316,19 @@ LogWriteResult LoggingFacade::log(const LogEvent& event) {
     record_write_accepted(metric_ts);
     record_queue_depth(metric_ts, "degraded");
     return recovery_result;
+  }
+
+  if (requires_audit_handoff(redacted_event)) {
+    const auto audit_result = persist_audit_record(redacted_event);
+    if (!audit_result.ok) {
+      const auto audit_error_code = audit_result.result_code ==
+              contracts::ResultCode::ValidationFieldMissing
+          ? LoggingErrorCode::ConfigInvalid
+          : logging_error_code_for(audit_result, LoggingErrorCode::SinkIo);
+      record_write_failed(audit_error_code, metric_ts, "write");
+      record_queue_depth(metric_ts, "failure");
+      return audit_result;
+    }
   }
 
   if (recovery_ != nullptr && recovery_->is_degraded()) {
@@ -445,6 +574,20 @@ bool LoggingFacade::is_enabled_for_level(LogLevel event_level,
   return static_cast<int>(event_level) >= static_cast<int>(current_level);
 }
 
+bool LoggingFacade::requires_audit_handoff(const LogEvent& event) {
+  return event.category() == "audit" || event.level == LogLevel::Fatal ||
+         attr_equals(event, "event_kind", "high_risk");
+}
+
+bool LoggingFacade::has_complete_audit_anchor_attrs(const LogEvent& event) {
+  const auto evidence_kind = find_attr(event, "evidence_kind");
+  return attr_equals(event, "audit_ref_pending", "true") &&
+         has_non_empty_attr(event, "evidence_ref") &&
+         evidence_kind.has_value() && is_supported_evidence_kind(*evidence_kind) &&
+         has_non_empty_attr(event, "audit_trace_id") &&
+         has_non_empty_attr(event, "audit_task_id");
+}
+
 LogEvent LoggingFacade::enrich_event(const LogEvent& event) const {
   auto enriched = event;
   enriched.attrs.try_emplace("request_id", current_context_.request_id);
@@ -454,6 +597,93 @@ LogEvent LoggingFacade::enrich_event(const LogEvent& event) const {
   enriched.attrs.try_emplace("parent_task_id", current_context_.parent_task_id);
   enriched.attrs.try_emplace("lease_id", current_context_.lease_id);
   return enriched;
+}
+
+AuditContext LoggingFacade::make_audit_context(const LogEvent& event) const {
+  return AuditContext{
+      .request_id = normalized_attr_or(event,
+                                       "request_id",
+                                       current_context_.request_id),
+      .session_id = normalized_attr_or(event,
+                                       "session_id",
+                                       current_context_.session_id),
+      .trace_id = normalized_attr_or(event,
+                                     "audit_trace_id",
+                                     current_context_.trace_id),
+      .task_id = normalized_attr_or(event,
+                                    "audit_task_id",
+                                    current_context_.task_id),
+      .parent_task_id = normalized_attr_or(event,
+                                           "parent_task_id",
+                                           current_context_.parent_task_id),
+      .lease_id = normalized_attr_or(event,
+                                     "lease_id",
+                                     current_context_.lease_id),
+      .worker_type = event.module.empty() ? std::string(kLoggingAuditActor)
+                                          : event.module,
+  };
+}
+
+AuditEvent LoggingFacade::make_audit_event(const LogEvent& event) {
+  AuditEvent::SideEffects side_effects;
+  side_effects.push_back(std::string("route:audit"));
+  side_effects.push_back(std::string("log_level:") +
+                         std::string(log_level_name(event.level)));
+  if (const auto event_kind = find_attr(event, "event_kind");
+      event_kind.has_value() && !event_kind->empty()) {
+    side_effects.push_back(std::string("event_kind:") + std::string(*event_kind));
+  }
+
+  return AuditEvent{
+      .event_id = std::string(kLoggingAuditEventIdPrefix) +
+          std::to_string(next_audit_event_sequence_++),
+      .action = std::string(kLoggingAuditAction),
+      .actor = std::string(kLoggingAuditActor),
+      .target = make_audit_target(event),
+      .outcome = audit_outcome_for(event),
+      .evidence_ref = {
+          .kind = parse_evidence_kind(find_attr(event, "evidence_kind").value_or("")),
+          .ref = normalized_attr_or(event,
+                                    "evidence_ref",
+                                    LogContext::kUnknownIdentifier),
+      },
+      .side_effects = std::move(side_effects),
+      .timestamp = metric_timestamp_for(event),
+  };
+}
+
+LogWriteResult LoggingFacade::persist_audit_record(const LogEvent& event) {
+  if (!requires_audit_handoff(event)) {
+    return LogWriteResult::success();
+  }
+
+  if (!has_complete_audit_anchor_attrs(event)) {
+    return LogWriteResult::failure(
+        contracts::ResultCode::ValidationFieldMissing,
+        "high-risk log requires complete audit correlation attrs before dispatch",
+        "logging.audit_handoff",
+        std::string(kLoggingFacadeSourceRef));
+  }
+
+  if (audit_logger_ == nullptr) {
+    return LogWriteResult::failure(
+        contracts::ResultCode::RuntimeRetryExhausted,
+        "high-risk log requires an attached audit logger before dispatch",
+        "logging.audit_handoff",
+        std::string(kLoggingFacadeSourceRef));
+  }
+
+  const auto write_outcome = audit_logger_->write_audit(make_audit_event(event),
+                                                        make_audit_context(event));
+  if (write_outcome.is_success() || write_outcome.is_degraded_success()) {
+    return LogWriteResult::success();
+  }
+
+  return LogWriteResult::failure(
+      write_outcome.error_code.value_or(contracts::ResultCode::RuntimeRetryExhausted),
+      "audit logger could not persist the correlated high-risk event",
+      "logging.audit_handoff",
+      std::string(kLoggingFacadeSourceRef));
 }
 
 std::int64_t LoggingFacade::current_time_unix_ms() {

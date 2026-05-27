@@ -1039,6 +1039,12 @@ dasall_register_logging_unit_test(
 )
 
 dasall_register_logging_unit_test(
+  dasall_audit_link_adapter_persistence_unit_test
+  AuditLinkAdapterPersistenceTest
+  logging/AuditLinkAdapterPersistenceTest.cpp
+)
+
+dasall_register_logging_unit_test(
   dasall_logging_recovery_unit_test
   LoggingRecoveryTest
   logging/LoggingRecoveryTest.cpp
