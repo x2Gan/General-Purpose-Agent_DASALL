@@ -3,7 +3,7 @@
 最近更新时间：2026-05-14
 阶段：Detailed Design -> Special TODO
 适用范围：access/、apps/cli、apps/daemon、apps/gateway、apps/simulator、tests/unit/access、tests/integration/access
-当前结论：Access 子系统的架构方向与 `access/ + apps/*` 双层工程落点正确；2026-04-24 交付评审给出的 Design Direction Ready / Implementation Not Ready / Release Gate Not Closed 仍保留为历史基线。自 2026-05-06 起，Access v1 unary focused ingress 已通过 `Gate-INT-08` 固化为当前 build 可执行证据，覆盖 CLI->daemon、HTTP->gateway、async receipt、policy backend unavailable、health readiness、profile/contracts guard；后续不得再把 mock pipeline、ping liveness 或局部 envelope 字段写成 release 证据，且更广 release 结论仍需继续受 051 等残余风险约束。
+当前结论：Access 子系统的架构方向与 `access/ + apps/*` 双层工程落点正确；2026-04-24 交付评审给出的 Design Direction Ready / Implementation Not Ready / Release Gate Not Closed 仍保留为历史基线。自 2026-05-06 起，Access v1 unary focused ingress 已通过 `Gate-INT-08` 固化为当前 build 可执行证据，覆盖 CLI->daemon、HTTP->gateway、async receipt、policy backend unavailable、health readiness、profile/contracts guard；`Gate-INT-08` 只代表 unary v1 focused ingress，不代表 `StreamGateway / WS / MQTT` ready，streaming 继续由 `ACC-GATE-11` 持有、保持 feature flag default-off，并统一退回 async receipt + poll fallback；后续不得再把 mock pipeline、ping liveness 或局部 envelope 字段写成 release 证据，且更广 release 结论仍需继续受 051 等残余风险约束。
 
 ## 1. 文档头
 
@@ -452,7 +452,7 @@
 
 2026-05-11 `FULLINT-TODO-006` 已将 Access ingress 业务链矩阵回链到本专项：`docs/todos/integration/deliverables/FULLINT-TODO-006-Access-ingress业务链验证矩阵.md`。
 
-本次回链只冻结 build-tree `Gate-INT-08` 的 Access v1 focused ingress 证据，不把结果外推为 app-binary、installed-package、qemu 或 production release-ready。`dasall_gate_int_08` 已升级为 expected-test discoverability + acceptance，当前 expected tests 为：`AgentRequestContractTest`、`AgentResultContractTest`、`IdentityMetadataContractTest`、`CliDaemonSubmitIntegrationTest`、`HttpGatewaySubmitIntegrationTest`、`AccessGatewayPipelineIntegrationTest`、`AccessAsyncReceiptQueryCancelIntegrationTest`、`AccessPolicyBackendUnavailableIntegrationTest`、`AccessHealthReadinessIntegrationTest`、`AccessProfileCompatibilityTest`。
+本次回链只冻结 build-tree `Gate-INT-08` 的 Access v1 unary focused ingress 证据；`Gate-INT-08` 不覆盖 `StreamGateway / WS / MQTT` ready，后者继续由 `ACC-GATE-11` 管理，保持 feature flag default-off、disabled/not ready 与 async receipt + poll fallback，不把结果外推为 app-binary、installed-package、qemu 或 production release-ready。`dasall_gate_int_08` 已升级为 expected-test discoverability + acceptance，当前 expected tests 为：`AgentRequestContractTest`、`AgentResultContractTest`、`IdentityMetadataContractTest`、`CliDaemonSubmitIntegrationTest`、`HttpGatewaySubmitIntegrationTest`、`AccessGatewayPipelineIntegrationTest`、`AccessAsyncReceiptQueryCancelIntegrationTest`、`AccessPolicyBackendUnavailableIntegrationTest`、`AccessHealthReadinessIntegrationTest`、`AccessProfileCompatibilityTest`。
 
 矩阵解释：
 

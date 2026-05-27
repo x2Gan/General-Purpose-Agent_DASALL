@@ -1,3 +1,45 @@
+## 记录 #831
+
+- 日期：2026-05-27
+- 阶段：access / streaming deferral wording closeout
+- 任务：推进 `ACC-FIX-004`，固化 streaming 延后与 feature gate
+- 状态：已完成（`Gate-INT-08` unary-not-stream-ready 边界已冻结；本轮未使用 qemu / kvm）
+
+### 执行前提
+
+1. 用户要求按 `project-implementation-cycle` 串行推进 `docs/todos/DASALL_子系统查漏补缺专项记录.md` 中的 `ACC-FIX-003~005`，每轮单独提交并推送，同时删除 qemu / kvm 作为当前验收依据。
+2. 近端核验确认：Access 详设、`BinaryEntrypointReadinessV1`、`HttpProtocolAdapter.h` 与 `apps/gateway/src/main.cpp` 已明确 gateway v1 只支持 unary + accepted async receipt；真正缺口是 `SystemIntegrationGateMatrix.md` 缺少 `Gate-INT-08 = unary-only` 的明文，且仓库没有自动化 wording guard。
+3. 前置 blocker 复核：无独立 BLOCK 需要先解。`HttpProtocolAdapterTest` 已有 websocket reject regression，因此本轮只需补一条静态 wording guard，不需要新建 streaming runtime 实现。
+
+### 改动
+
+1. 新增 `tests/integration/access/AccessStreamingDeferralWordingGuardIntegrationTest.cpp`，扫描 `SystemIntegrationGateMatrix.md`、Access TODO、`HttpProtocolAdapter.h` 与 `apps/gateway/src/main.cpp`，锁定 `Gate-INT-08` 只代表 unary focused ingress，且 `StreamGateway / WS / MQTT` 继续受 `ACC-GATE-11` 持有。
+2. 更新 `tests/integration/access/CMakeLists.txt`，注册 `dasall_access_streaming_deferral_wording_guard_integration_test` 与 `AccessStreamingDeferralWordingGuardIntegrationTest`，使这条边界进入 focused integration discoverability。
+3. 更新 `docs/ssot/SystemIntegrationGateMatrix.md`、`docs/todos/access/DASALL_access子系统专项TODO.md`、顶层 `docs/todos/DASALL_子系统查漏补缺专项记录.md` 与独立 deliverable，统一冻结 `Gate-INT-08 = Access v1 unary production ingress gate`、`ACC-GATE-11 = StreamGateway / WS / MQTT delayed gate`、feature flag default-off 与 async receipt/poll fallback。
+
+### 验证
+
+1. `Build_CMakeTools(buildTargets=["dasall_access_streaming_deferral_wording_guard_integration_test"])`
+   - 结果：通过。
+2. 首次执行 `./build/vscode-linux-ninja/tests/integration/access/dasall_access_streaming_deferral_wording_guard_integration_test`
+   - 结果：失败；直接暴露 `SystemIntegrationGateMatrix.md` 缺少 `Access v1 unary production ingress gate` 明文，证实缺口确实位于 SSOT wording。
+3. 修正 `Gate-INT-08` wording 后，再次执行 `./build/vscode-linux-ninja/tests/integration/access/dasall_access_streaming_deferral_wording_guard_integration_test`
+   - 结果：通过。
+4. `Build_CMakeTools(buildTargets=["dasall_access_streaming_deferral_wording_guard_integration_test","dasall_access_http_protocol_adapter_unit_test"])`
+   - 结果：通过。
+5. `RunCtest_CMakeTools(tests=["AccessStreamingDeferralWordingGuardIntegrationTest","HttpProtocolAdapterTest"])`
+   - 结果：命中仓库既有泛化错误 `生成失败`。
+6. fallback 直接执行：
+   - `./build/vscode-linux-ninja/tests/integration/access/dasall_access_streaming_deferral_wording_guard_integration_test`
+   - `./build/vscode-linux-ninja/tests/unit/access/dasall_access_http_protocol_adapter_unit_test`
+   - 结果：2/2 通过。
+
+### 结果
+
+1. `ACC-FIX-004` 已闭合：`Gate-INT-08` 不再被误读为 streaming-ready，Access 对外只保留 unary v1 focused ingress 结论。
+2. `ACC-GATE-11` 继续冻结 `StreamGateway / WS / MQTT` 的 delayed gate，默认 feature flag default-off、disabled/not ready，并统一回退到 async receipt + poll fallback。
+3. Access 剩余缺口进一步收敛到 installed / release security hardening；如果未来要宣称 stream-ready，需要单开 runtime / llm / contracts shared lifecycle 冻结与 listener/replay/auth tests，而不是外推本轮 focused 结果。
+
 ## 记录 #830
 
 - 日期：2026-05-27
