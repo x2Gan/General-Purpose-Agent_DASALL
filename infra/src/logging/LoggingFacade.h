@@ -9,6 +9,7 @@
 #include "IInfrastructureService.h"
 #include "logging/ILogConfigurator.h"
 #include "logging/ILogger.h"
+#include "logging/LoggingRecovery.h"
 #include "logging/LogTypes.h"
 #include "logging/RedactionFilter.h"
 #include "logging/StructuredFormatter.h"
@@ -27,6 +28,8 @@ class LoggingFacade final : public ILogger {
  public:
   LoggingFacade();
   explicit LoggingFacade(std::unique_ptr<ILogDispatchBackend> dispatch_backend);
+  LoggingFacade(std::unique_ptr<ILogDispatchBackend> dispatch_backend,
+                std::shared_ptr<ILogRecoverySink> fallback_sink);
 
   InfraOperationResult init(const LogContext& context = {});
   InfraOperationResult stop();
@@ -58,8 +61,32 @@ class LoggingFacade final : public ILogger {
     return current_context_;
   }
 
+  void set_force_format_failure_for_tests(bool enabled) {
+    force_format_failure_for_tests_ = enabled;
+  }
+
   [[nodiscard]] LogLevel current_level() const {
     return current_level_;
+  }
+
+  [[nodiscard]] bool is_degraded() const {
+    return recovery_ != nullptr && recovery_->is_degraded();
+  }
+
+  [[nodiscard]] bool fallback_active() const {
+    return recovery_ != nullptr && recovery_->fallback_active();
+  }
+
+  [[nodiscard]] std::optional<LoggingErrorCode> last_recovery_error_code() const {
+    return recovery_ != nullptr ? recovery_->last_error_code() : std::nullopt;
+  }
+
+  [[nodiscard]] bool has_last_fallback_event() const {
+    return recovery_ != nullptr && recovery_->has_last_fallback_event();
+  }
+
+  [[nodiscard]] const LogEvent& last_fallback_event() const {
+    return recovery_->last_fallback_event();
   }
 
   [[nodiscard]] LoggingFormat current_format() const {
@@ -90,6 +117,14 @@ class LoggingFacade final : public ILogger {
   [[nodiscard]] static bool is_enabled_for_level(LogLevel event_level,
                                                  LogLevel current_level);
   [[nodiscard]] LogEvent enrich_event(const LogEvent& event) const;
+  [[nodiscard]] LogWriteResult handle_recovery_result(
+      const LoggingRecoveryResult& result,
+      const LogEvent& primary_event);
+  [[nodiscard]] LogWriteResult recover_format_failure(const LogEvent& event);
+  [[nodiscard]] LogWriteResult handle_dispatch_failure(
+      const LogEvent& formatted_event,
+      const LogWriteResult& dispatch_result);
+  void reset_recovery_path();
 
   LifecycleState lifecycle_state_ = LifecycleState::Created;
   LogContext current_context_{};
@@ -97,6 +132,9 @@ class LoggingFacade final : public ILogger {
   RedactionFilter redaction_filter_{};
   StructuredFormatter structured_formatter_{};
   std::unique_ptr<ILogDispatchBackend> dispatch_backend_;
+  std::shared_ptr<ILogRecoverySink> fallback_sink_;
+  std::unique_ptr<LoggingRecovery> recovery_;
+  bool force_format_failure_for_tests_ = false;
   std::optional<LogEvent> last_dispatched_event_;
   std::size_t dispatched_record_count_ = 0;
 };

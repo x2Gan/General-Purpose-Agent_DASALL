@@ -1,3 +1,47 @@
+## 记录 #839
+
+- 日期：2026-05-27
+- 阶段：infrastructure / logging recovery fallback
+- 任务：推进 `INF-LOG-FIX-006`，把 deterministic queue contract 与 live config projection 作为 recovery/fallback 的承接面
+- 状态：已完成（L3 build-tree degraded/fallback evidence 已闭合；本轮不使用 qemu / kvm）
+
+### 执行前提
+
+1. 用户要求继续按 `project-implementation-cycle` 串行推进 `INF-LOG-FIX-006`，并保持相同规则：先守住 owner boundary、完成后同步回写详设/SSOT/总账/worklog、单独提交推送。
+2. 近端核验确认：`LoggingRecovery` 虽已有 isolated state machine 与 unit tests，但 `LoggingFacade` hot path 尚未消费它；direct dispatch failure、deterministic queue flush 暴露的 sink failure 与 formatter failure 都不会转成 degraded fallback/advisory signal。
+3. 前置依赖已满足：`INF-LOG-FIX-003`、`INF-LOG-FIX-004` 与 `INF-LOG-FIX-005` 已分别冻结 primary sink/rotation、deterministic queue contract 与 live config projection，因此本轮只需把 recovery/fallback 接到现有主链，不重新定义 queue 或 runtime policy owner 语义。
+
+### 改动
+
+1. 更新 `infra/src/logging/LoggingRecovery.h` 与 `infra/src/logging/LoggingRecovery.cpp`，新增 `handle_sink_failure()` 与 `handle_queue_saturation()`，固定 queue saturation advisory schema，并保留 `LOG_E_SINK_IO` / `LOG_E_FORMAT_INVALID` / `LOG_E_QUEUE_FULL` 的 fallback 语义。
+2. 更新 `infra/src/logging/LoggingFacade.h` 与 `infra/src/logging/LoggingFacade.cpp`，让 facade 显式持有 `LoggingRecovery`、default `ringbuffer + stderr` fallback sink，并把 formatter failure、direct dispatch failure、queue flush sink failure 与 queue saturation 全部接入 degraded fallback 路径，同时暴露 degraded/fallback state 供后续 metrics/health owner 消费。
+3. 新增 `tests/unit/infra/logging/LoggingSinkFallbackTest.cpp`、`tests/unit/infra/logging/LoggingQueueFailureSignalTest.cpp`、`tests/integration/infra/logging/LoggingRecoveryIntegrationTest.cpp`，并更新 `tests/unit/CMakeLists.txt`、`tests/unit/infra/CMakeLists.txt`、`tests/integration/CMakeLists.txt`、`tests/integration/infra/logging/CMakeLists.txt` 完成注册。
+4. 更新 `docs/ssot/LoggingProductionAcceptanceMatrix.md`、`docs/architecture/DASALL_infra_logging模块详细设计.md`、`docs/todos/DASALL_子系统查漏补缺专项记录.md`，并新增 `docs/todos/infrastructure/deliverables/INF-LOG-FIX-006-recovery-fallback收口.md`，把 `INF-LOG-FIX-006` 的 degraded/fallback 口径与 ADR 边界正式收口。
+
+### 验证
+
+1. `Build_CMakeTools(buildTargets=["dasall_logging_recovery_integration_test","dasall_logging_sink_fallback_unit_test","dasall_logging_queue_failure_signal_unit_test"])`
+   - 结果：通过。
+2. `RunCtest_CMakeTools(tests=["LoggingRecoveryIntegrationTest","LoggingSinkFallbackTest","LoggingQueueFailureSignalTest"])`
+   - 结果：命中仓库既有泛化 `生成失败`。
+3. fallback 直接执行：
+   - `./build/vscode-linux-ninja/tests/unit/infra/dasall_logging_sink_fallback_unit_test`
+   - `./build/vscode-linux-ninja/tests/unit/infra/dasall_logging_queue_failure_signal_unit_test`
+   - `./build/vscode-linux-ninja/tests/integration/infra/logging/dasall_logging_recovery_integration_test`
+   - 结果：3/3 通过。
+4. 相邻回归：
+   - `./build/vscode-linux-ninja/tests/unit/infra/dasall_logging_recovery_unit_test`
+   - `./build/vscode-linux-ninja/tests/unit/infra/dasall_logging_facade_unit_test`
+   - `./build/vscode-linux-ninja/tests/unit/infra/dasall_logging_flush_deadline_unit_test`
+   - `./build/vscode-linux-ninja/tests/integration/infra/logging/dasall_logging_sink_failure_injection_test`
+   - 结果：4/4 通过。
+
+### 结果
+
+1. `INF-LOG-FIX-006` 已闭合：`LoggingFacade` 现会把 formatter failure、direct sink failure、queue flush sink failure 与 queue saturation 统一转成 degraded fallback 或 advisory signal，并保持 logging owner 不越权触发 runtime recovery。
+2. deterministic queue contract 与 live config projection 现已成为 recovery/fallback 的承接面，而不是被 006 重新定义；queue saturation 仍按上一轮 backpressure contract 返回，只是在 logging owner 内额外补了 `LOG_E_QUEUE_FULL` advisory signal。
+3. 本轮结论仍只到 L3 build-tree degraded/fallback evidence；metrics/health、diagnostics artifact 与 installed package proof 继续留给 `INF-LOG-FIX-007~011`。
+
 ## 记录 #838
 
 - 日期：2026-05-27

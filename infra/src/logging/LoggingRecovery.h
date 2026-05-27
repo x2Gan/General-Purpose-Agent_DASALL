@@ -72,6 +72,10 @@ class LoggingRecovery {
                   std::shared_ptr<ILogRecoverySink> fallback_sink);
 
   LoggingRecoveryResult write(const LogEvent& event);
+  LoggingRecoveryResult handle_sink_failure(const LogEvent& event,
+                                            std::string_view reason,
+                                            bool recovery_attempted = false);
+  LoggingRecoveryResult handle_queue_saturation(const LogEvent& event);
   LoggingRecoveryResult handle_format_failure(const LogEvent& event);
   LoggingRecoveryResult retry_primary_sink(const LogEvent& probe_event);
 
@@ -125,6 +129,8 @@ class LoggingRecovery {
       bool degraded,
       bool recovery_attempted);
   [[nodiscard]] static LogEvent make_minimal_fallback_event(const LogEvent& event);
+    [[nodiscard]] static LogEvent make_queue_saturation_signal_event(
+      const LogEvent& event);
 
   std::shared_ptr<ILogRecoverySink> primary_sink_;
   std::shared_ptr<ILogRecoverySink> fallback_sink_;

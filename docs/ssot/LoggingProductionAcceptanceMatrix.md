@@ -136,6 +136,14 @@
 5. focused 证据固定为 `LoggingConfigAdapterStrictParseTest`、`LoggingLiveCompositionConfigTest` 与 `DaemonRuntimeLiveDependencyCompositionTest`；其中 live composition test 直接验证 key-value formatter、redaction toggle、rotation family 与 queue-backed dispatcher 的 config projection。
 6. 本轮结论仍只到 L3 build-tree live composition evidence；recovery/fallback、metrics/health、diagnostics artifact 与 installed package proof 继续留给 `INF-LOG-FIX-006~011`。
 
+### 6.5 INF-LOG-FIX-006 recovery/fallback closeout
+
+1. `LoggingFacade` 现成为 logging recovery 的 hot-path owner seam：direct dispatch failure、deterministic queue flush 暴露的 sink failure、显式 formatter failure 与 queue saturation 均经 `LoggingRecovery` 统一转成 degraded fallback 或 advisory signal；整个 recovery path 仍严格停留在 logging owner 内，不执行 Runtime recovery。
+2. default degraded fallback sink 现固定为 `ringbuffer + stderr`；direct dispatch failure 与 queued flush sink failure 会把已结构化/已脱敏记录持久化到 fallback，并把 `LOG_E_SINK_IO` 与 degraded/fallback state 保留给后续 metrics/health owner 消费。
+3. queue saturation 继续复用 `INF-LOG-FIX-004` 已冻结的 deterministic queue contract；当 `AsyncQueueController` 返回 backpressure failure 时，`LoggingRecovery` 现会发出带 `LOG_E_QUEUE_FULL`、`recovery_advisory=queue_saturation` 与 `dropped_original_record=true` 的 degraded fallback advisory signal，而不是把 queue semantics 扩写成 runtime recovery。
+4. focused 证据固定为 `LoggingSinkFallbackTest`、`LoggingQueueFailureSignalTest` 与 `LoggingRecoveryIntegrationTest`；其中 `LoggingSinkFallbackTest` 现同时覆盖 direct dispatch failure 与 formatter failure fallback。相邻回归继续使用 `LoggingRecoveryTest`、`LoggingFacadeTest`、`LoggingFlushDeadlineTest` 与 `LoggingSinkFailureInjectionTest` 守住既有 deterministic queue / sink failure 语义。`RunCtest_CMakeTools` 仍命中仓库既有泛化 `生成失败`，因此 authoritative evidence 继续采用 `Build_CMakeTools` + direct-binary fallback。
+5. 本轮结论仍只到 L3 build-tree degraded/fallback evidence；metrics/health、diagnostics artifact 与 installed package proof 继续留给 `INF-LOG-FIX-007~011`。
+
 ## 7. industry practice alignment
 
 1. OpenTelemetry Logs：把 `TraceId / SpanId / Resource` 作为 top-level correlation 对齐点，把 request-scoped 附加信息保留在 structured attributes；DASALL 只吸收字段契约，不在本轮引入 OTel SDK 直连。

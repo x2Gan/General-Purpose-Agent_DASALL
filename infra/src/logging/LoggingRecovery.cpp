@@ -50,9 +50,23 @@ LoggingRecoveryResult LoggingRecovery::write(const LogEvent& event) {
     };
   }
 
+  return handle_sink_failure(event, "primary sink write failed");
+}
+
+LoggingRecoveryResult LoggingRecovery::handle_sink_failure(
+    const LogEvent& event,
+    std::string_view reason,
+    bool recovery_attempted) {
   return write_to_fallback(event,
                            LoggingErrorCode::SinkIo,
-                           "primary sink write failed",
+                           reason,
+                           recovery_attempted);
+}
+
+LoggingRecoveryResult LoggingRecovery::handle_queue_saturation(const LogEvent& event) {
+  return write_to_fallback(make_queue_saturation_signal_event(event),
+                           LoggingErrorCode::QueueFull,
+                           "logging queue saturation dropped the primary record and emitted a degraded fallback advisory",
                            false);
 }
 
@@ -120,10 +134,9 @@ LoggingRecoveryResult LoggingRecovery::retry_primary_sink(const LogEvent& probe_
   }
 
   ++recovery_failure_total_;
-  return write_to_fallback(probe_event,
-                           LoggingErrorCode::SinkIo,
-                           "primary sink retry failed",
-                           true);
+  return handle_sink_failure(probe_event,
+                             "primary sink retry failed",
+                             true);
 }
 
 LoggingRecoveryResult LoggingRecovery::write_to_fallback(
@@ -194,6 +207,29 @@ LogEvent LoggingRecovery::make_minimal_fallback_event(const LogEvent& event) {
   }
 
   return fallback_event;
+}
+
+LogEvent LoggingRecovery::make_queue_saturation_signal_event(const LogEvent& event) {
+  auto advisory_event = make_minimal_fallback_event(event);
+  advisory_event.message =
+      "logging queue saturation dropped the primary record and routed a degraded fallback signal";
+  advisory_event.attrs.insert_or_assign(
+      "logging_error_code",
+      std::string(logging_error_code_name(LoggingErrorCode::QueueFull)));
+  advisory_event.attrs.insert_or_assign("recovery_advisory", "queue_saturation");
+  advisory_event.attrs.insert_or_assign("dropped_original_record", "true");
+
+  for (const auto key : {std::string_view("request_id"),
+                         std::string_view("session_id"),
+                         std::string_view("trace_id"),
+                         std::string_view("task_id")}) {
+    const auto it = event.attrs.find(std::string(key));
+    if (it != event.attrs.end() && !it->second.empty()) {
+      advisory_event.attrs.insert_or_assign(std::string(key), it->second);
+    }
+  }
+
+  return advisory_event;
 }
 
 }  // namespace dasall::infra::logging

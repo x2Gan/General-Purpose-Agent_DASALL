@@ -1045,6 +1045,18 @@ dasall_register_logging_unit_test(
 )
 
 dasall_register_logging_unit_test(
+  dasall_logging_sink_fallback_unit_test
+  LoggingSinkFallbackTest
+  logging/LoggingSinkFallbackTest.cpp
+)
+
+dasall_register_logging_unit_test(
+  dasall_logging_queue_failure_signal_unit_test
+  LoggingQueueFailureSignalTest
+  logging/LoggingQueueFailureSignalTest.cpp
+)
+
+dasall_register_logging_unit_test(
   dasall_logging_config_merge_unit_test
   LoggingConfigMergeTest
   logging/LoggingConfigMergeTest.cpp

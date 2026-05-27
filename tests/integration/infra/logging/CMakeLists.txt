@@ -51,6 +51,12 @@ dasall_register_logging_integration_test(
 )
 
 dasall_register_logging_integration_test(
+  dasall_logging_recovery_integration_test
+  LoggingRecoveryIntegrationTest
+  LoggingRecoveryIntegrationTest.cpp
+)
+
+dasall_register_logging_integration_test(
   dasall_logging_live_composition_config_integration_test
   LoggingLiveCompositionConfigTest
   LoggingLiveCompositionConfigTest.cpp
