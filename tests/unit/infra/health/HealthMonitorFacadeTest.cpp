@@ -124,6 +124,7 @@ void test_health_monitor_facade_registers_probe_and_evaluates_snapshot() {
       .probe_name = std::string("logging_sink"),
       .probe_group = std::string("readiness"),
       .probe = &probe,
+      .keepalive = {},
   });
   assert_true(registration_result.ok && !registration_result.replaced_existing && facade.is_ready() &&
                   facade.registered_probe_count() == 1U,
@@ -153,6 +154,7 @@ void test_health_monitor_facade_preserves_last_snapshot_in_safe_observe_mode() {
                   .probe_name = std::string("config_center"),
                   .probe_group = std::string("liveness"),
                   .probe = &probe,
+            .keepalive = {},
               }).ok,
               "HealthMonitorFacade should accept a valid probe before safe_observe_mode is exercised");
 
@@ -197,6 +199,7 @@ void test_health_monitor_facade_evaluates_registered_probe_results_and_notifies_
       .probe_name = std::string("logging_sink"),
       .probe_group = std::string("readiness"),
       .probe = &probe,
+      .keepalive = {},
   });
   assert_true(registration_result.ok,
               "HealthMonitorFacade should accept a mutable readiness probe for transition testing");

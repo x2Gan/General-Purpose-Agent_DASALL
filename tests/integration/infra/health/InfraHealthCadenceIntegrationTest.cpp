@@ -1,14 +1,20 @@
 #include <algorithm>
+#include <chrono>
 #include <exception>
+#include <filesystem>
 #include <iostream>
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
+#include "ObservabilityLiveComposition.h"
 #include "health/HealthConfigPolicy.h"
+#include "health/HealthMonitorFacade.h"
 #include "health/ProbeScheduler.h"
 #include "health/RuntimeHealthProbe.h"
 #include "maintenance/BackgroundMaintenanceHooks.h"
+#include "logging/LoggingFacade.h"
 #include "support/TestAssertions.h"
 #include "telemetry/RuntimeEventBus.h"
 
@@ -16,6 +22,9 @@ namespace {
 
 using dasall::infra::HealthConfigPatch;
 using dasall::infra::HealthConfigPolicy;
+using dasall::infra::HealthSnapshot;
+using dasall::infra::HealthTransition;
+using dasall::infra::IHealthStateListener;
 using dasall::infra::ProbeScheduler;
 using dasall::runtime::BackgroundMaintenanceHookOptions;
 using dasall::runtime::BackgroundMaintenanceHooks;
@@ -45,6 +54,75 @@ class RecordingHealthSignalProvider final : public IRuntimeHealthSignalProvider 
   std::vector<std::int64_t> observed_timeouts_ms_;
 };
 
+class RecordingHealthStateListener final : public IHealthStateListener {
+ public:
+  void on_health_transition(const HealthTransition& transition,
+                            const HealthSnapshot& snapshot) override {
+    ++notification_count_;
+    last_transition_ = transition;
+    last_snapshot_ = snapshot;
+  }
+
+  [[nodiscard]] std::size_t notification_count() const {
+    return notification_count_;
+  }
+
+  [[nodiscard]] const std::optional<HealthTransition>& last_transition() const {
+    return last_transition_;
+  }
+
+  [[nodiscard]] const std::optional<HealthSnapshot>& last_snapshot() const {
+    return last_snapshot_;
+  }
+
+ private:
+  std::size_t notification_count_ = 0U;
+  std::optional<HealthTransition> last_transition_;
+  std::optional<HealthSnapshot> last_snapshot_;
+};
+
+class TempLogRoot {
+ public:
+  explicit TempLogRoot(const std::string& stem)
+      : path_(std::filesystem::temp_directory_path() /
+              (stem + "-" + std::to_string(std::chrono::duration_cast<std::chrono::microseconds>(
+                  std::chrono::system_clock::now().time_since_epoch())
+                                             .count()))) {
+    std::filesystem::create_directories(path_);
+  }
+
+  ~TempLogRoot() {
+    std::error_code error;
+    std::filesystem::remove_all(path_, error);
+  }
+
+  [[nodiscard]] const std::filesystem::path& path() const {
+    return path_;
+  }
+
+ private:
+  std::filesystem::path path_;
+};
+
+class AlwaysFailDispatchBackend final : public dasall::infra::logging::ILogDispatchBackend {
+ public:
+  dasall::infra::logging::LogWriteResult dispatch(
+      const dasall::infra::logging::LogEvent&) override {
+    return dasall::infra::logging::LogWriteResult::failure(
+        dasall::infra::logging::map_logging_error_code(
+            dasall::infra::logging::LoggingErrorCode::SinkIo)
+            .result_code,
+        "forced primary sink failure",
+        "logging.dispatch",
+        "AlwaysFailDispatchBackend");
+  }
+
+  dasall::infra::logging::LogWriteResult flush(
+      const dasall::infra::logging::LogFlushDeadline&) override {
+    return dasall::infra::logging::LogWriteResult::success();
+  }
+};
+
 [[nodiscard]] bool has_attribute(const RuntimeEventEnvelope& envelope,
                                  const std::string& key,
                                  const std::string& value) {
@@ -54,6 +132,25 @@ class RecordingHealthSignalProvider final : public IRuntimeHealthSignalProvider 
              [&key, &value](const auto& attribute) {
                return attribute.key == key && attribute.value == value;
              }) != envelope.attributes.end();
+}
+
+[[nodiscard]] bool snapshot_contains_component(const HealthSnapshot& snapshot,
+                                               const std::string& component) {
+  return std::find(snapshot.failed_components.begin(),
+                   snapshot.failed_components.end(),
+                   component) != snapshot.failed_components.end();
+}
+
+[[nodiscard]] dasall::infra::logging::LogEvent make_logging_event(
+    std::string message,
+    std::int64_t timestamp_ms) {
+  return dasall::infra::logging::LogEvent{
+      .level = dasall::infra::logging::LogLevel::Error,
+      .module = std::string("runtime"),
+      .message = std::move(message),
+      .attrs = {{"event_name", "health.cadence.logging"}},
+      .ts = timestamp_ms,
+  };
 }
 
 void test_health_cadence_integration_projects_policy_into_runtime_and_preserves_fallback() {
@@ -164,11 +261,65 @@ void test_health_cadence_integration_projects_policy_into_runtime_and_preserves_
               "health cadence integration should preserve maintenance fallback evidence when the event sink is absent");
 }
 
+  void test_health_cadence_integration_observes_logging_probe_transition_when_logger_degrades() {
+    using dasall::infra::HealthMonitorFacade;
+    using dasall::infra::ObservabilityLiveCompositionOptions;
+    using dasall::infra::compose_live_observability;
+    using dasall::infra::logging::LoggingFacade;
+    using dasall::tests::support::assert_true;
+
+    TempLogRoot log_root("dasall-health-cadence-logging");
+
+    ObservabilityLiveCompositionOptions options;
+    options.profile_id = "desktop_full";
+    options.logging_state_root_override = log_root.path();
+
+    const auto observability = compose_live_observability(options);
+    assert_true(observability.ok(),
+          "health cadence integration should compose live observability before probing logging transitions: " +
+            observability.error);
+
+    auto* facade = dynamic_cast<LoggingFacade*>(observability.logger.get());
+    auto* health_monitor =
+      dynamic_cast<HealthMonitorFacade*>(observability.health_monitor.get());
+    assert_true(facade != nullptr && health_monitor != nullptr,
+          "health cadence integration should expose concrete logging facade and health monitor types for focused transition checks");
+
+    RecordingHealthStateListener listener;
+    assert_true(health_monitor->subscribe(listener).ok,
+          "health cadence integration should accept a listener before the logging probe transitions");
+
+    const auto first_snapshot = health_monitor->evaluate_now();
+    assert_true(first_snapshot.ok && first_snapshot.snapshot.is_ready(),
+          "health cadence integration should establish a healthy baseline snapshot before the logging facade degrades");
+
+    facade->set_dispatch_backend(std::make_unique<AlwaysFailDispatchBackend>());
+    const auto log_result = facade->log(make_logging_event("forced degraded transition",
+                               1712402001000LL));
+    assert_true(log_result.ok && facade->fallback_active(),
+          "forced primary sink failure should degrade through fallback while preserving the write result for the health transition check");
+
+    const auto second_snapshot = health_monitor->evaluate_now();
+    assert_true(second_snapshot.ok && second_snapshot.snapshot.is_degraded_state(),
+          "health cadence integration should degrade the aggregate snapshot once the logging probe observes fallback_active=true");
+    assert_true(snapshot_contains_component(second_snapshot.snapshot,
+                        std::string("infra.logging.pipeline")),
+          "degraded health cadence snapshot should identify infra.logging.pipeline as the failing component");
+    assert_true(listener.notification_count() == 1U &&
+            listener.last_transition().has_value() &&
+            listener.last_transition()->trigger_probe ==
+              "infra.logging.pipeline" &&
+            listener.last_snapshot().has_value() &&
+            listener.last_snapshot()->is_degraded_state(),
+          "health cadence integration should emit a healthy-to-degraded transition once the logging readiness probe degrades");
+  }
+
 }  // namespace
 
 int main() {
   try {
     test_health_cadence_integration_projects_policy_into_runtime_and_preserves_fallback();
+    test_health_cadence_integration_observes_logging_probe_transition_when_logger_degrades();
   } catch (const std::exception& ex) {
     std::cerr << ex.what() << std::endl;
     return 1;

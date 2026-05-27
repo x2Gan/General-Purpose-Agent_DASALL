@@ -1,5 +1,6 @@
 #include "LoggingFacade.h"
 
+#include <chrono>
 #include "SinkDispatcher.h"
 
 #include <deque>
@@ -103,6 +104,14 @@ LoggingFacade::LoggingFacade(std::unique_ptr<ILogDispatchBackend> dispatch_backe
   set_dispatch_backend(std::move(dispatch_backend));
 }
 
+void LoggingFacade::attach_metrics_bridge(
+    std::shared_ptr<LoggingMetricsBridge> metrics_bridge,
+    std::uint32_t queue_high_watermark) {
+  metrics_bridge_ = std::move(metrics_bridge);
+  queue_high_watermark_ = std::max<std::uint32_t>(1U, queue_high_watermark);
+  last_observed_dropped_total_ = current_dropped_total();
+}
+
 InfraOperationResult LoggingFacade::init(const LogContext& context) {
   if (lifecycle_state_ != LifecycleState::Created) {
     return invalid_transition("init", "created");
@@ -117,6 +126,7 @@ InfraOperationResult LoggingFacade::init(const LogContext& context) {
     dispatch_backend_ = make_default_dispatch_backend();
   }
   reset_recovery_path();
+  reset_runtime_health_state();
 
   lifecycle_state_ = LifecycleState::Initialized;
   return InfraOperationResult::success();
@@ -162,6 +172,8 @@ LogWriteResult LoggingFacade::log(const LogEvent& event) {
     return LogWriteResult::success();
   }
 
+  const auto metric_ts = metric_timestamp_for(event);
+
   auto enriched_event = enrich_event(event);
   auto redacted_event = redaction_filter_.apply(enriched_event);
   LogEvent formatted_event;
@@ -171,20 +183,86 @@ LogWriteResult LoggingFacade::log(const LogEvent& event) {
     }
     formatted_event = structured_formatter_.format(redacted_event);
   } catch (...) {
-    return recover_format_failure(redacted_event);
+    record_write_failed(LoggingErrorCode::FormatInvalid, metric_ts, "write");
+    const auto recovery_result = recover_format_failure(redacted_event);
+    if (!recovery_result.ok) {
+      note_unrecoverable_failure();
+      if (recovery_ != nullptr) {
+        record_write_failed(
+            last_recovery_error_code().value_or(LoggingErrorCode::FormatInvalid),
+            metric_ts,
+            "recovery");
+      }
+      record_queue_depth(metric_ts, "failure");
+      return recovery_result;
+    }
+
+    record_write_accepted(metric_ts);
+    record_queue_depth(metric_ts, "degraded");
+    return recovery_result;
   }
 
   if (recovery_ != nullptr && recovery_->is_degraded()) {
-    return handle_recovery_result(recovery_->write(formatted_event), formatted_event);
+    const auto recovery_result =
+        handle_recovery_result(recovery_->write(formatted_event), formatted_event);
+    if (!recovery_result.ok) {
+      note_unrecoverable_failure();
+      record_write_failed(
+          last_recovery_error_code().value_or(LoggingErrorCode::SinkIo),
+          metric_ts,
+          "recovery");
+      record_queue_depth(metric_ts, "failure");
+      return recovery_result;
+    }
+
+    record_write_accepted(metric_ts);
+    record_queue_depth(metric_ts, "degraded");
+    return recovery_result;
   }
 
+  const auto dropped_total_before_dispatch = current_dropped_total();
   const auto result = dispatch_backend_->dispatch(formatted_event);
   if (!result.ok) {
-    return handle_dispatch_failure(formatted_event, result);
+    if (result.result_code == contracts::ResultCode::RuntimeRetryExhausted) {
+      const auto recovery_result = handle_dispatch_failure(formatted_event, result);
+      if (!recovery_result.ok) {
+        note_unrecoverable_failure();
+        record_drop(metric_ts, "failure");
+        record_queue_depth(metric_ts, "failure");
+        return recovery_result;
+      }
+
+      record_drop(metric_ts, "degraded");
+      record_queue_depth(metric_ts, "degraded");
+      return recovery_result;
+    }
+
+    record_write_failed(logging_error_code_for(result), metric_ts, "write");
+    const auto recovery_result = handle_dispatch_failure(formatted_event, result);
+    if (!recovery_result.ok) {
+      note_unrecoverable_failure();
+      if (recovery_ != nullptr) {
+        record_write_failed(
+            last_recovery_error_code().value_or(LoggingErrorCode::SinkIo),
+            metric_ts,
+            "recovery");
+      }
+      record_queue_depth(metric_ts, "failure");
+      return recovery_result;
+    }
+
+    record_write_accepted(metric_ts);
+    record_queue_depth(metric_ts, "degraded");
+    return recovery_result;
   }
 
   last_dispatched_event_ = std::move(formatted_event);
   ++dispatched_record_count_;
+  if (current_dropped_total() > dropped_total_before_dispatch) {
+    record_drop(metric_ts, "degraded");
+  }
+  record_write_accepted(metric_ts);
+  record_queue_depth(metric_ts, "success");
   return result;
 }
 
@@ -205,17 +283,91 @@ LogWriteResult LoggingFacade::flush(const LogFlushDeadline& deadline) {
         std::string(kLoggingFacadeSourceRef));
   }
 
+  const auto flush_started_at_steady_ms = current_steady_time_ms();
+
   const auto flush_result = dispatch_backend_->flush(deadline);
   if (flush_result.ok || recovery_ == nullptr || !has_last_dispatched_event() ||
       flush_result.result_code != contracts::ResultCode::ProviderTimeout) {
+    if (!flush_result.ok) {
+      note_unrecoverable_failure();
+    }
+    record_flush_latency(flush_started_at_steady_ms, flush_result);
+    record_queue_depth(current_time_unix_ms(),
+                       flush_result.ok
+                           ? (is_degraded() ? "degraded" : "success")
+                           : "failure");
     return flush_result;
   }
 
-  return handle_recovery_result(
+  const auto recovery_result = handle_recovery_result(
       recovery_->handle_sink_failure(
           last_dispatched_event(),
           "primary flush surfaced a sink failure after the deterministic queue drain path"),
       last_dispatched_event());
+  if (!recovery_result.ok) {
+    note_unrecoverable_failure();
+  }
+  record_flush_latency(flush_started_at_steady_ms, recovery_result);
+  record_queue_depth(current_time_unix_ms(),
+                     recovery_result.ok
+                         ? (is_degraded() ? "degraded" : "success")
+                         : "failure");
+  return recovery_result;
+}
+
+LoggingHealthSample LoggingFacade::sample(std::int64_t timeout_ms) {
+  const auto started_at_steady_ms = current_steady_time_ms();
+  const auto sampled_at_unix_ms = current_time_unix_ms();
+
+  if (timeout_ms <= 0) {
+    return LoggingHealthSample{
+        .state = LoggingHealthSampleState::Invalid,
+        .signals = {},
+        .latency_ms = 0,
+        .sampled_at_unix_ms = sampled_at_unix_ms,
+        .detail_ref = std::string(kLoggingHealthDetailNamespace) +
+            "/config/timeout_invalid",
+    };
+  }
+
+  if (lifecycle_state_ != LifecycleState::Initialized) {
+    return LoggingHealthSample{
+        .state = LoggingHealthSampleState::Invalid,
+        .signals = {},
+        .latency_ms = std::max<std::int64_t>(0,
+                                             current_steady_time_ms() -
+                                                 started_at_steady_ms),
+        .sampled_at_unix_ms = sampled_at_unix_ms,
+        .detail_ref = std::string(kLoggingHealthDetailNamespace) +
+            "/lifecycle/invalid",
+    };
+  }
+
+  const auto current_dropped_total = this->current_dropped_total();
+  const auto dropped_total_delta =
+      current_dropped_total >= last_observed_dropped_total_
+          ? current_dropped_total - last_observed_dropped_total_
+          : current_dropped_total;
+  last_observed_dropped_total_ = current_dropped_total;
+
+  return LoggingHealthSample{
+      .state = LoggingHealthSampleState::Ready,
+      .signals = LoggingHealthSignals{
+          .queue_depth = current_queue_depth(),
+          .queue_high_watermark = std::max<std::uint32_t>(1U, queue_high_watermark_),
+          .dropped_total_delta = dropped_total_delta,
+          .recovery_degraded = is_degraded(),
+          .fallback_active = fallback_active(),
+          .unrecoverable_failure_total = unrecoverable_failure_total_,
+          .metrics_bridge_degraded = metrics_bridge_ != nullptr &&
+              metrics_bridge_->is_degraded(),
+      },
+      .latency_ms = std::max<std::int64_t>(0,
+                                           current_steady_time_ms() -
+                                               started_at_steady_ms),
+      .sampled_at_unix_ms = sampled_at_unix_ms,
+      .detail_ref = std::string(kLoggingHealthDetailNamespace) + "/sample",
+  };
 }
 
 void LoggingFacade::set_level(LogLevel level) {
@@ -244,6 +396,7 @@ void LoggingFacade::set_dispatch_backend(
                           ? std::move(dispatch_backend)
                           : make_default_dispatch_backend();
   reset_recovery_path();
+  reset_runtime_health_state();
 }
 
 std::string_view LoggingFacade::lifecycle_state_name() const {
@@ -301,6 +454,56 @@ LogEvent LoggingFacade::enrich_event(const LogEvent& event) const {
   enriched.attrs.try_emplace("parent_task_id", current_context_.parent_task_id);
   enriched.attrs.try_emplace("lease_id", current_context_.lease_id);
   return enriched;
+}
+
+std::int64_t LoggingFacade::current_time_unix_ms() {
+  return std::chrono::duration_cast<std::chrono::milliseconds>(
+             std::chrono::system_clock::now().time_since_epoch())
+      .count();
+}
+
+std::int64_t LoggingFacade::current_steady_time_ms() {
+  return std::chrono::duration_cast<std::chrono::milliseconds>(
+             std::chrono::steady_clock::now().time_since_epoch())
+      .count();
+}
+
+std::uint32_t LoggingFacade::current_queue_depth() const {
+  const auto* sink_dispatcher =
+      dynamic_cast<const SinkDispatcher*>(dispatch_backend_.get());
+  if (sink_dispatcher == nullptr) {
+    return 0U;
+  }
+
+  return static_cast<std::uint32_t>(sink_dispatcher->queue_depth());
+}
+
+std::uint64_t LoggingFacade::current_dropped_total() const {
+  const auto* sink_dispatcher =
+      dynamic_cast<const SinkDispatcher*>(dispatch_backend_.get());
+  if (sink_dispatcher == nullptr) {
+    return 0U;
+  }
+
+  return sink_dispatcher->dropped_total();
+}
+
+LoggingErrorCode LoggingFacade::logging_error_code_for(
+    const LogWriteResult& result,
+    LoggingErrorCode fallback) {
+  if (result.result_code == map_logging_error_code(LoggingErrorCode::QueueFull).result_code) {
+    return LoggingErrorCode::QueueFull;
+  }
+
+  if (result.result_code == map_logging_error_code(LoggingErrorCode::ConfigInvalid).result_code) {
+    return LoggingErrorCode::ConfigInvalid;
+  }
+
+  if (result.result_code == map_logging_error_code(LoggingErrorCode::FormatInvalid).result_code) {
+    return LoggingErrorCode::FormatInvalid;
+  }
+
+  return fallback;
 }
 
 LogWriteResult LoggingFacade::handle_recovery_result(
@@ -361,6 +564,78 @@ LogWriteResult LoggingFacade::handle_dispatch_failure(
       recovery_->handle_sink_failure(formatted_event,
                                      "primary dispatch failed before the record could be durably persisted"),
       formatted_event);
+}
+
+std::int64_t LoggingFacade::metric_timestamp_for(const LogEvent& event) const {
+  return event.ts.has_value() && *event.ts > 0 ? *event.ts : current_time_unix_ms();
+}
+
+void LoggingFacade::note_unrecoverable_failure() {
+  ++unrecoverable_failure_total_;
+}
+
+void LoggingFacade::record_write_accepted(std::int64_t ts_unix_ms) {
+  if (metrics_bridge_ == nullptr) {
+    return;
+  }
+
+  metrics_bridge_->record_write_accepted(ts_unix_ms);
+}
+
+void LoggingFacade::record_write_failed(LoggingErrorCode error_code,
+                                        std::int64_t ts_unix_ms,
+                                        std::string_view stage) {
+  if (metrics_bridge_ == nullptr) {
+    return;
+  }
+
+  metrics_bridge_->record_write_failed(error_code, ts_unix_ms, stage);
+}
+
+void LoggingFacade::record_drop(std::int64_t ts_unix_ms,
+                                std::string_view outcome) {
+  if (metrics_bridge_ == nullptr) {
+    return;
+  }
+
+  metrics_bridge_->record_drop(LoggingErrorCode::QueueFull, ts_unix_ms, outcome);
+}
+
+void LoggingFacade::record_queue_depth(std::int64_t ts_unix_ms,
+                                       std::string_view outcome) {
+  if (metrics_bridge_ == nullptr) {
+    return;
+  }
+
+  metrics_bridge_->record_queue_depth(current_queue_depth(), ts_unix_ms, outcome);
+}
+
+void LoggingFacade::record_flush_latency(std::int64_t started_at_steady_ms,
+                                         const LogWriteResult& result) {
+  if (metrics_bridge_ == nullptr) {
+    return;
+  }
+
+  const auto finished_at_unix_ms = current_time_unix_ms();
+  const auto latency_ms = std::max<std::int64_t>(0,
+                                                 current_steady_time_ms() -
+                                                     started_at_steady_ms);
+  const auto outcome = !result.ok ? std::string_view("failure")
+                                  : (is_degraded() ? std::string_view("degraded")
+                                                   : std::string_view("success"));
+  const auto error_code = outcome == "success"
+      ? std::optional<LoggingErrorCode>{}
+      : std::optional<LoggingErrorCode>(
+            last_recovery_error_code().value_or(logging_error_code_for(result)));
+  metrics_bridge_->record_flush_latency(latency_ms,
+                                        finished_at_unix_ms,
+                                        outcome,
+                                        error_code);
+}
+
+void LoggingFacade::reset_runtime_health_state() {
+  unrecoverable_failure_total_ = 0U;
+  last_observed_dropped_total_ = current_dropped_total();
 }
 
 void LoggingFacade::reset_recovery_path() {

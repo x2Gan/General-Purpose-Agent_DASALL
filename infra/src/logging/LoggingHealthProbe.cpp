@@ -1,4 +1,4 @@
-#include "LoggingHealthProbe.h"
+#include "logging/LoggingHealthProbe.h"
 
 #include <algorithm>
 #include <chrono>

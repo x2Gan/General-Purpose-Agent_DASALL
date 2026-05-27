@@ -1,5 +1,6 @@
 #pragma once
 
+#include <memory>
 #include <optional>
 #include <string>
 #include <utility>
@@ -25,6 +26,7 @@ struct HealthProbeRegistration {
   std::string probe_name;
   std::string probe_group;
   IHealthProbe* probe = nullptr;
+  std::shared_ptr<IHealthProbe> keepalive;
 
   [[nodiscard]] bool is_valid() const {
     return !probe_name.empty() && !probe_group.empty() && probe != nullptr;

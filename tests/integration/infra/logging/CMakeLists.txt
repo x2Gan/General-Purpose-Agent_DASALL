@@ -63,6 +63,12 @@ dasall_register_logging_integration_test(
 )
 
 dasall_register_logging_integration_test(
+  dasall_logging_health_probe_live_composition_test
+  LoggingHealthProbeLiveCompositionTest
+  LoggingHealthProbeLiveCompositionTest.cpp
+)
+
+dasall_register_logging_integration_test(
   dasall_log_query_integration_test
   LogQueryIntegrationTest
   LogQueryIntegrationTest.cpp

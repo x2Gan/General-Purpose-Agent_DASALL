@@ -2,6 +2,7 @@
 
 #include <cstddef>
 #include <map>
+#include <memory>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -136,6 +137,7 @@ class ProbeRegistry {
   struct ProbeEntry {
     ProbeDescriptor descriptor;
     IHealthProbe* probe = nullptr;
+    std::shared_ptr<IHealthProbe> keepalive;
   };
 
   using ProbeMap = std::map<std::string, ProbeEntry>;

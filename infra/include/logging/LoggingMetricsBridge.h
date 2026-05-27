@@ -178,6 +178,22 @@ class LoggingMetricsBridge {
 
   LoggingMetricsEmitResult emit(const LoggingMetricSignal& signal);
 
+  LoggingMetricsEmitResult record_write_accepted(std::int64_t ts_unix_ms);
+  LoggingMetricsEmitResult record_write_failed(LoggingErrorCode error_code,
+                                               std::int64_t ts_unix_ms,
+                                               std::string_view stage = "write");
+  LoggingMetricsEmitResult record_drop(LoggingErrorCode error_code,
+                                       std::int64_t ts_unix_ms,
+                                       std::string_view outcome = "degraded");
+  LoggingMetricsEmitResult record_queue_depth(std::uint32_t queue_depth,
+                                              std::int64_t ts_unix_ms,
+                                              std::string_view outcome = "success");
+  LoggingMetricsEmitResult record_flush_latency(
+      std::int64_t latency_ms,
+      std::int64_t ts_unix_ms,
+      std::string_view outcome,
+      std::optional<LoggingErrorCode> logging_error_code = std::nullopt);
+
   [[nodiscard]] bool is_degraded() const {
     return degraded_;
   }

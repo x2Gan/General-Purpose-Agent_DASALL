@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstddef>
+#include <cstdint>
 #include <memory>
 #include <optional>
 #include <string>
@@ -9,6 +10,8 @@
 #include "IInfrastructureService.h"
 #include "logging/ILogConfigurator.h"
 #include "logging/ILogger.h"
+#include "logging/LoggingHealthProbe.h"
+#include "logging/LoggingMetricsBridge.h"
 #include "logging/LoggingRecovery.h"
 #include "logging/LogTypes.h"
 #include "logging/RedactionFilter.h"
@@ -24,7 +27,8 @@ class ILogDispatchBackend {
   virtual LogWriteResult flush(const LogFlushDeadline& deadline) = 0;
 };
 
-class LoggingFacade final : public ILogger {
+class LoggingFacade final : public ILogger,
+                            public ILoggingHealthSignalProvider {
  public:
   LoggingFacade();
   explicit LoggingFacade(std::unique_ptr<ILogDispatchBackend> dispatch_backend);
@@ -34,8 +38,12 @@ class LoggingFacade final : public ILogger {
   InfraOperationResult init(const LogContext& context = {});
   InfraOperationResult stop();
 
+  void attach_metrics_bridge(std::shared_ptr<LoggingMetricsBridge> metrics_bridge,
+                             std::uint32_t queue_high_watermark);
+
   LogWriteResult log(const LogEvent& event) override;
   LogWriteResult flush(const LogFlushDeadline& deadline) override;
+  [[nodiscard]] LoggingHealthSample sample(std::int64_t timeout_ms) override;
   void set_level(LogLevel level) override;
   InfraOperationResult apply_config(const LoggingConfig& config);
 
@@ -117,6 +125,13 @@ class LoggingFacade final : public ILogger {
   [[nodiscard]] static bool is_enabled_for_level(LogLevel event_level,
                                                  LogLevel current_level);
   [[nodiscard]] LogEvent enrich_event(const LogEvent& event) const;
+    [[nodiscard]] static std::int64_t current_time_unix_ms();
+    [[nodiscard]] static std::int64_t current_steady_time_ms();
+    [[nodiscard]] std::uint32_t current_queue_depth() const;
+    [[nodiscard]] std::uint64_t current_dropped_total() const;
+    [[nodiscard]] static LoggingErrorCode logging_error_code_for(
+      const LogWriteResult& result,
+      LoggingErrorCode fallback = LoggingErrorCode::SinkIo);
   [[nodiscard]] LogWriteResult handle_recovery_result(
       const LoggingRecoveryResult& result,
       const LogEvent& primary_event);
@@ -124,6 +139,17 @@ class LoggingFacade final : public ILogger {
   [[nodiscard]] LogWriteResult handle_dispatch_failure(
       const LogEvent& formatted_event,
       const LogWriteResult& dispatch_result);
+    [[nodiscard]] std::int64_t metric_timestamp_for(const LogEvent& event) const;
+    void note_unrecoverable_failure();
+    void record_write_accepted(std::int64_t ts_unix_ms);
+    void record_write_failed(LoggingErrorCode error_code,
+                 std::int64_t ts_unix_ms,
+                 std::string_view stage);
+    void record_drop(std::int64_t ts_unix_ms, std::string_view outcome);
+    void record_queue_depth(std::int64_t ts_unix_ms, std::string_view outcome);
+    void record_flush_latency(std::int64_t started_at_steady_ms,
+                const LogWriteResult& result);
+    void reset_runtime_health_state();
   void reset_recovery_path();
 
   LifecycleState lifecycle_state_ = LifecycleState::Created;
@@ -134,9 +160,13 @@ class LoggingFacade final : public ILogger {
   std::unique_ptr<ILogDispatchBackend> dispatch_backend_;
   std::shared_ptr<ILogRecoverySink> fallback_sink_;
   std::unique_ptr<LoggingRecovery> recovery_;
+  std::shared_ptr<LoggingMetricsBridge> metrics_bridge_;
   bool force_format_failure_for_tests_ = false;
   std::optional<LogEvent> last_dispatched_event_;
   std::size_t dispatched_record_count_ = 0;
+  std::uint32_t queue_high_watermark_ = 1U;
+  std::uint64_t unrecoverable_failure_total_ = 0U;
+  std::uint64_t last_observed_dropped_total_ = 0U;
 };
 
 }  // namespace dasall::infra::logging

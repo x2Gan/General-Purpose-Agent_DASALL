@@ -1075,6 +1075,12 @@ dasall_register_logging_unit_test(
 )
 
 dasall_register_logging_unit_test(
+  dasall_logging_metrics_bridge_main_chain_unit_test
+  LoggingMetricsBridgeMainChainTest
+  logging/LoggingMetricsBridgeMainChainTest.cpp
+)
+
+dasall_register_logging_unit_test(
   dasall_logging_health_probe_unit_test
   LoggingHealthProbeTest
   logging/LoggingHealthProbeTest.cpp

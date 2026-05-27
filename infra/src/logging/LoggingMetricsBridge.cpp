@@ -1,4 +1,4 @@
-#include "LoggingMetricsBridge.h"
+#include "logging/LoggingMetricsBridge.h"
 
 #include <array>
 #include <string>
@@ -163,6 +163,75 @@ LoggingMetricsEmitResult LoggingMetricsBridge::emit(
       .status = status,
       .metrics_error_code = std::nullopt,
   };
+}
+
+LoggingMetricsEmitResult LoggingMetricsBridge::record_write_accepted(
+    std::int64_t ts_unix_ms) {
+  return emit(LoggingMetricSignal{
+      .kind = LoggingMetricKind::WriteTotal,
+      .value = 1.0,
+      .ts_unix_ms = ts_unix_ms,
+      .stage = std::string("write"),
+      .outcome = std::string("success"),
+      .logging_error_code = std::nullopt,
+  });
+}
+
+LoggingMetricsEmitResult LoggingMetricsBridge::record_write_failed(
+    LoggingErrorCode error_code,
+    std::int64_t ts_unix_ms,
+    std::string_view stage) {
+  return emit(LoggingMetricSignal{
+      .kind = LoggingMetricKind::WriteFailTotal,
+      .value = 1.0,
+      .ts_unix_ms = ts_unix_ms,
+      .stage = std::string(stage),
+      .outcome = std::string("failure"),
+      .logging_error_code = error_code,
+  });
+}
+
+LoggingMetricsEmitResult LoggingMetricsBridge::record_drop(
+    LoggingErrorCode error_code,
+    std::int64_t ts_unix_ms,
+    std::string_view outcome) {
+  return emit(LoggingMetricSignal{
+      .kind = LoggingMetricKind::DropTotal,
+      .value = 1.0,
+      .ts_unix_ms = ts_unix_ms,
+      .stage = std::string("queue"),
+      .outcome = std::string(outcome),
+      .logging_error_code = error_code,
+  });
+}
+
+LoggingMetricsEmitResult LoggingMetricsBridge::record_queue_depth(
+    std::uint32_t queue_depth,
+    std::int64_t ts_unix_ms,
+    std::string_view outcome) {
+  return emit(LoggingMetricSignal{
+      .kind = LoggingMetricKind::QueueDepth,
+      .value = static_cast<double>(queue_depth),
+      .ts_unix_ms = ts_unix_ms,
+      .stage = std::string("queue"),
+      .outcome = std::string(outcome),
+      .logging_error_code = std::nullopt,
+  });
+}
+
+LoggingMetricsEmitResult LoggingMetricsBridge::record_flush_latency(
+    std::int64_t latency_ms,
+    std::int64_t ts_unix_ms,
+    std::string_view outcome,
+    std::optional<LoggingErrorCode> logging_error_code) {
+  return emit(LoggingMetricSignal{
+      .kind = LoggingMetricKind::FlushLatencyMs,
+      .value = static_cast<double>(std::max<std::int64_t>(0, latency_ms)),
+      .ts_unix_ms = ts_unix_ms,
+      .stage = std::string("flush"),
+      .outcome = std::string(outcome),
+      .logging_error_code = std::move(logging_error_code),
+  });
 }
 
 bool LoggingMetricsBridge::ensure_meter_ready(

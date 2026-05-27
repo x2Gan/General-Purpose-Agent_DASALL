@@ -1,3 +1,43 @@
+## 记录 #841
+
+- 日期：2026-05-27
+- 阶段：infrastructure / logging metrics and health main chain
+- 任务：推进 `INF-LOG-FIX-007`，把 `LoggingMetricsBridge` 与 `LoggingHealthProbe` 接入 logging 主链与 live composition health monitor
+- 状态：已完成（L2 build-tree wiring / live composition health evidence 已闭合；本轮不使用 qemu / kvm）
+
+### 执行前提
+
+1. 前置 blocker `BLK-INF-LOG-006` 已在上一轮闭合，五个 frozen metric family、label cardinality、`queue_high_watermark = max(1, active_logging_config.queue_size)` 与 `unrecoverable_failure_total >= 1` 阈值已经进入 SSOT / 详设，不再在本轮重新定义。
+2. 近端核验确认：`LoggingMetricsBridge` 与 `LoggingHealthProbe` 仍停留在独立骨架，`compose_live_observability()` 尚未注册 logging probe，`LoggingFacade` 也还没有把 accepted/drop/failure/flush 结果写回 frozen metrics family。
+3. 现有 focused 约束还要求保留 `compose_live_observability()` 返回的 concrete `LoggingFacade` 类型，因此本轮优先把 metrics/health state 接入 facade 本体，而不是再包一层 logger wrapper。
+
+### 改动
+
+1. 公开 `infra/include/logging/LoggingMetricsBridge.h` 与 `infra/include/logging/LoggingHealthProbe.h`，并在 `LoggingMetricsBridge` 上补齐 `record_*()` helper，保证主链只沿五个 frozen metric family 发射样本。
+2. 更新 `infra/src/logging/LoggingFacade.h` 与 `infra/src/logging/LoggingFacade.cpp`，让 facade 同时充当 `ILoggingHealthSignalProvider`，把 accepted / dropped / failed / flushed / queue_depth 主链结果接入 `LoggingMetricsBridge`，并向 `LoggingHealthProbe` 暴露 `queue_depth`、`dropped_total_delta`、`fallback_active`、`recovery_degraded`、`unrecoverable_failure_total` 与 `metrics_bridge_degraded`。
+3. 更新 `infra/include/health/IHealthMonitor.h`、`infra/src/health/ProbeRegistry.h` 与 `infra/src/health/ProbeRegistry.cpp`，给 `HealthProbeRegistration` 增加 `keepalive` 所有权承载，避免 live composition 注册 probe 时只剩裸指针生命周期。
+4. 更新 `infra/src/ObservabilityLiveComposition.cpp`，在 logger、metrics provider 与 health monitor 初始化成功后 fail-closed 注册 `probe_name=infra.logging.pipeline`、`probe_group=readiness` 的 logging probe，并把 queue high-watermark 固定映射到 facade health sample。
+5. 新增 `tests/unit/infra/logging/LoggingMetricsBridgeMainChainTest.cpp` 与 `tests/integration/infra/logging/LoggingHealthProbeLiveCompositionTest.cpp`，扩展 `tests/integration/infra/health/InfraHealthCadenceIntegrationTest.cpp`，同时更新 `tests/unit/infra/CMakeLists.txt` 与 `tests/integration/infra/logging/CMakeLists.txt` 注册新的 focused test target。
+6. 新增 `docs/todos/infrastructure/deliverables/INF-LOG-FIX-007-logging-metrics-health-mainchain收口.md`，并回写系统总账 `INF-LOG-FIX-007` 状态。
+
+### 验证
+
+1. `Build_CMakeTools(buildTargets=["dasall_logging_metrics_bridge_main_chain_unit_test","dasall_logging_health_probe_live_composition_test","dasall_infra_health_cadence_integration_test"])`
+   - 结果：通过。
+2. `RunCtest_CMakeTools(tests=["LoggingMetricsBridgeMainChainTest","LoggingHealthProbeLiveCompositionTest","InfraHealthCadenceIntegrationTest"])`
+   - 结果：命中仓库既有泛化 `生成失败`。
+3. fallback 直接执行：
+   - `./build/vscode-linux-ninja/tests/unit/infra/dasall_logging_metrics_bridge_main_chain_unit_test`
+   - `./build/vscode-linux-ninja/tests/integration/infra/logging/dasall_logging_health_probe_live_composition_test`
+   - `./build/vscode-linux-ninja/tests/integration/infra/health/dasall_infra_health_cadence_integration_test`
+   - 结果：3/3 通过；stderr 中出现的 degraded advisory / structured fallback record 为预期证据，不是测试失败。
+
+### 结果
+
+1. `INF-LOG-FIX-007` 已闭合：logging 主链 accepted / dropped / failed / flushed / queue_depth 结果现已稳定写入五个 frozen metrics family，`compose_live_observability()` 也已把 `infra.logging.pipeline` 注册进 `HealthMonitorFacade`。
+2. sink unavailable 与 queue saturation 现在都会在 health snapshot 中退化为 `Degraded`，而非静默吞掉；只有 unrecoverable failure 才会提升为 `Unhealthy`，继续沿 blocker 冻结后的 owner 阈值执行。
+3. 本轮仍不把结论外推到 qemu / kvm；installed/package authoritative logging proof 继续留给 `INF-LOG-FIX-010` / `INF-LOG-FIX-011`，但后续 owner 验收仍以 installed authoritative evidence 为准。
+
 ## 记录 #840
 
 - 日期：2026-05-27

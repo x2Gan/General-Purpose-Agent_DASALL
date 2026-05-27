@@ -86,6 +86,7 @@ ProbeRegistryRegisterResult ProbeRegistry::register_probe(
                    ProbeEntry{
                        .descriptor = descriptor,
                        .probe = registration.probe,
+                       .keepalive = registration.keepalive,
                    });
   return ProbeRegistryRegisterResult::success(std::move(descriptor));
 }

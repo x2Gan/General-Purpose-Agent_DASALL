@@ -360,6 +360,8 @@ set(DASALL_INFRA_PUBLIC_HEADERS
   include/logging/ILogSink.h
   include/logging/ILogger.h
   include/logging/FileLogSink.h
+  include/logging/LoggingHealthProbe.h
+  include/logging/LoggingMetricsBridge.h
   include/logging/LoggingErrors.h
   include/logging/LogTypes.h
   include/logging/RedactionFilter.h

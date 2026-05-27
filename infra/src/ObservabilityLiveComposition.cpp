@@ -14,6 +14,8 @@
 #include "logging/FileLogSink.h"
 #include "logging/LoggingConfigAdapter.h"
 #include "logging/LoggingFacade.h"
+#include "logging/LoggingHealthProbe.h"
+#include "logging/LoggingMetricsBridge.h"
 #include "logging/SinkDispatcher.h"
 #include "metrics/MetricsFacade.h"
 #include "tracing/TraceConfig.h"
@@ -412,12 +414,46 @@ ObservabilityLiveCompositionResult compose_live_observability(
     };
   }
 
+      auto health_monitor = std::make_shared<HealthMonitorFacade>();
+      auto logging_metrics_bridge = std::make_shared<logging::LoggingMetricsBridge>(
+        metrics_provider,
+        options.profile_id);
+      logger->attach_metrics_bridge(
+        logging_metrics_bridge,
+        active_logging_config.async_enabled
+          ? std::max<std::uint32_t>(1U, active_logging_config.queue_size)
+          : 1U);
+
+      auto logging_probe = std::make_shared<logging::LoggingHealthProbe>(
+        std::shared_ptr<logging::ILoggingHealthSignalProvider>(logger, logger.get()));
+      const auto registration_result = health_monitor->register_probe(
+        HealthProbeRegistration{
+          .probe_name = std::string(logging::kLoggingHealthProbeName),
+          .probe_group = std::string(logging::kLoggingHealthProbeGroup),
+          .probe = logging_probe.get(),
+          .keepalive = logging_probe,
+        });
+      if (!registration_result.ok) {
+      return ObservabilityLiveCompositionResult{
+        .logger = nullptr,
+        .audit_logger = nullptr,
+        .metrics_provider = nullptr,
+        .tracer_provider = nullptr,
+        .health_monitor = nullptr,
+        .active_logging_config = std::nullopt,
+        .error = std::string("logging health probe registration failed: ") +
+             (registration_result.error.has_value()
+                ? registration_result.error->details.message
+                : std::string("infra.health.register_probe")),
+      };
+      }
+
   return ObservabilityLiveCompositionResult{
       .logger = logger,
       .audit_logger = audit_logger,
       .metrics_provider = metrics_provider,
       .tracer_provider = tracer_provider,
-      .health_monitor = std::make_shared<HealthMonitorFacade>(),
+        .health_monitor = health_monitor,
       .active_logging_config = active_logging_config,
       .error = {},
   };
