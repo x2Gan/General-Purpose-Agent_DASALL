@@ -1098,6 +1098,18 @@ dasall_register_logging_unit_test(
   logging/LogQueryServiceTest.cpp
 )
 
+dasall_register_logging_unit_test(
+  dasall_log_query_service_persisted_reader_unit_test
+  LogQueryServicePersistedReaderTest
+  logging/LogQueryServicePersistedReaderTest.cpp
+)
+
+dasall_register_logging_unit_test(
+  dasall_log_retention_policy_unit_test
+  LogRetentionPolicyTest
+  logging/LogRetentionPolicyTest.cpp
+)
+
 dasall_register_audit_unit_test(
   dasall_audit_logger_interface_unit_test
   AuditInterfaceCompileTest

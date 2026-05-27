@@ -116,6 +116,7 @@ set(DASALL_INFRA_METRICS_PRIVATE_HEADERS
 set(DASALL_INFRA_LOGGING_SOURCES
   src/logging/AsyncQueueController.cpp
   src/logging/AuditLinkAdapter.cpp
+  src/logging/FileLogReader.cpp
   src/logging/FileLogSink.cpp
   src/logging/LoggingConfigAdapter.cpp
   src/logging/LoggingFacade.cpp

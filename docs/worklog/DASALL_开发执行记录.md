@@ -1,3 +1,50 @@
+## 记录 #845
+
+- 日期：2026-05-27
+- 阶段：infrastructure / logging persisted query artifact implementation
+- 任务：推进 `INF-LOG-FIX-009`，闭合 `LogQueryService` 的 persisted reader、local artifact/index、retention cleanup 与 redaction-at-query 实现
+- 状态：已完成（L2/L3 build-tree persisted reader / artifact / cleanup evidence 已闭合；本轮不使用 qemu / kvm）
+
+### 执行前提
+
+1. 前置 blocker `BLK-INF-LOG-008` 已在上一轮闭合，query artifact 的 default-disabled/admin-only、owner-safe metadata index、retention cleanup 与 redaction-at-query 已进入 SSOT 与 logging 详设，不再在本轮重新定义。
+2. 近端核验确认：`LogQueryService` 当时仍只返回 artifact summary，`ILogQueryRecordReader` 也还停留在 injected in-memory seam；真正缺口在 persisted reader、artifact materialization、metadata index 与 cleanup，而不是 selector / allow proof 形状本身。
+3. `FileLogSink` 的当前 owner 行为是只把 `StructuredFormatter` 产出的 `event.message` 落盘，因此本轮必须按 `dasall.logging.event.v1` JSON-line 解析真实 `runtime.log` / rotation family，而不是依赖隐藏的 richer sink-side state。
+
+### 改动
+
+1. 新增 `infra/src/logging/FileLogReader.h` 与 `infra/src/logging/FileLogReader.cpp`，实现 `ILogQueryRecordReader` 的文件落盘读取版本：按 `runtime.log` + rotation family 顺序扫描本地 redacted JSON-line，解析 `trace_id/session_id`、message、attrs 与时间窗，并保持 selector 只允许精确 `trace_id` / `session_id`。
+2. 更新 `infra/src/logging/LogQueryService.h` 与 `infra/src/logging/LogQueryService.cpp`，新增 `LogQueryArtifactIndexEntry`、`LogRetentionPolicy` 与 artifact/index 选项；`query()` 现在会在 allow proof 与 `enable_diag_pull` gate 通过后 materialize 本地 artifact JSON、追加 owner-safe metadata JSONL index，并在 publish 前对 matched records 再走一次 `RedactionFilter`。
+3. `LogRetentionPolicy::apply()` 现按 `created_at` retention window 与 max artifact count 清理 query artifact root 中过期或溢出的 artifact 文件，但明确不触碰 primary runtime log、rotation family、audit owner persistence 或 diagnostics retained snapshot store。
+4. 新增 `tests/unit/infra/logging/LogQueryServicePersistedReaderTest.cpp`、`tests/unit/infra/logging/LogRetentionPolicyTest.cpp` 与 `tests/integration/infra/logging/LoggingDiagnosticsArtifactIntegrationTest.cpp`，并更新 `tests/unit/infra/CMakeLists.txt`、`tests/unit/CMakeLists.txt`、`tests/integration/infra/logging/CMakeLists.txt`、`tests/integration/CMakeLists.txt` 注册新的 focused gate；相邻回归继续重编 `LogQueryServiceTest` 与 `LogQueryIntegrationTest`。
+5. 更新 `docs/ssot/LoggingProductionAcceptanceMatrix.md`、`docs/architecture/DASALL_infra_logging模块详细设计.md`、`docs/todos/infrastructure/DASALL_infrastructure_logging组件专项TODO.md` 与系统总账，回写 `INF-LOG-FIX-009` 的 L2/L3 build-track closeout；新增 `docs/todos/infrastructure/deliverables/INF-LOG-FIX-009-log-query-persisted-reader-retention收口.md`，并扩展 `tests/contract/smoke/LoggingProductionAcceptanceContractTest.cpp` 扫描 009 closeout wording。
+
+### 验证
+
+1. `Build_CMakeTools(buildTargets=["dasall_log_query_service_persisted_reader_unit_test","dasall_log_retention_policy_unit_test","dasall_logging_diagnostics_artifact_integration_test"])`
+   - 结果：通过。
+2. `RunCtest_CMakeTools(tests=["LogQueryServicePersistedReaderTest","LogRetentionPolicyTest","LoggingDiagnosticsArtifactIntegrationTest"])`
+   - 结果：命中仓库既有泛化 `生成失败`。
+3. fallback 直接执行：
+   - `./build/vscode-linux-ninja/tests/unit/infra/dasall_log_query_service_persisted_reader_unit_test`
+   - `./build/vscode-linux-ninja/tests/unit/infra/dasall_log_retention_policy_unit_test`
+   - `./build/vscode-linux-ninja/tests/integration/infra/logging/dasall_logging_diagnostics_artifact_integration_test`
+   - 结果：3/3 通过。
+4. 邻近回归：`Build_CMakeTools(buildTargets=["dasall_log_query_service_unit_test","dasall_log_query_integration_test"])`
+   - 结果：通过。
+5. `RunCtest_CMakeTools(tests=["LogQueryServiceTest","LogQueryIntegrationTest"])`
+   - 结果：命中仓库既有泛化 `生成失败`。
+6. fallback 直接执行：
+   - `./build/vscode-linux-ninja/tests/unit/infra/dasall_log_query_service_unit_test`
+   - `./build/vscode-linux-ninja/tests/integration/infra/logging/dasall_log_query_integration_test`
+   - 结果：2/2 通过。
+
+### 结果
+
+1. `INF-LOG-FIX-009` 已闭合：query 现在可读取真实 `runtime.log` / rotation family，materialize 本地 artifact JSON 与 owner-safe metadata JSONL index，并在 publish 前再次执行 redaction-at-query。
+2. `LogRetentionPolicy` 已把 cleanup 边界锁在 query artifact root 内；cleanup 只删除过期或溢出的 query artifact，不会误伤 primary runtime log、rotation family、audit owner persistence 或 diagnostics retained snapshot store。
+3. 当前结论已到 L2/L3 build-tree persisted reader/index/materialization/cleanup evidence；跨子系统 e2e 与 installed/package authoritative evidence 继续留给后续 `INF-LOG-FIX-010` / `INF-LOG-FIX-011`。
+
 ## 记录 #844
 
 - 日期：2026-05-27

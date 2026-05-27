@@ -79,3 +79,9 @@ dasall_register_logging_integration_test(
   LogQueryIntegrationTest
   LogQueryIntegrationTest.cpp
 )
+
+dasall_register_logging_integration_test(
+  dasall_logging_diagnostics_artifact_integration_test
+  LoggingDiagnosticsArtifactIntegrationTest
+  LoggingDiagnosticsArtifactIntegrationTest.cpp
+)

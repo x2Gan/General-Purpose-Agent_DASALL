@@ -76,6 +76,11 @@ void test_ssot_matrix_freezes_backend_levels_and_artifacts() {
                 "retention cleanup",
                 "diag://infra/logging/query/<query_id>",
                 "不得删除或截断 primary runtime log、rotation family、audit owner persistence",
+                    "FileLogReader",
+                    "owner-safe metadata JSONL index",
+                    "LogQueryServicePersistedReaderTest",
+                    "LoggingDiagnosticsArtifactIntegrationTest",
+                    "LogRetentionPolicyTest",
           "不把 qemu / kvm 作为 logging owner 当前验收前置",
       },
       "LoggingProductionAcceptanceMatrix");
@@ -108,6 +113,9 @@ void test_logging_design_points_to_frozen_matrix_and_backend_policy() {
             "redaction-at-query",
             "owner-safe metadata index",
             "retention cleanup 只作用于 query artifact / index 自身",
+            "LogQueryService persisted reader / artifact index / retention 收口补充",
+            "owner-safe metadata JSONL",
+            "LogRetentionPolicy::apply()",
       },
       "logging detailed design");
 }
@@ -143,6 +151,9 @@ void test_system_gap_todo_marks_inf_log_fix_001_done_and_blocker_closed() {
             "BLK-INF-LOG-006（已闭合）",
             "BLK-INF-LOG-007（已闭合）",
             "BLK-INF-LOG-008（已闭合）",
+            "| INF-LOG-FIX-009 | Done |",
+            "FileLogReader::read_window()",
+            "owner-safe metadata index",
             "IAuditLogger::write_audit()",
             "default-disabled/admin-only",
             "redaction-at-query",

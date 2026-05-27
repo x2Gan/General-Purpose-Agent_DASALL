@@ -108,7 +108,7 @@ logging 组件目标固定为：
 3. 已有主流程与异常流程：正常路径 7 步、异常分类 4 类、恢复动作 3 类。
 4. 已有错误语义清单：LOG_E_QUEUE_FULL、LOG_E_SINK_IO、LOG_E_FORMAT_INVALID、LOG_E_CONFIG_INVALID。
 5. 已有目录与测试落点建议：infra/include/logging、infra/src/logging、tests/unit/infra/logging、tests/integration/infra/logging。
-6. 但仍缺 `LoggingHealthProbe` 状态 provider / 阈值实现与 `LogQueryService` 的本地索引/保留策略实现，尚未全量进入函数级实现。
+6. 当前不再缺 `LoggingHealthProbe` 或 `LogQueryService` 的本地索引/保留策略实现；剩余缺口已收敛到跨子系统 e2e / installed authoritative evidence，而不是 logging 核心构件本身尚未落盘。
 
 当前最小可执行粒度：接口/数据结构级（L2）。
 
@@ -128,7 +128,7 @@ logging 组件目标固定为：
 | RedactionFilter | logging 设计 6.2、6.3、6.9 | L2 | 脱敏职责、规则配置项、`dasall.logging.event.v1` 配套 deny-by-default pattern | 更丰富的规则 DSL/模式库定义 | 当前先保持 frozen key/message pattern 与 golden fixture，后续 DSL 扩展另开任务 |
 | LoggingMetricsBridge | logging 设计 6.2、6.10；metrics 设计 6.6.1、6.8.1 | L2 | 指标名清单、IMeter::record(MetricSample) 导出协议、MetricLabels 五元组与 non-recursive failure 语义已冻结 | health bridge 接口签名仍待 LOG-BLK-003 | 直接拆 bridge 骨架 + unit/contract 边界测试 |
 | LoggingHealthProbe | logging 设计 6.2、6.8、6.10.1；health 设计 6.5、6.6 | L2 | degraded 语义、`IHealthProbe`/`ProbeResult` 通用契约、descriptor 固定值 | logging 本地状态 provider 与阈值实现尚未落盘 | 直接拆 `LoggingHealthProbe` 骨架任务 |
-| LogQueryService | logging 设计 6.9、6.10.2、8.3；架构 13.3 | L2 | `LogQueryRequest` / `LogQueryAccessContext` / `LogQueryResult`、`enable_diag_pull` gate、local artifact 约束已冻结 | 本地索引增量维护、artifact retention/清理策略 | 直接拆 LogQueryService 骨架 + unit/integration 边界测试 |
+| LogQueryService | logging 设计 6.9、6.10.2、6.10.11、6.10.12、8.3；架构 13.3 | L3 | `LogQueryRequest` / `LogQueryAccessContext` / `LogQueryResult`、`enable_diag_pull` gate、local artifact 约束，以及 default-disabled/admin-only、redaction-at-query、owner-safe metadata index 已冻结 | 跨子系统 log caller wiring 与 installed authoritative evidence | 已闭合：`FileLogReader`、`LogQueryService` artifact/index、`LogRetentionPolicy` + focused unit/integration/tests |
 | tests/integration 注册点 | logging 设计 8.1、9.1；tests/CMakeLists.txt 现状 | L2 | tests 顶层 integration 拓扑、logging 组件用例与 `integration;logging` 标签均已落盘 | 后续场景扩展与聚合目标维护 | 沿既有目录与标签继续增量扩展 |
 
 ## 5. Design -> TODO 映射表
@@ -315,7 +315,7 @@ logging 组件目标固定为：
 1. logging 设计已明确接口名、对象字段、错误语义、主异常流程与目录落点。
 2. 当前仓库中 logging 已完成接口与对象冻结，后续重点转向 facade/dispatcher/queue/recovery 等骨架实现。
 3. tests 顶层 integration 已接入，且 logging 组件最小 integration smoke 已落盘；当前集成缺口已从“无用例”转为“后续场景扩展”。
-4. metrics/config/health 接入点已收敛到实现期，当前剩余缺口主要集中在 `LogQueryService` 的本地索引与保留策略，而不是通用接口签名缺失。
+4. metrics/config/health 与 `LogQueryService` persisted reader/index/retention 已全部收敛到实现期并落盘；当前剩余缺口主要集中在跨子系统 production logging gate 与 installed authoritative evidence，而不是 logging 核心构件缺失。
 5. ADR-005/006/007/008 对边界限制明确，禁止越权扩张。
 
 ### 11.3 当前最小可执行粒度
@@ -324,11 +324,11 @@ logging 组件目标固定为：
 
 ### 11.4 未达全量函数级的缺失信息
 
-1. LogQueryService 的本地索引增量维护与 artifact retention/清理策略实现。
-2. `LogQueryService` 当前仍通过 internal record reader 抽象承接本地扫描，尚未接入真实运行时索引或持久保留策略。
+1. 跨子系统 live composition 下的 owner-safe attrs/correlation matrix 与 queryability gate。
+2. installed/package authoritative logging evidence、proof schema 与 release handoff。
 
 ### 11.5 下一步建议
 
-1. 当前专项 TODO 已完成 001~019 的全部原子任务；若继续推进 logging 子域，应新开围绕 retention、真实索引或运行时 wiring 的后续原子任务，而不是回退已完成骨架。
+1. 当前专项 TODO 已完成 001~019 的全部原子任务，且 `INF-LOG-FIX-009` 已把 retention、真实 persisted reader 与本地 artifact/index 实现补齐；若继续推进 logging 子域，应新开围绕跨子系统 e2e 或 installed evidence 的后续原子任务，而不是回退已完成主链。
 2. `LOG-BLK-003`、`LOG-BLK-005` 已解阻且 `LOG-GATE-06` 已关闭；当前 logging 专项没有遗留 blocker。
 3. 后续若新增 logging integration 场景，应沿用 `tests/integration/infra/logging/` 与 `integration;logging` 标签，不再回退到顶层无组件归属的 smoke 用例。

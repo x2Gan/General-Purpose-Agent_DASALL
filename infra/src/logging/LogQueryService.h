@@ -1,11 +1,12 @@
 #pragma once
 
 #include <cstdint>
+#include <filesystem>
 #include <functional>
 #include <memory>
 #include <optional>
-#include <string>
 #include <string_view>
+#include <string>
 #include <vector>
 
 #include "InfraContext.h"
@@ -125,12 +126,66 @@ class ILogQueryRecordReader {
       std::int64_t end_ts_ms) = 0;
 };
 
+struct LogQueryArtifactIndexEntry {
+  std::string artifact_ref;
+  std::string artifact_file_name;
+  std::string query_id;
+  LogQuerySelectorKind selector_kind = LogQuerySelectorKind::Unspecified;
+  std::string selector_value;
+  std::string checksum;
+  std::uint32_t match_count = 0;
+  bool truncated = false;
+  std::int64_t created_at = 0;
+
+  [[nodiscard]] bool has_required_fields() const {
+    return !artifact_ref.empty() && !artifact_file_name.empty() && !query_id.empty() &&
+           selector_kind != LogQuerySelectorKind::Unspecified && !selector_value.empty() &&
+           !checksum.empty() && created_at > 0;
+  }
+};
+
+struct LogRetentionPolicyOptions {
+  std::uint32_t retention_days = 7;
+  std::size_t max_artifact_count = 128;
+
+  [[nodiscard]] bool has_consistent_values() const {
+    return retention_days > 0U && max_artifact_count > 0U;
+  }
+};
+
+class LogRetentionPolicy {
+ public:
+  explicit LogRetentionPolicy(LogRetentionPolicyOptions options = {});
+
+  [[nodiscard]] std::vector<LogQueryArtifactIndexEntry> apply(
+      const std::vector<LogQueryArtifactIndexEntry>& entries,
+      const std::filesystem::path& artifact_root,
+      std::int64_t now_ms) const;
+
+  [[nodiscard]] const LogRetentionPolicyOptions& options() const {
+    return options_;
+  }
+
+ private:
+  [[nodiscard]] bool should_expire(const LogQueryArtifactIndexEntry& entry,
+                                   std::int64_t now_ms) const;
+  void remove_artifact_if_present(const std::filesystem::path& artifact_root,
+                                  const LogQueryArtifactIndexEntry& entry) const;
+
+  LogRetentionPolicyOptions options_{};
+};
+
 struct LogQueryServiceOptions {
   bool enable_diag_pull = true;
   std::string artifact_namespace = std::string(kLogQueryArtifactNamespace);
+  std::filesystem::path artifact_root_dir = std::filesystem::path("logs") /
+                                            "query-artifacts";
+  std::string index_file_name = "query-index.jsonl";
+  LogRetentionPolicyOptions retention_policy{};
 
   [[nodiscard]] bool has_consistent_values() const {
-    return !artifact_namespace.empty();
+    return !artifact_namespace.empty() && !artifact_root_dir.empty() &&
+           !index_file_name.empty() && retention_policy.has_consistent_values();
   }
 };
 
@@ -152,14 +207,25 @@ class LogQueryService {
   [[nodiscard]] static bool matches_selector(const LogEvent& event,
                                             const LogQueryRequest& request);
   [[nodiscard]] std::string make_artifact_ref(const LogQueryRequest& request) const;
+  [[nodiscard]] std::filesystem::path resolve_artifact_root_path() const;
+  [[nodiscard]] std::filesystem::path resolve_index_path() const;
+  [[nodiscard]] static std::string make_artifact_file_name(const LogQueryRequest& request,
+                                                           std::int64_t created_at);
   [[nodiscard]] static std::string make_checksum(const LogQueryRequest& request,
                                                  std::uint32_t match_count,
                                                  bool truncated);
+  [[nodiscard]] LogQueryResult materialize_artifact(
+      const LogQueryRequest& request,
+      const std::vector<LogEvent>& matches,
+      std::uint32_t returned_match_count,
+      bool truncated,
+      std::int64_t created_at) const;
   [[nodiscard]] static std::int64_t default_now_ms();
 
   std::shared_ptr<ILogQueryRecordReader> record_reader_;
   LogQueryServiceOptions options_;
   ClockNowMs clock_now_ms_;
+  LogRetentionPolicy retention_policy_;
 };
 
 }  // namespace dasall::infra::logging
