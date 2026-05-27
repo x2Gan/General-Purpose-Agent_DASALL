@@ -1,3 +1,37 @@
+## 记录 #844
+
+- 日期：2026-05-27
+- 阶段：infrastructure / logging query artifact retention and admin boundary freeze
+- 任务：先行关闭 `BLK-INF-LOG-008`，冻结 `INF-LOG-FIX-009` 所需的 query artifact default-disabled/admin-only、retention cleanup 与 redaction-at-query 边界
+- 状态：已完成（L1 design / SSOT freeze 已闭合；本轮不使用 qemu / kvm）
+
+### 执行前提
+
+1. 用户要求继续按 `project-implementation-cycle` 串行推进 `INF-LOG-FIX-009`，若存在前置 BLOCK 则需先完成 BLOCK 解组原子任务并单独提交推送。
+2. 近端核验确认：`LogQueryService` 当前只有 `ILogQueryRecordReader` 注入骨架，既没有 persisted reader、artifact materialization，也没有 retention cleanup；与此同时，`docs/ssot/LoggingProductionAcceptanceMatrix.md` 与 logging 详设还没有把 query artifact 的 default-disabled/admin-only、owner-safe metadata index 和 redaction-at-query 写成正式 owner 结论。
+3. 既有 diagnostics 证据已经把 retained snapshot 与 daemon `diag_disabled` admin boundary 分层冻结到 `INF-FIX-002`，因此本轮 blocker 可以直接复用那套 owner boundary，不需要提前改 daemon / CLI command surface。
+
+### 改动
+
+1. 更新 `docs/ssot/LoggingProductionAcceptanceMatrix.md`，新增 `6.8 BLK-INF-LOG-008 query artifact retention / admin boundary / redaction-at-query freeze`，正式冻结 query artifact 的 default-disabled/admin-only 口径、本地 artifact/index 边界、redaction-at-query 与 retention cleanup 不触碰 primary runtime log / audit persistence 的规则。
+2. 更新 `docs/architecture/DASALL_infra_logging模块详细设计.md`，新增 `6.10.11 LogQueryService persisted artifact / retention / admin boundary 冻结补充`，把 `diag://infra/logging/query/<query_id>` 继续限定为 diagnostics local artifact 引用，并写明 owner-safe metadata index、retention cleanup 与 redaction-at-query 的 build-track边界。
+3. 更新 `docs/todos/DASALL_子系统查漏补缺专项记录.md`，将 `BLK-INF-LOG-008` 标记为 Closed，并把 `INF-LOG-FIX-009` 行内的代码目标修正为现有真实路径 `infra/src/logging/LogQueryService.h`，同时显式标注 blocker 已闭合。
+4. 更新 `tests/contract/smoke/LoggingProductionAcceptanceContractTest.cpp`，让 acceptance contract 直接扫描 `default-disabled/admin-only`、`redaction-at-query`、`retention cleanup`、`diag://infra/logging/query/<query_id>` 以及系统总账中 `BLK-INF-LOG-008` 的 Closed 状态。
+5. 新增 `docs/todos/infrastructure/deliverables/BLK-INF-LOG-008-log-query-retention-admin-boundary冻结.md`，沉淀本轮 blocker closeout、本地证据、与 `INF-FIX-002` 的 admin boundary 对齐点和非外推边界。
+
+### 验证
+
+1. `Build_CMakeTools(buildTargets=["dasall_logging_production_acceptance_contract_test"])`
+   - 结果：待本轮 blocker 修改后执行。
+2. `RunCtest_CMakeTools(tests=["LoggingProductionAcceptanceContractTest"])`
+   - 结果：预期仍命中仓库既有泛化 `生成失败`，因此 authoritative evidence 继续采用 direct-binary fallback。
+
+### 结果
+
+1. `BLK-INF-LOG-008` 已解阻：`INF-LOG-FIX-009` 现已具备正式 SSOT 可依赖的 query artifact default-disabled/admin-only、owner-safe metadata index、retention cleanup 与 redaction-at-query 边界，不再需要在实现轮次里临时决定 cleanup 能不能碰 primary runtime log，或 query artifact 是否可以绕过二次脱敏。
+2. `diag://infra/logging/query/<query_id>` 被重新固定为 diagnostics local artifact 引用，logging 侧后续只需要补 persisted reader、artifact materialization、metadata index 与 cleanup 实现，而不是再重写 owner boundary。
+3. 本轮结论仍只到 L1 design / SSOT freeze；真正的 query artifact build-tree persisted reader/index/materialization/cleanup evidence 继续留给下一轮 `INF-LOG-FIX-009`。
+
 ## 记录 #843
 
 - 日期：2026-05-27

@@ -473,6 +473,17 @@ key 域冻结规则：
 6. `SinkDispatcher::select_route()` 后续只允许根据 `category==audit` 或完整 audit anchor attrs 做 route 判定；route selection 可以消费 `audit_ref_pending`/`evidence_ref` 这些 frozen anchor，但不能据此反向拼装 audit payload，更不能把 route 语义扩写成 audit persistence 已完成。
 7. `LoggingFacade::log()` 的 build-track 实现现已固定为：ordinary log 先完成 `enrich -> redact -> format`，随后在 dispatch 前对 high-risk event fail-closed 执行 `IAuditLogger::write_audit()` handoff；`compose_live_observability()` 负责 attach concrete audit owner。`AuditLinkAdapter` 与 `SinkDispatcher` 继续只承担 correlation attrs 与 route 选择，不接管 audit payload persistence。
 
+### 6.10.11 LogQueryService persisted artifact / retention / admin boundary 冻结补充
+
+`BLK-INF-LOG-008` 的真实缺口不是 `LogQueryService` 完全不存在，而是 query artifact 的 default-disabled/admin-only 口径、retention cleanup 边界，以及 redaction-at-query 还没有被写成 owner-safe 设计结论。当前轮次冻结如下：
+
+1. query artifact surface 继续 default-disabled/admin-only：`LogQueryService` 只接受来自 diagnostics/local artifact consumer 的显式调用，且调用方必须同时满足 `infra.logging.export.enable_diag_pull == true` 与 `PolicyDecision::Allow` 的完整 allow proof。daemon / CLI / installed command surface 若未显式启用，应继续返回 default-disabled/admin boundary，而不是把未开放 surface 混写成 query failure。
+2. persisted reader 只允许读取本地 redacted runtime log 与同目录 rotation family；首版 selector 仍固定为精确 `trace_id` / `session_id` + 有序时间窗，不新增全文检索、任意 attr 扫描、cursor DSL、remote upload 或跨模块二次授权。
+3. `diag://infra/logging/query/<query_id>` 仍只是 diagnostics local artifact 引用；build-track 允许 materialize 本地 artifact 文件与 owner-safe metadata index，但 index 只允许保存 `artifact_ref/query_id/selector_kind/selector_value/checksum/match_count/truncated/created_at` 这类摘要字段，不得额外缓存 raw record body、未脱敏 attrs 副本或 audit owner payload。
+4. redaction-at-query 在本轮正式冻结：query artifact materialization 与 index write 必须对 matched record 再执行一次 redaction，保证 `message`、attrs，以及 `evidence_ref` / `audit_*` allowlist 字段中若命中 logging 文本模式，仍保持 redacted，而不是因为它们来自 persisted log 或 allowlist 就被豁免。
+5. retention cleanup 只作用于 query artifact / index 自身：允许按 `created_at` retention window 与 max artifact count 清理过期 artifact 与陈旧 index entry，但不得删除、截断或重写 primary runtime log、rotation family、audit owner persistence 或 diagnostics retained snapshot store。
+6. `INF-LOG-FIX-009` 的 focused build-track 证据后续固定为 `LogQueryServicePersistedReaderTest`、`LoggingDiagnosticsArtifactIntegrationTest` 与 `LogRetentionPolicyTest`；本轮 blocker 只闭合 L1 design / SSOT freeze，不把 default-disabled/admin-only 口径外推成 query artifact 已实现。
+
 ---
 
 ## 7. Design -> Build 映射（建议级）
