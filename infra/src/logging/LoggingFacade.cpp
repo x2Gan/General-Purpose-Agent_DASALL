@@ -11,6 +11,7 @@ namespace dasall::infra::logging {
 namespace {
 
 constexpr std::string_view kLoggingFacadeSourceRef = "LoggingFacade";
+constexpr std::uint32_t kLoggingFacadeStopFlushTimeoutMs = 500;
 
 std::unique_ptr<ILogDispatchBackend> make_default_dispatch_backend() {
   return std::make_unique<SinkDispatcher>();
@@ -57,6 +58,16 @@ InfraOperationResult LoggingFacade::init(const LogContext& context) {
 InfraOperationResult LoggingFacade::stop() {
   if (lifecycle_state_ != LifecycleState::Initialized) {
     return invalid_transition("stop", "initialized");
+  }
+
+  const auto flush_result = dispatch_backend_->flush(
+      LogFlushDeadline{.timeout_ms = kLoggingFacadeStopFlushTimeoutMs});
+  if (!flush_result.ok) {
+    return InfraOperationResult::failure(
+        flush_result.result_code,
+        "logging facade stop() could not drain the logging queue before the shutdown deadline",
+        "logging.stop",
+        std::string(kLoggingFacadeSourceRef));
   }
 
   lifecycle_state_ = LifecycleState::Stopped;

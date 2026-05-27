@@ -83,6 +83,10 @@ void test_logging_facade_enriches_context_on_happy_path() {
   const auto flush_result = facade.flush(LogFlushDeadline{.timeout_ms = 250});
   assert_true(flush_result.ok,
               "logging facade should expose a working flush outlet after init");
+
+  const auto stop_result = facade.stop();
+  assert_true(stop_result.ok,
+              "logging facade should stop cleanly after the queue has already been drained");
 }
 
 void test_logging_facade_validates_input_and_applies_level_filter() {

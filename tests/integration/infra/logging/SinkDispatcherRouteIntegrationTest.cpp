@@ -8,6 +8,7 @@
 #include <string>
 
 #include "logging/FileLogSink.h"
+#include "logging/ILogger.h"
 #include "logging/SinkDispatcher.h"
 #include "support/TestAssertions.h"
 
@@ -105,6 +106,10 @@ void test_sink_dispatcher_routes_runtime_and_audit_events_to_distinct_file_sinks
   const auto audit_result = dispatcher.dispatch(audit_event);
   assert_true(runtime_result.ok && audit_result.ok,
               "SinkDispatcherRouteIntegrationTest should persist both runtime and audit events when route-specific sinks are configured");
+  const auto flush_result = dispatcher.flush(
+      dasall::infra::logging::LogFlushDeadline{.timeout_ms = 500});
+  assert_true(flush_result.ok,
+              "SinkDispatcherRouteIntegrationTest should flush the queued runtime and audit records through the worker-backed dispatcher");
   assert_true(dispatcher.last_route() == SinkRoute::Audit,
               "SinkDispatcherRouteIntegrationTest should still report the audit route for the last routed record");
   assert_equal(1,
@@ -113,6 +118,9 @@ void test_sink_dispatcher_routes_runtime_and_audit_events_to_distinct_file_sinks
   assert_equal(1,
                static_cast<int>(dispatcher.dispatched_record_count(SinkRoute::Audit)),
                "SinkDispatcherRouteIntegrationTest should count one audit record on the audit route");
+  assert_equal(0,
+               static_cast<int>(dispatcher.queue_depth()),
+               "SinkDispatcherRouteIntegrationTest should leave no queued or in-flight records after flush drains the worker");
   assert_true(fs::exists(runtime_path) && fs::exists(audit_path),
               "SinkDispatcherRouteIntegrationTest should materialize both configured route files");
 

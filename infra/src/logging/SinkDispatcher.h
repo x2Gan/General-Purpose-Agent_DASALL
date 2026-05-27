@@ -20,6 +20,7 @@ struct SinkDispatcherOptions {
 class SinkDispatcher final : public ILogDispatchBackend {
  public:
   SinkDispatcher();
+  ~SinkDispatcher() override;
   explicit SinkDispatcher(AsyncQueueOptions queue_options);
   explicit SinkDispatcher(SinkDispatcherOptions options);
 

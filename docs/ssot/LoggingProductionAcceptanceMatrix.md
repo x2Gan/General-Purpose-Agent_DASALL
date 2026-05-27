@@ -88,7 +88,7 @@
 | INF-LOG-FIX-001 | acceptance matrix、backend/path policy、gate 表、non-extrapolation | 设计冻结，不改 production code | `LoggingProductionAcceptanceContractTest` | L1，无 installed artifact |
 | INF-LOG-FIX-002 | redaction schema、structured field schema | `StructuredFormatter`、`RedactionFilter`、`LoggingFacade` 主链 | formatter/filter/facade redaction tests | L2 focused evidence |
 | INF-LOG-FIX-003 | primary sink/rotation/install path policy | `FileLogSink`、`SinkDispatcher`、CMake target | file sink / route / failure injection tests | L2/L3 build-tree log file |
-| INF-LOG-FIX-004 | async queue/backpressure/flush deadline policy | `AsyncQueueController`、`LoggingFacade::flush()` | worker/deadline/backpressure tests | L2/L3 build-tree queue/flush evidence |
+| INF-LOG-FIX-004 | async queue/backpressure/flush deadline policy | `AsyncQueueController`、`SinkDispatcher`、`LoggingFacade::flush()/stop()` | worker/deadline/backpressure tests | L2/L3 build-tree queue/flush evidence |
 | INF-LOG-FIX-005 | config key SSOT 与 live projection | `LoggingConfigAdapter`、live composition wiring | strict parse + live composition config tests | L3 live composition evidence |
 | INF-LOG-FIX-006 | recovery advisory/fallback schema | `LoggingRecovery`、sink/queue failure wiring | recovery/fallback/failure signal tests | L3 degraded/fallback evidence |
 | INF-LOG-FIX-007 | metric family 与 health threshold | `LoggingMetricsBridge`、`LoggingHealthProbe` | metrics/health/live composition tests | L3 health/metric evidence |
@@ -117,6 +117,15 @@
 4. `SinkDispatcher` 现已支持按 `SinkRoute` 注入 basic/audit sinks，并在保留 queue bookkeeping 的同时把 routed event 实际写入对应 file sink；未注入 sink 时保持 skeleton 行为，不把默认测试路径静默外推为 production-ready。
 5. `INF-LOG-GATE-003` 在本轮新增 focused 证据固定为 `FileLogSinkTest`、`SinkDispatcherRouteIntegrationTest` 与 `LoggingSinkFailureInjectionTest`；它们共同证明 structured/redacted event 可在 build-tree 临时目录落盘、rotation 可复验、显式不可写路径会 fail-closed 上报。
 6. 本轮结论仍停留在 L2/L3 build-tree evidence：已闭合 sink adapter、rotation 与 failure injection 行为，但 async worker、flush deadline、live composition config 与 installed package proof 继续留给 `INF-LOG-FIX-004~011`。
+
+### 6.3 INF-LOG-FIX-004 async worker / backpressure / flush deadline closeout
+
+1. `AsyncQueueController` 现已从纯 bookkeeping 升级为 deterministic single-worker queue：支持显式 `start()` / `stop()`、single worker drain、flush deadline 等待，以及 `processed_total`、`blocked_write_attempt_total`、`dropped_total`、`flush_timeout_total` 等单调计数。
+2. `SinkDispatcher` 在注入 real sinks 时会自动把 routed record 交给 `AsyncQueueController` worker callback；未注入 sink 时继续保留 skeleton queue 行为，从而维持既有 focused tests 的无副作用默认面。
+3. block/backpressure 语义现固定为“单 worker in-flight slot 计入容量占用”；因此 worker 被卡住时，capacity=1 的 queue 会对后续 record 明确返回 `RuntimeRetryExhausted`，不再只停留在 queue bookkeeping。
+4. `LoggingFacade::flush()` 现对成功、超时、worker stuck 三种结果给出确定性返回；`LoggingFacade::stop()` 也会先执行固定 shutdown deadline 的 flush，只有 drain 成功后才进入 stopped，从而把 shutdown drain 变成 public lifecycle contract。
+5. `INF-LOG-GATE-003` 在本轮新增 focused 证据固定为 `AsyncQueueControllerWorkerTest`、`LoggingFlushDeadlineTest` 与 `LoggingBackpressureTest`；它们与既有 `SinkDispatcherRouteIntegrationTest`、`LoggingSinkFailureInjectionTest` 共同证明 worker lifecycle、deadline flush、block policy 与 async sink failure observation 已具备 deterministic build-tree evidence。
+6. 本轮结论仍只到 L2/L3 build-tree evidence：已闭合 async worker、backpressure 与 flush deadline，但 recovery/fallback、metrics/health 与 installed package proof 继续留给 `INF-LOG-FIX-005~011`。
 
 ## 7. industry practice alignment
 

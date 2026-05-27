@@ -29,7 +29,23 @@ SinkDispatcher::SinkDispatcher(AsyncQueueOptions queue_options)
 SinkDispatcher::SinkDispatcher(SinkDispatcherOptions options)
   : queue_controller_(options.queue_options),
     basic_sink_(std::move(options.basic_sink)),
-    audit_sink_(std::move(options.audit_sink)) {}
+    audit_sink_(std::move(options.audit_sink)) {
+  if (basic_sink_ != nullptr || audit_sink_ != nullptr) {
+    const auto start_result = queue_controller_.start(
+        [this](const RoutedLogRecord& record) {
+          if (const auto sink = sink_for_route(record.route); sink != nullptr) {
+            return sink->write(record.event);
+          }
+
+          return LogWriteResult::success();
+        });
+    (void)start_result;
+  }
+}
+
+SinkDispatcher::~SinkDispatcher() {
+  queue_controller_.stop();
+}
 
 std::size_t SinkDispatcher::dispatched_record_count(SinkRoute route) const {
   switch (route) {
@@ -59,13 +75,6 @@ LogWriteResult SinkDispatcher::dispatch(const LogEvent& event) {
   const auto result = queue_controller_.enqueue(record);
   if (!result.ok) {
     return result;
-  }
-
-  if (const auto sink = sink_for_route(record.route); sink != nullptr) {
-    const auto sink_result = sink->write(record.event);
-    if (!sink_result.ok) {
-      return sink_result;
-    }
   }
 
   last_record_ = record;

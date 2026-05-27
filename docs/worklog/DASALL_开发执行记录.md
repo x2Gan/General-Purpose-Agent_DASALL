@@ -1,3 +1,47 @@
+## 记录 #837
+
+- 日期：2026-05-27
+- 阶段：infrastructure / logging deterministic async queue
+- 任务：推进 `INF-LOG-FIX-004`，闭合 async worker、backpressure 与 flush deadline
+- 状态：已完成（L2/L3 build-tree deterministic queue evidence 已闭合；本轮不使用 qemu / kvm）
+
+### 执行前提
+
+1. 用户要求继续按 `project-implementation-cycle` 串行推进 `INF-LOG-FIX-004`，并保持同样的规则：必要时回链详设/SSOT，完成后单独提交推送。
+2. 近端核验确认：`AsyncQueueController` 仍只有 queue bookkeeping，`SinkDispatcher` 仍在同步路径直接写 sink，因此 flush/backpressure 没有真实 worker 语义，`BLK-INF-LOG-004` 仍然 Open。
+3. 前置依赖已满足：`INF-LOG-FIX-003` 已提供 backend-neutral sink seam 与 route-specific sink 注入点，足以在当前 repo 依赖集内把 real sink write 移到 queue worker callback。
+
+### 改动
+
+1. 更新 `infra/src/logging/AsyncQueueController.h` 与 `infra/src/logging/AsyncQueueController.cpp`，引入 explicit `start()` / `stop()`、single worker drain、deadline flush、单调计数与 worker failure observation。
+2. 更新 `infra/src/logging/SinkDispatcher.h`、`infra/src/logging/SinkDispatcher.cpp` 与 `infra/src/logging/LoggingFacade.cpp`，让 injected sinks 经由 queue worker callback 执行，并把 `LoggingFacade::stop()` 变成带 shutdown deadline flush 的 public lifecycle contract。
+3. 新增 `tests/unit/infra/logging/AsyncQueueControllerWorkerTest.cpp`、`tests/unit/infra/logging/LoggingFlushDeadlineTest.cpp`、`tests/unit/infra/logging/LoggingBackpressureTest.cpp`，并更新 `tests/unit/CMakeLists.txt`、`tests/unit/infra/CMakeLists.txt` 完成注册。
+4. 更新 `tests/unit/infra/logging/AsyncQueueControllerTest.cpp`、`tests/unit/infra/logging/LoggingFacadeTest.cpp`、`tests/integration/infra/logging/SinkDispatcherRouteIntegrationTest.cpp` 与 `tests/integration/infra/logging/LoggingSinkFailureInjectionTest.cpp`，使既有 tests 与新的 async boundary 对齐。
+5. 更新 `docs/ssot/LoggingProductionAcceptanceMatrix.md`、`docs/architecture/DASALL_infra_logging模块详细设计.md`、`docs/todos/infrastructure/DASALL_infrastructure_logging组件专项TODO.md` 与 `docs/todos/DASALL_子系统查漏补缺专项记录.md`，回写 `INF-LOG-FIX-004` / `BLK-INF-LOG-004` 的 deterministic queue 结论，并新增 `docs/todos/infrastructure/deliverables/INF-LOG-FIX-004-async-worker-backpressure-flush收口.md`。
+
+### 验证
+
+1. `Build_CMakeTools(buildTargets=["dasall_async_queue_controller_unit_test","dasall_async_queue_controller_worker_unit_test","dasall_logging_flush_deadline_unit_test","dasall_logging_backpressure_unit_test","dasall_logging_facade_unit_test","dasall_sink_dispatcher_unit_test","dasall_sink_dispatcher_route_integration_test","dasall_logging_sink_failure_injection_test"])`
+   - 结果：通过。
+2. `RunCtest_CMakeTools(tests=["AsyncQueueControllerTest","AsyncQueueControllerWorkerTest","LoggingFlushDeadlineTest","LoggingBackpressureTest","LoggingFacadeTest","SinkDispatcherTest","SinkDispatcherRouteIntegrationTest","LoggingSinkFailureInjectionTest"])`
+   - 结果：命中仓库既有泛化 `生成失败`。
+3. fallback 直接执行：
+   - `./build/vscode-linux-ninja/tests/unit/infra/dasall_async_queue_controller_unit_test`
+   - `./build/vscode-linux-ninja/tests/unit/infra/dasall_async_queue_controller_worker_unit_test`
+   - `./build/vscode-linux-ninja/tests/unit/infra/dasall_logging_flush_deadline_unit_test`
+   - `./build/vscode-linux-ninja/tests/unit/infra/dasall_logging_backpressure_unit_test`
+   - `./build/vscode-linux-ninja/tests/unit/infra/dasall_logging_facade_unit_test`
+   - `./build/vscode-linux-ninja/tests/unit/infra/dasall_sink_dispatcher_unit_test`
+   - `./build/vscode-linux-ninja/tests/integration/infra/logging/dasall_sink_dispatcher_route_integration_test`
+   - `./build/vscode-linux-ninja/tests/integration/infra/logging/dasall_logging_sink_failure_injection_test`
+   - 结果：8/8 通过。
+
+### 结果
+
+1. `INF-LOG-FIX-004` 已闭合：logging queue 现具备 deterministic single worker、deadline flush、block-policy backpressure 与 public shutdown drain contract。
+2. `BLK-INF-LOG-004` 已解阻：queue backpressure/drop/flush 语义已写入 SSOT / 详设 / 总账，后续 recovery/fallback 与 metrics/health 可以在这个固定 contract 上继续推进。
+3. 本轮结论仍只到 L2/L3 build-tree evidence；recovery/fallback、metrics/health、config live projection 与 installed package proof 继续留给后续任务。
+
 ## 记录 #836
 
 - 日期：2026-05-27

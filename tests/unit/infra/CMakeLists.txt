@@ -1015,6 +1015,24 @@ dasall_register_logging_unit_test(
 )
 
 dasall_register_logging_unit_test(
+  dasall_async_queue_controller_worker_unit_test
+  AsyncQueueControllerWorkerTest
+  logging/AsyncQueueControllerWorkerTest.cpp
+)
+
+dasall_register_logging_unit_test(
+  dasall_logging_flush_deadline_unit_test
+  LoggingFlushDeadlineTest
+  logging/LoggingFlushDeadlineTest.cpp
+)
+
+dasall_register_logging_unit_test(
+  dasall_logging_backpressure_unit_test
+  LoggingBackpressureTest
+  logging/LoggingBackpressureTest.cpp
+)
+
+dasall_register_logging_unit_test(
   dasall_audit_link_adapter_unit_test
   AuditLinkAdapterTest
   logging/AuditLinkAdapterTest.cpp

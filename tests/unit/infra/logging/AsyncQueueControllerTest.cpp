@@ -79,9 +79,12 @@ void test_async_queue_controller_overruns_oldest_and_tracks_drop_count() {
   assert_equal(1,
                static_cast<int>(controller.dropped_total()),
                "overrun_oldest queue should increase the drop counter when replacing the oldest record");
-  assert_true(controller.newest_record().event.message == "newest",
+  const auto newest_record = controller.newest_record();
+  assert_true(newest_record.has_value(),
+              "overrun_oldest queue should retain a newest record snapshot after replacement");
+  assert_true(newest_record->event.message == "newest",
               "overrun_oldest queue should retain the newest record after replacement");
-  assert_true(controller.newest_record().route == SinkRoute::Audit,
+  assert_true(newest_record->route == SinkRoute::Audit,
               "overrun_oldest queue should keep the routed sink classification of the retained record");
 }
 
