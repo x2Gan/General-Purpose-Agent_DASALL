@@ -432,7 +432,7 @@
 
 可以，但不是无条件全量执行。
 
-当前专项 TODO 已无剩余原子任务：ACC-TODO-034~051 均已完成 focused integration gate、最小 production ingress、安全治理、P2 polish 与证据回写收口。001~038 保留为历史基础和前置依赖，不再作为 Access v1 可交付的最终证据。stream / WS / MQTT 继续沿用 005 已冻结的延后 Gate 口径，不能被写成 Done-ready Build 结论；若后续出现新评审项、回归或 packaging / qemu 级别问题，应新开增量任务而不是回滚当前 Done 口径。2026-05-27 追加的 `ACC-FIX-003` 已把 receipt authority 明确冻结为 v1 single-daemon / in-memory scope，见 [docs/todos/access/deliverables/ACC-FIX-003-receipt-authority-single-daemon-scope收口.md](/home/gangan/DASALL/docs/todos/access/deliverables/ACC-FIX-003-receipt-authority-single-daemon-scope收口.md)。
+当前专项 TODO 已无剩余原子任务：ACC-TODO-034~051 均已完成 focused integration gate、最小 production ingress、安全治理、P2 polish 与证据回写收口。001~038 保留为历史基础和前置依赖，不再作为 Access v1 可交付的最终证据。stream / WS / MQTT 继续沿用 005 已冻结的延后 Gate 口径，不能被写成 Done-ready Build 结论；若后续出现新评审项、回归或 packaging / release 环境级问题，应新开增量任务而不是回滚当前 Done 口径。2026-05-27 追加的 `ACC-FIX-003` / `ACC-FIX-004` / `ACC-FIX-005` 已分别冻结 receipt authority、stream deferral 与 Local installed security matrix，见对应 deliverables。
 
 ### 11.2 当前可落到的最细粒度
 
@@ -442,7 +442,7 @@
 
 ### 11.3 后续建议
 
-1. 当前专项 TODO 已无后续原子任务；若 Gate-INT-08、installed-package、app-binary 或 qemu 证据面出现新回归，再新开增量任务承接。
+1. 当前专项 TODO 已无后续原子任务；若 Gate-INT-08、installed-package、app-binary 或 packaging / release 环境证据面出现新回归，再新开增量任务承接。
 2. `ACC-TODO-040~043` 已以 focused unit/integration tests 落盘；后续只在出现 handoff、pipeline、composition 或 query/cancel 回退时再回开增量任务。
 3. ACC-TODO-049/050 已把 focused integration gate 与证据口径收敛到 `Gate-INT-08`；后续若 Gate 名称或矩阵变更，必须同步更新 TODO / worklog / system integration 记录。
 4. 最后用 ACC-TODO-051 收口 P2 工程硬化；stream / WS / MQTT 保持延后 Gate + feature flag default-off，直到外部边界冻结。
@@ -452,7 +452,7 @@
 
 2026-05-11 `FULLINT-TODO-006` 已将 Access ingress 业务链矩阵回链到本专项：`docs/todos/integration/deliverables/FULLINT-TODO-006-Access-ingress业务链验证矩阵.md`。
 
-本次回链只冻结 build-tree `Gate-INT-08` 的 Access v1 unary focused ingress 证据；`Gate-INT-08` 不覆盖 `StreamGateway / WS / MQTT` ready，后者继续由 `ACC-GATE-11` 管理，保持 feature flag default-off、disabled/not ready 与 async receipt + poll fallback，不把结果外推为 app-binary、installed-package、qemu 或 production release-ready。`dasall_gate_int_08` 已升级为 expected-test discoverability + acceptance，当前 expected tests 为：`AgentRequestContractTest`、`AgentResultContractTest`、`IdentityMetadataContractTest`、`CliDaemonSubmitIntegrationTest`、`HttpGatewaySubmitIntegrationTest`、`AccessGatewayPipelineIntegrationTest`、`AccessAsyncReceiptQueryCancelIntegrationTest`、`AccessPolicyBackendUnavailableIntegrationTest`、`AccessHealthReadinessIntegrationTest`、`AccessProfileCompatibilityTest`。
+本次回链只冻结 build-tree `Gate-INT-08` 的 Access v1 unary focused ingress 证据；`Gate-INT-08` 不覆盖 `StreamGateway / WS / MQTT` ready，后者继续由 `ACC-GATE-11` 管理，保持 feature flag default-off、disabled/not ready 与 async receipt + poll fallback，不把结果外推为 app-binary、installed-package 或 production release-ready。更高层 machine-isolation / release 环境复核继续由 packaging / release owner 承接。`dasall_gate_int_08` 已升级为 expected-test discoverability + acceptance，当前 expected tests 为：`AgentRequestContractTest`、`AgentResultContractTest`、`IdentityMetadataContractTest`、`CliDaemonSubmitIntegrationTest`、`HttpGatewaySubmitIntegrationTest`、`AccessGatewayPipelineIntegrationTest`、`AccessAsyncReceiptQueryCancelIntegrationTest`、`AccessPolicyBackendUnavailableIntegrationTest`、`AccessHealthReadinessIntegrationTest`、`AccessProfileCompatibilityTest`。
 
 矩阵解释：
 
@@ -464,7 +464,9 @@
 
 验证阻塞修复：矩阵升级后，`AccessAsyncReceiptQueryCancelIntegrationTest` 暴露 build-tree CLI binary status 查询会把 `response_text=active`、`task_completed=false` 误判为 `task_not_completed` / exit `5`。本轮已最小修复 `CliExitDecision` 的命令上下文：`status` active 查询保持 exit `0`，`run` completed/non-final 仍保持 exit `5`，并由 `CliExitCodeContractTest` 锁定正/负例。
 
-安装态边界：当前 `/usr/bin/dasall` 存在，daemon `active/enabled`，`sudo -n dasall ping/readiness --json` 返回 completed / READY；`status` / `cancel` missing receipt 返回 `status_missing` / `cancel_missing`，`diag health` 返回 `diag_disabled`。`ACC-FIX-003` 已进一步证明：即使 sibling daemon 或 restarted daemon 复用同一 ownership secret，对 pre-existing receipt 仍必须返回 `status_missing`；因此安装态证据只代表 single-daemon authority，不代表 shared receipt authority。上述事实只作为当前包运行边界，不替代 `Gate-INT-08` 的 build-tree true-integration 证据，也不替代 `Gate-INT-10` 或 release runner qemu。
+安装态边界：当前 `/usr/bin/dasall` 存在，daemon `active/enabled`，`sudo -n dasall ping/readiness --json` 返回 completed / READY；`status` / `cancel` missing receipt 返回 `status_missing` / `cancel_missing`，`diag health` 返回 `diag_disabled`。`ACC-FIX-003` 已进一步证明：即使 sibling daemon 或 restarted daemon 复用同一 ownership secret，对 pre-existing receipt 仍必须返回 `status_missing`；因此安装态证据只代表 single-daemon authority，不代表 shared receipt authority。上述事实只作为当前包运行边界，不替代 `Gate-INT-08` 的 build-tree true-integration 证据，也不替代 `Gate-INT-10`；更高层 machine-isolation / release 环境复核继续由 packaging / release owner 承接。
+
+Local installed security matrix：当前 Access owner authoritative acceptance 由 `pkg_smoke_install.sh --explicit-start-check` 与 focused release-preflight tests 共同组成。`access-installed-async-receipt-proof.json` 锁定 `accepted_async`、`status_owner_mismatch` 与 `cancel_owner_mismatch`；`access-installed-gateway-http-proof.json` 锁定 `submit.status=200`、`negative_listener_exposed=false` 与 missing-backend fail-closed；installed `dasall-cli diag health --json` 固定 `diag_disabled`；`DaemonSocketModeIntegrationTest` 与 `AccessPolicyBackendUnavailableIntegrationTest` 分别锁定 socket mode 与 policy backend unavailable。上述矩阵不以 qemu / kvm 作为 Access owner 当前验收前置；machine isolation 继续由 packaging / release 环境承接。
 
 ## 13. FULLINT-TODO-007 回链：readiness 投影与 app-binary no-stub
 

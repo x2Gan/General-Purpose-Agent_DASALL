@@ -38,6 +38,25 @@ list(APPEND DASALL_ACCESS_INTEGRATION_TEST_EXECUTABLE_TARGETS
   dasall_access_streaming_deferral_wording_guard_integration_test
 )
 
+add_executable(dasall_access_installed_security_matrix_wording_guard_integration_test
+  AccessInstalledSecurityMatrixWordingGuardIntegrationTest.cpp
+)
+
+target_link_libraries(dasall_access_installed_security_matrix_wording_guard_integration_test
+  PRIVATE
+    dasall_test_support
+)
+
+dasall_apply_common_options(dasall_access_installed_security_matrix_wording_guard_integration_test)
+
+add_test(NAME AccessInstalledSecurityMatrixWordingGuardIntegrationTest
+  COMMAND dasall_access_installed_security_matrix_wording_guard_integration_test)
+set_tests_properties(AccessInstalledSecurityMatrixWordingGuardIntegrationTest PROPERTIES LABELS "integration;access")
+
+list(APPEND DASALL_ACCESS_INTEGRATION_TEST_EXECUTABLE_TARGETS
+  dasall_access_installed_security_matrix_wording_guard_integration_test
+)
+
 add_executable(dasall_access_daemon_ping_integration_test
   DaemonPingIntegrationTest.cpp
   ${CMAKE_SOURCE_DIR}/apps/cli/src/CliIpcClient.cpp

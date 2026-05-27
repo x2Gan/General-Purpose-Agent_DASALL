@@ -1,3 +1,55 @@
+## 记录 #832
+
+- 日期：2026-05-27
+- 阶段：access / installed security matrix closeout
+- 任务：推进 `ACC-FIX-005`，建立 Access owner 本机安装态安全矩阵
+- 状态：已完成（Local installed security matrix 已冻结；本轮未使用 qemu / kvm）
+
+### 执行前提
+
+1. 用户要求按 `project-implementation-cycle` 串行推进 `docs/todos/DASALL_子系统查漏补缺专项记录.md` 中的 `ACC-FIX-003~005`，每轮单独提交并推送，同时删除 qemu / kvm 作为当前验收依据。
+2. 近端核验确认：`pkg_smoke_install.sh --explicit-start-check`、`access-installed-async-receipt-proof.json`、`access-installed-gateway-http-proof.json`、`diag_disabled`、`DaemonSocketModeIntegrationTest` 与 `AccessPolicyBackendUnavailableIntegrationTest` 已经覆盖 Access 当前安全矩阵所需的 installed / focused seams；真正缺口是顶层总账与 Access TODO 仍把这项任务描述成“需要 L5/qemu 才能闭合”。
+3. 前置 blocker 复核：无独立 BLOCK 需要先解。本轮目标是 owner 口径收口与矩阵回链，而不是重做 packaging / qemu 运行器。
+
+### 改动
+
+1. 新增 `tests/integration/access/AccessInstalledSecurityMatrixWordingGuardIntegrationTest.cpp`，扫描顶层总账、Access TODO 与 `scripts/packaging/README.md`，锁定 `ACC-FIX-005 = Local installed security matrix`、installed proof artifact 名称，以及“不以 qemu / kvm 作为 Access owner 当前验收前置”的结论。
+2. 更新 `tests/integration/access/CMakeLists.txt`，注册 `dasall_access_installed_security_matrix_wording_guard_integration_test` 与 `AccessInstalledSecurityMatrixWordingGuardIntegrationTest`，使该 owner 口径进入 focused integration discoverability。
+3. 更新 `docs/todos/DASALL_子系统查漏补缺专项记录.md`、`docs/todos/access/DASALL_access子系统专项TODO.md`、`scripts/packaging/README.md` 与独立 deliverable，统一冻结 Access owner 当前安全矩阵由 installed package smoke + focused release-preflight tests 构成，并把 machine isolation 明确回交给 packaging / release owner。
+
+### 验证
+
+1. `Build_CMakeTools(buildTargets=["dasall_access_installed_security_matrix_wording_guard_integration_test"])`
+   - 结果：通过。
+2. 首次执行 `./build/vscode-linux-ninja/tests/integration/access/dasall_access_installed_security_matrix_wording_guard_integration_test`
+   - 结果：失败；直接暴露顶层总账缺少 `Local installed security matrix` 明文，证实缺口位于 owner 文档口径。
+3. 修正总账 / Access TODO / packaging README 后，再次执行 `./build/vscode-linux-ninja/tests/integration/access/dasall_access_installed_security_matrix_wording_guard_integration_test`
+   - 结果：通过。
+4. `Build_CMakeTools(buildTargets=["dasall_access_installed_security_matrix_wording_guard_integration_test","dasall_access_daemon_socket_mode_integration_test","dasall_access_observability_main_chain_integration_test"])`
+   - 结果：通过。
+5. `RunCtest_CMakeTools(tests=["AccessInstalledSecurityMatrixWordingGuardIntegrationTest","DaemonSocketModeIntegrationTest","AccessPolicyBackendUnavailableIntegrationTest"])`
+   - 结果：命中仓库既有泛化错误 `生成失败`。
+6. fallback 直接执行：
+   - `./build/vscode-linux-ninja/tests/integration/access/dasall_access_installed_security_matrix_wording_guard_integration_test`
+   - `./build/vscode-linux-ninja/tests/integration/access/dasall_access_daemon_socket_mode_integration_test`
+   - `./build/vscode-linux-ninja/tests/integration/access/dasall_access_observability_main_chain_integration_test`
+   - 结果：3/3 通过。
+7. 当前安装态最小命令集：
+   - `sudo -n dasall-cli readiness --json`
+   - `sudo -n dasall-cli status receipt:missing token local://uid/0 --json`
+   - `sudo -n dasall-cli cancel receipt:missing token local://uid/0 --json`
+   - `sudo -n dasall-cli diag health --json`
+   - 结果：分别返回 completed/exit 0、`status_missing`/exit 5、`cancel_missing`/exit 5、`diag_disabled`/exit 4。
+8. 本机既有 installed artifact 复核：
+   - `/tmp/rtsup-fix-005-installed-smoke/access-installed-async-receipt-proof.json` 保留 `status_owner_mismatch` / `cancel_owner_mismatch`。
+   - `/tmp/rtsup-fix-005-installed-smoke/access-installed-gateway-http-proof.json` 保留 `negative_listener_exposed=false` 与 `detail=production submit pipeline unavailable`。
+
+### 结果
+
+1. `ACC-FIX-005` 已闭合：Access owner 当前安全验收已由 Local installed security matrix 收口，不再把 qemu / kvm 写成当前验收前置。
+2. installed `owner mismatch` / `missing-backend` / `diag_disabled` 与 focused `socket mode` / `policy fail-closed` 现在形成统一矩阵，owner 边界清晰。
+3. machine isolation / release-runner rerun 继续归 packaging / release 环境复核，不再回流为 Access owner blocker。
+
 ## 记录 #831
 
 - 日期：2026-05-27
