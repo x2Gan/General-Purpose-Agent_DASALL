@@ -65,6 +65,12 @@ void test_ssot_matrix_freezes_backend_levels_and_artifacts() {
             "dropped_total_delta >= 1",
             "unrecoverable_failure_total >= 1",
             "health monitor 均成功初始化后注册 `probe_name=infra.logging.pipeline`、`probe_group=readiness` 的 logging probe",
+              "event_kind=high_risk",
+              "ordinary log route",
+              "evidence_kind",
+              "audit_trace_id",
+              "audit_task_id",
+              "actor`、`action`、`target`、`outcome`、`side_effects`",
           "不把 qemu / kvm 作为 logging owner 当前验收前置",
       },
       "LoggingProductionAcceptanceMatrix");
@@ -88,6 +94,11 @@ void test_logging_design_points_to_frozen_matrix_and_backend_policy() {
             "不允许把 redacted path 再拆出第六个指标族",
             "queue_high_watermark = max(1, active_logging_config.queue_size)",
             "unrecoverable_failure_total >= 1",
+            "event_kind=high_risk",
+            "ValidationFieldMissing",
+            "audit_ref_pending",
+            "IAuditLogger::write_audit()",
+            "actor`、`action`、`target`、`outcome`、`side_effects`",
       },
       "logging detailed design");
 }
@@ -119,12 +130,16 @@ void test_system_gap_todo_marks_inf_log_fix_001_done_and_blocker_closed() {
           "| BLK-INF-LOG-001 | Closed |",
             "| BLK-INF-LOG-003 | Closed |",
             "| BLK-INF-LOG-006 | Closed |",
+            "| BLK-INF-LOG-007 | Closed |",
             "BLK-INF-LOG-006（已闭合）",
+            "BLK-INF-LOG-007（已闭合）",
+            "IAuditLogger::write_audit()",
             "`DASALL_STATE_ROOT` 是唯一 state_root override",
           "本轮不使用 qemu / kvm",
       },
       "subsystem gap ledger");
 }
+
 
 }  // namespace
 

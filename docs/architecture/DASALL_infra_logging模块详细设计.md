@@ -461,6 +461,17 @@ key 域冻结规则：
 4. formatter failure 现在通过 `LoggingFacade` 的 recovery seam 直接进入 `LoggingRecovery::handle_format_failure()`，并写出最小 fallback record；该最小记录保留 pre-format message，但剥离 formatter 生成 attrs，避免把半成品 structured payload 冒充成功格式化结果。
 5. focused 证据固定为 `LoggingSinkFallbackTest`、`LoggingQueueFailureSignalTest` 与 `LoggingRecoveryIntegrationTest`；相邻回归继续由 `LoggingRecoveryTest`、`LoggingFacadeTest`、`LoggingFlushDeadlineTest` 与 `LoggingSinkFailureInjectionTest` 守住 queue deadline、direct facade lifecycle 与 raw sink failure observation 的既有边界。
 
+### 6.10.10 AuditLinkAdapter / audit route / privacy split 冻结补充
+
+`BLK-INF-LOG-007` 的真实缺口不是 `AuditLinkAdapter` 或 `SinkDispatcher` 完全不存在，而是 high-risk classifier、audit ref schema 与 privacy split 还没有被写成 owner-safe 设计结论。当前轮次冻结如下：
+
+1. v1 high-risk classifier 只允许三条入口：`LogEvent.category() == "audit"`、`LogLevel::Fatal`，以及 attrs 显式声明 `event_kind=high_risk`。普通 `LogLevel::Error` 若没有这个显式 marker，必须继续走 ordinary log route，避免把大量错误级别日志静默升级成 audit owner persistence。
+2. `AuditLinkAdapter::attach_audit_ref()` 的最小 `AuditRef` 冻结为 `evidence_ref.kind/ref + trace_id + task_id`。其中 `evidence_ref.kind` 只允许沿 `AuditEvidenceKind::{ToolResult, RecoveryOutcome, WorkerTask}` 映射到 `tool_result`、`recovery_outcome`、`worker_task`；缺任何一项都必须 fail-closed 返回 `ValidationFieldMissing`，且不允许在 `LogEvent.attrs` 留下部分 `audit_*` 片段。
+3. ordinary log 面允许保留的 audit anchor attrs 固定为 `audit_ref_pending`、`evidence_ref`、`evidence_kind`、`audit_trace_id`、`audit_task_id`。它们只表达 route hint 与 correlation anchor，不新增 top-level `LogEvent` 字段，也不把 `AuditEvent` 本体投影成 logging 私有对象。
+4. `IAuditLogger::write_audit()` 仍是 audit owner handoff 的唯一持久化入口；`actor`、`action`、`target`、`outcome`、`side_effects` 等完整 audit payload 必须继续停留在 audit owner persistence。logging 侧只保留 redacted message 与 correlation attrs，不对 audit 主存储开放 join/export 旁路。
+5. 与 `docs/architecture/DASALL_infra_audit模块详细设计.md` 6.5 对齐，`target`、`evidence_ref.ref`、`side_effects` 在 v1 只承接结构化标识或 effect 名称，不得承载 access token、password、session id、原始文件路径或其他高敏感原文。即便某个 audit anchor attr 属于 allowlist，只要 value 命中 logging redaction 文本模式，仍必须保持 redacted。
+6. `SinkDispatcher::select_route()` 后续只允许根据 `category==audit` 或完整 audit anchor attrs 做 route 判定；route selection 可以消费 `audit_ref_pending`/`evidence_ref` 这些 frozen anchor，但不能据此反向拼装 audit payload，更不能把 route 语义扩写成 audit persistence 已完成。
+
 ---
 
 ## 7. Design -> Build 映射（建议级）

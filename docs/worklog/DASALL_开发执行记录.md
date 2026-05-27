@@ -1,3 +1,40 @@
+## 记录 #842
+
+- 日期：2026-05-27
+- 阶段：infrastructure / logging audit route boundary freeze
+- 任务：先行关闭 `BLK-INF-LOG-007`，冻结 `INF-LOG-FIX-008` 所需的 high-risk classifier、audit ref schema 与 privacy split
+- 状态：已完成（L1 design / SSOT freeze 已闭合；本轮不使用 qemu / kvm）
+
+### 执行前提
+
+1. 用户要求继续按 `project-implementation-cycle` 串行推进 `INF-LOG-FIX-008`，若存在前置 BLOCK 则需先完成 BLOCK 解组原子任务并单独提交推送。
+2. 近端核验确认：`AuditLinkAdapter` 与 `SinkDispatcher` 已经具备 attrs-based route skeleton，也已有 `AuditLinkAdapterBoundaryContractTest` 与 `LoggingAuditLinkIntegrationTest`，但 `docs/ssot/LoggingProductionAcceptanceMatrix.md` 与 logging 详设还没有把 high-risk classifier、audit ref attrs schema 以及 ordinary log / audit owner persistence 的 privacy split 写成正式 owner 结论。
+3. `docs/architecture/DASALL_infra_audit模块详细设计.md` 已明确 `target`、`evidence_ref.ref`、`side_effects` 不得承载 access token、password、session id、原始文件路径等高敏感原文，因此本轮 blocker 可以在 logging 边界内最小修复，不需要越界改 audit 实现。
+
+### 改动
+
+1. 更新 `docs/ssot/LoggingProductionAcceptanceMatrix.md`，新增 `6.7 BLK-INF-LOG-007 audit route classifier / audit ref schema / privacy split freeze`，正式冻结 v1 high-risk classifier、`audit_ref_pending/evidence_ref/evidence_kind/audit_trace_id/audit_task_id` attrs schema，以及 ordinary log 与 audit owner persistence 的 privacy split。
+2. 更新 `docs/architecture/DASALL_infra_logging模块详细设计.md`，新增 `6.10.10 AuditLinkAdapter / audit route / privacy split 冻结补充`，把 `IAuditLogger::write_audit()` 作为唯一 audit handoff seam、`ValidationFieldMissing` fail-closed 规则和 route selection 边界写入详设。
+3. 更新 `docs/todos/DASALL_子系统查漏补缺专项记录.md`，将 `BLK-INF-LOG-007` 标记为 Closed，纠正 `INF-LOG-FIX-008` 行内的 audit owner handoff 接口名为 `IAuditLogger::write_audit()`，并显式标注 blocker 已闭合。
+4. 更新 `tests/contract/smoke/LoggingProductionAcceptanceContractTest.cpp`，让 acceptance contract 直接扫描 `event_kind=high_risk`、`evidence_kind`、`audit_trace_id`、`audit_task_id`、privacy split wording，以及系统总账中 `BLK-INF-LOG-007` 的 Closed 状态。
+5. 新增 `docs/todos/infrastructure/deliverables/BLK-INF-LOG-007-audit-route-boundary冻结.md`，沉淀本轮 blocker closeout、本地证据、OWASP Logging Cheat Sheet / OpenTelemetry Logs Data Model 对齐点与非外推边界。
+
+### 验证
+
+1. `Build_CMakeTools(buildTargets=["dasall_logging_production_acceptance_contract_test"])`
+   - 结果：通过。
+2. `RunCtest_CMakeTools(tests=["LoggingProductionAcceptanceContractTest"])`
+   - 结果：命中仓库既有泛化 `生成失败`。
+3. fallback 直接执行：
+   - `./build/vscode-linux-ninja/tests/contract/dasall_logging_production_acceptance_contract_test`
+   - 结果：通过。
+
+### 结果
+
+1. `BLK-INF-LOG-007` 已解阻：`INF-LOG-FIX-008` 现已具备正式 SSOT 可依赖的 high-risk classifier、audit ref attrs schema 与 privacy split，不再需要在实现轮次里临时拍脑袋决定哪些错误级别应走 audit route，或哪些 audit payload 可以回流到普通日志。
+2. `IAuditLogger::write_audit()` 被重新固定为 audit owner 的唯一 handoff seam，logging 侧后续只需要补 route wiring、audit owner persistence handoff 和 correlation tests，而不是再重写边界语义。
+3. 本轮结论仍只到 L1 design / SSOT freeze；真正的 route/persistence/correlation build-tree evidence 继续留给下一轮 `INF-LOG-FIX-008`。
+
 ## 记录 #841
 
 - 日期：2026-05-27
