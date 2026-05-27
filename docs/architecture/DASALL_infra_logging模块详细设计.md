@@ -384,6 +384,18 @@ key 域冻结规则：
 
 冻结结果：LOG-BLK-005 的真实缺口是 query schema、allow 证明和导出限制未写成正式设计，而不是“按 trace/session 诊断拉取”能力本身不成立；后续实现可直接按 `LogQueryRequest` / `LogQueryAccessContext` / `LogQueryResult` 边界推进。
 
+### 6.10.3 Production acceptance matrix 冻结补充
+
+`docs/ssot/LoggingProductionAcceptanceMatrix.md` 现在是 logging production acceptance 的唯一 SSOT。当前阶段必须额外冻结以下结论，避免继续把骨架/fixture 结果误写成 production-ready：
+
+1. v1 production primary backend 固定为 `spdlog-backed file / rotating sink`；`stderr + ringbuffer` 只作为 degraded fallback，不作为 primary owner。
+2. build-tree 默认配置仍允许 `infra.logging.file.path=logs/runtime.log`，但 installed authoritative path 固定为 `state_root/logging/runtime.log`；packaged `state_root` 来自 `InstallLayout.state_root=/var/lib/dasall`，因此 canonical installed path 是 `/var/lib/dasall/logging/runtime.log`。
+3. evidence level 统一按 matrix 解释：L1 只代表设计/SSOT 冻结，L2/L3 代表 build-tree focused/integrated evidence，L4 代表 local installed authoritative evidence，L5 只代表 packaging / release handoff。
+4. 本轮只要求冻结 matrix，不要求宣称 code path 已 production-ready；local installed authoritative evidence 由后续 `INF-LOG-FIX-011` 产出 `logging-installed-proof.json` 与 `logging-runtime-proof.json` 后才能进入完成判定。
+5. industry practice 只吸收结构：OpenTelemetry Logs 的 `TraceId / SpanId / Resource` correlation 字段分层，以及 spdlog 风格 async queue / overflow policy / rotation 语义；logging 仍不得越过 ADR-006 / ADR-007 / ADR-008。
+
+冻结补充结论：本轮不把 qemu / kvm 作为 logging owner 当前验收前置；若后续存在 machine-isolated rerun，也只属于 packaging / release handoff，不改变 local installed authoritative evidence 的 owner 地位。
+
 ---
 
 ## 7. Design -> Build 映射（建议级）
@@ -437,7 +449,7 @@ tests/
 
 | 阶段 | 目标 | 关键动作 | 完成判定 |
 |---|---|---|---|
-| M0 设计冻结 | 固化接口与对象边界 | 新增本详细设计文档并评审通过 | 文档评审结论为 Pass |
+| M0 设计冻结 | 固化接口、对象边界与 production acceptance matrix | 新增本详细设计文档、`LoggingProductionAcceptanceMatrix` 并评审通过 | 文档评审结论为 Pass |
 | M1 最小日志闭环 | 支持普通结构化日志 | 新增 ILogger + LoggingFacade + basic file sink | 单元测试通过且可落盘 |
 | M2 审计协同闭环 | 审计关联可追踪 | 新增 AuditLinkAdapter + evidence_ref 透传 | 与 infra/audit 联调通过 |
 | M3 异步与降级 | 高负载与故障可恢复 | 引入 AsyncQueueController、fallback、degraded | 故障注入测试通过 |

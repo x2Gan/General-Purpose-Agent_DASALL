@@ -1,8 +1,14 @@
 # DASALL infrastructure 子系统 logging 组件专项 TODO
 
-最近更新时间：2026-04-03  
+最近更新时间：2026-05-27  
 阶段：Detailed Design -> Special TODO  
 适用范围：infra/logging
+
+2026-05-27 追加冻结说明：
+
+1. 本文档中的 `LOG-TODO-001~019` 完成状态，当前只代表接口/骨架/focused evidence 已落盘，不等于 production-ready。
+2. logging production acceptance 已统一迁入 `docs/ssot/LoggingProductionAcceptanceMatrix.md`，并由 `INF-LOG-FIX-001~011` 管理 evidence level、installed artifact、owner boundary 与 non-extrapolation 规则。
+3. 后续若要宣称 production / installed ready，必须同时满足 matrix 中的 gate 与 local installed authoritative evidence；不得再把早期 unit/contract/fixture 结果直接上卷成 production 结论。
 
 ## 1. 文档头
 

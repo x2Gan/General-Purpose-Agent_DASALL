@@ -1,3 +1,40 @@
+## 记录 #833
+
+- 日期：2026-05-27
+- 阶段：infrastructure / logging production acceptance freeze
+- 任务：推进 `INF-LOG-FIX-001`，冻结 logging production acceptance matrix
+- 状态：已完成（L1 acceptance matrix 已冻结；本轮不使用 qemu / kvm）
+
+### 执行前提
+
+1. 用户要求按 `project-implementation-cycle` 串行推进 `docs/todos/DASALL_子系统查漏补缺专项记录.md` 中的 `INF-LOG-FIX-001`，必要时回链 logging 详设与相关文档，并在完成后提交推送。
+2. 近端核验确认：仓库尚无 `docs/ssot/LoggingProductionAcceptanceMatrix.md`，也没有 `LoggingProductionAcceptanceContractTest`；当前缺口首先是 design/SSOT/gate/owner boundary 未冻结，而不是继续扩写 production code。
+3. blocker 复核：`BLK-INF-LOG-001` 的真实缺口是 production sink backend、artifact path 与不可外推边界未定。本轮可在 design track 内最小解阻，不需要另拆 BLOCK 原子任务。
+
+### 改动
+
+1. 新增 `tests/contract/smoke/LoggingProductionAcceptanceContractTest.cpp` 并更新 `tests/contract/CMakeLists.txt`，建立 focused contract test，扫描 SSOT matrix、logging 详设、logging 专项 TODO 与系统总账四处 wording。
+2. 新增 `docs/ssot/LoggingProductionAcceptanceMatrix.md`，冻结 L1-L5 evidence level、`spdlog-backed file / rotating sink` backend policy、`/var/lib/dasall/logging/runtime.log` installed canonical path、`logging-installed-proof.json` / `logging-runtime-proof.json` artifact taxonomy，以及 `INF-LOG-GATE-001~006`。
+3. 更新 `docs/architecture/DASALL_infra_logging模块详细设计.md` 与 `docs/todos/infrastructure/DASALL_infrastructure_logging组件专项TODO.md`：明确旧 `LOG-TODO-001~019` 只代表接口/骨架/focused evidence，新的 production acceptance 统一受 matrix 管理。
+4. 更新 `docs/todos/DASALL_子系统查漏补缺专项记录.md`：将 `INF-LOG-GAP-001` 回写为已闭合 / High，把 `INF-LOG-FIX-001` 标为 Done，并将 `BLK-INF-LOG-001` 转为 Closed，同时写明本轮不使用 qemu / kvm。
+5. 新增 `docs/todos/infrastructure/deliverables/INF-LOG-FIX-001-logging-production-acceptance-matrix冻结.md`，沉淀本轮 closeout、external practice 对齐与 Design -> Build 映射。
+
+### 验证
+
+1. `Build_CMakeTools(buildTargets=["dasall_logging_production_acceptance_contract_test"])`
+   - 结果：通过。
+2. `RunCtest_CMakeTools(tests=["LoggingProductionAcceptanceContractTest"])`
+   - 结果：命中仓库既有泛化错误 `生成失败`。
+3. fallback 直接执行 `./build/vscode-linux-ninja/tests/contract/dasall_logging_production_acceptance_contract_test`
+   - 首次结果：失败；依次暴露缺 `LoggingProductionAcceptanceMatrix.md`、logging 详设未回链 matrix、logging 专项 TODO 缺少 non-extrapolation note、系统总账未把 `INF-LOG-FIX-001`/`BLK-INF-LOG-001` 回写为 Done/Closed。
+   - 修正上述文档后再次执行：通过。
+
+### 结果
+
+1. `INF-LOG-FIX-001` 已闭合：logging 现在拥有单点 SSOT 的 production acceptance matrix，后续 `INF-LOG-FIX-002~011` 不再缺失 gate/evidence/owner boundary 基线。
+2. `BLK-INF-LOG-001` 已解阻：v1 primary backend 统一固定为 `spdlog-backed file / rotating sink`，build-tree `logs/runtime.log` 与 installed `/var/lib/dasall/logging/runtime.log` 的分层也已明确。
+3. 本轮已经删除 qemu / kvm 作为 logging owner 当前验收口径；后续 owner 验收统一以 local installed authoritative evidence 为标准，machine-isolated rerun 只保留为 packaging / release handoff。
+
 ## 记录 #832
 
 - 日期：2026-05-27

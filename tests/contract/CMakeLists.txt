@@ -231,6 +231,12 @@ dasall_register_logging_contract_test(
   smoke/LogEventBoundaryContractTest.cpp
 )
 
+dasall_register_logging_contract_test(
+  dasall_logging_production_acceptance_contract_test
+  LoggingProductionAcceptanceContractTest
+  smoke/LoggingProductionAcceptanceContractTest.cpp
+)
+
 target_include_directories(dasall_contract_log_event_boundary_test
   PRIVATE
     ${CMAKE_SOURCE_DIR}/infra/include
