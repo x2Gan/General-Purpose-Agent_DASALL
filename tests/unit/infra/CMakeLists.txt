@@ -1051,6 +1051,12 @@ dasall_register_logging_unit_test(
 )
 
 dasall_register_logging_unit_test(
+  dasall_logging_config_adapter_strict_parse_unit_test
+  LoggingConfigAdapterStrictParseTest
+  logging/LoggingConfigAdapterStrictParseTest.cpp
+)
+
+dasall_register_logging_unit_test(
   dasall_logging_metrics_bridge_unit_test
   LoggingMetricsBridgeTest
   logging/LoggingMetricsBridgeTest.cpp

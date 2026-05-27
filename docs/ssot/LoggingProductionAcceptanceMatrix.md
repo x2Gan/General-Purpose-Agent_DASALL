@@ -125,7 +125,16 @@
 3. block/backpressure 语义现固定为“单 worker in-flight slot 计入容量占用”；因此 worker 被卡住时，capacity=1 的 queue 会对后续 record 明确返回 `RuntimeRetryExhausted`，不再只停留在 queue bookkeeping。
 4. `LoggingFacade::flush()` 现对成功、超时、worker stuck 三种结果给出确定性返回；`LoggingFacade::stop()` 也会先执行固定 shutdown deadline 的 flush，只有 drain 成功后才进入 stopped，从而把 shutdown drain 变成 public lifecycle contract。
 5. `INF-LOG-GATE-003` 在本轮新增 focused 证据固定为 `AsyncQueueControllerWorkerTest`、`LoggingFlushDeadlineTest` 与 `LoggingBackpressureTest`；它们与既有 `SinkDispatcherRouteIntegrationTest`、`LoggingSinkFailureInjectionTest` 共同证明 worker lifecycle、deadline flush、block policy 与 async sink failure observation 已具备 deterministic build-tree evidence。
-6. 本轮结论仍只到 L2/L3 build-tree evidence：已闭合 async worker、backpressure 与 flush deadline，但 recovery/fallback、metrics/health 与 installed package proof 继续留给 `INF-LOG-FIX-005~011`。
+6. 本轮结论仍只到 L2/L3 build-tree evidence：已闭合 async worker、backpressure 与 flush deadline，但 recovery/fallback、metrics/health 与 installed package proof 继续留给 `INF-LOG-FIX-006~011`。
+
+### 6.4 INF-LOG-FIX-005 config key SSOT / live composition projection closeout
+
+1. `compose_live_observability()` 现必须先经 `LoggingConfigAdapter` 读取 typed config，再形成 active `LoggingConfig`；adapter parse/validate 失败时，composition 直接返回 error，不允许 partial logger init。
+2. `ObservabilityLiveCompositionOptions` 当前冻结最小 logging projection 面：`logging_level`、`logging_diag_pull_enabled`、`logging_config_entries`、`logging_state_root_override`。`apps/runtime_support` 只从 `RuntimePolicySnapshot` 投影 `ops_policy.log_level` 与 `remote_diagnostics_enabled`；其余 frozen logging keys 由 typed config entries 或 adapter fallback 提供。若后续需要扩 public runtime policy schema，必须新开任务，不得在当前 row 内隐式扩面。
+3. `LoggingFacade` / `StructuredFormatter` / `RedactionFilter` 现提供最小 config surface，使 `format`、`redaction_enabled`、`redaction_ruleset` 真正进入 live logger 主链；`file_path`、`rotate_max_*`、`queue_size`、`overflow_policy` 与 `async_enabled` 则通过 `FileLogSink` / `SinkDispatcher` / direct sink dispatcher 投影到实际 backend。
+4. strict numeric parse 现固定为“消费完整字符串”；`8192junk`、`50MB` 之类 trailing junk 必须被 `LoggingConfigAdapter::parse_uint32_value()` 拒绝，不允许再被 `stoull` 部分吞掉后冒充有效配置。
+5. focused 证据固定为 `LoggingConfigAdapterStrictParseTest`、`LoggingLiveCompositionConfigTest` 与 `DaemonRuntimeLiveDependencyCompositionTest`；其中 live composition test 直接验证 key-value formatter、redaction toggle、rotation family 与 queue-backed dispatcher 的 config projection。
+6. 本轮结论仍只到 L3 build-tree live composition evidence；recovery/fallback、metrics/health、diagnostics artifact 与 installed package proof 继续留给 `INF-LOG-FIX-006~011`。
 
 ## 7. industry practice alignment
 

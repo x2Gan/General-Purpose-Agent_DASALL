@@ -131,6 +131,22 @@ void LoggingFacade::set_level(LogLevel level) {
   current_level_ = level;
 }
 
+InfraOperationResult LoggingFacade::apply_config(const LoggingConfig& config) {
+  if (lifecycle_state_ != LifecycleState::Initialized) {
+    return invalid_transition("apply_config", "initialized");
+  }
+
+  current_level_ = config.level;
+  redaction_filter_.set_options(RedactionFilterOptions{
+      .enabled = config.redaction_enabled,
+      .ruleset = config.redaction_ruleset,
+  });
+  structured_formatter_.set_options(StructuredFormatterOptions{
+      .format = config.format,
+  });
+  return InfraOperationResult::success();
+}
+
 void LoggingFacade::set_dispatch_backend(
     std::unique_ptr<ILogDispatchBackend> dispatch_backend) {
   dispatch_backend_ = dispatch_backend != nullptr

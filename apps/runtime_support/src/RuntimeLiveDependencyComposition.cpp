@@ -2058,7 +2058,8 @@ class RuntimeControlPlaneHealthSignalProvider final
 }
 
 [[nodiscard]] RuntimeObservabilityBundle compose_runtime_observability_bundle(
-    const profiles::RuntimePolicySnapshot& policy_snapshot) {
+  const profiles::RuntimePolicySnapshot& policy_snapshot,
+  const RuntimeLiveDependencyCompositionOptions& options) {
   const auto& optional_backends = policy_snapshot.ops_policy().optional_backends;
   const auto live_observability = infra::compose_live_observability(
       infra::ObservabilityLiveCompositionOptions{
@@ -2068,6 +2069,11 @@ class RuntimeControlPlaneHealthSignalProvider final
           .metrics_exporter_type = optional_backends.metrics_exporter_type,
           .trace_exporter_type = optional_backends.trace_exporter_type,
           .trace_exporter_otlp_endpoint = optional_backends.trace_exporter_otlp_endpoint,
+      .logging_level = policy_snapshot.ops_policy().log_level,
+      .logging_diag_pull_enabled =
+        policy_snapshot.ops_policy().remote_diagnostics_enabled,
+            .logging_config_entries = {},
+      .logging_state_root_override = options.state_root_override,
       });
   if (!live_observability.ok()) {
     return RuntimeObservabilityBundle{
@@ -3210,7 +3216,8 @@ RuntimeDependencyCompositionResult compose_minimal_live_dependency_set(
       std::string("runtime:") + std::string(composition_owner) +
       ":secret-manager-live-seam");
 
-  const auto observability = compose_runtime_observability_bundle(*policy_snapshot);
+  const auto observability = compose_runtime_observability_bundle(*policy_snapshot,
+                                                                  options);
   if (!observability.ok()) {
     return make_error(std::string("runtime observability composition failed for ") +
                       std::string(composition_owner) + ": " + observability.error);

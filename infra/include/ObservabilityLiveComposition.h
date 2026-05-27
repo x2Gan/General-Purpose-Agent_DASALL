@@ -2,8 +2,14 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <filesystem>
 #include <memory>
+#include <optional>
 #include <string>
+#include <vector>
+
+#include "config/ConfigTypes.h"
+#include "logging/ILogConfigurator.h"
 
 namespace dasall::infra {
 
@@ -45,6 +51,10 @@ struct ObservabilityLiveCompositionOptions {
   std::string trace_exporter_type = "noop";
   std::string trace_exporter_otlp_endpoint;
   std::uint32_t trace_export_timeout_ms = 100U;
+  std::string logging_level = "info";
+  bool logging_diag_pull_enabled = true;
+  std::vector<config::TypedConfig> logging_config_entries;
+  std::filesystem::path logging_state_root_override;
 };
 
 struct ObservabilityLiveCompositionResult {
@@ -53,6 +63,7 @@ struct ObservabilityLiveCompositionResult {
   std::shared_ptr<metrics::IMetricsProvider> metrics_provider;
   std::shared_ptr<tracing::ITracerProvider> tracer_provider;
   std::shared_ptr<IHealthMonitor> health_monitor;
+  std::optional<logging::LoggingConfig> active_logging_config;
   std::string error;
 
   [[nodiscard]] bool ok() const {

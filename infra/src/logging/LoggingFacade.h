@@ -3,9 +3,11 @@
 #include <cstddef>
 #include <memory>
 #include <optional>
+#include <string>
 #include <string_view>
 
 #include "IInfrastructureService.h"
+#include "logging/ILogConfigurator.h"
 #include "logging/ILogger.h"
 #include "logging/LogTypes.h"
 #include "logging/RedactionFilter.h"
@@ -32,8 +34,13 @@ class LoggingFacade final : public ILogger {
   LogWriteResult log(const LogEvent& event) override;
   LogWriteResult flush(const LogFlushDeadline& deadline) override;
   void set_level(LogLevel level) override;
+  InfraOperationResult apply_config(const LoggingConfig& config);
 
   void set_dispatch_backend(std::unique_ptr<ILogDispatchBackend> dispatch_backend);
+
+  [[nodiscard]] const ILogDispatchBackend* dispatch_backend() const {
+    return dispatch_backend_.get();
+  }
 
   [[nodiscard]] std::size_t dispatched_record_count() const {
     return dispatched_record_count_;
@@ -53,6 +60,18 @@ class LoggingFacade final : public ILogger {
 
   [[nodiscard]] LogLevel current_level() const {
     return current_level_;
+  }
+
+  [[nodiscard]] LoggingFormat current_format() const {
+    return structured_formatter_.format_type();
+  }
+
+  [[nodiscard]] bool redaction_enabled() const {
+    return redaction_filter_.enabled();
+  }
+
+  [[nodiscard]] const std::string& redaction_ruleset() const {
+    return redaction_filter_.ruleset();
   }
 
   [[nodiscard]] std::string_view lifecycle_state_name() const;

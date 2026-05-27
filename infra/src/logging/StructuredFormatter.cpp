@@ -125,7 +125,76 @@ namespace {
   return json;
 }
 
+[[nodiscard]] std::string escape_key_value(std::string_view value) {
+  std::string escaped;
+  escaped.reserve(value.size());
+
+  for (const auto ch : value) {
+    switch (ch) {
+      case '\\':
+        escaped += "\\\\";
+        break;
+      case '"':
+        escaped += "\\\"";
+        break;
+      case '\n':
+        escaped += "\\n";
+        break;
+      case '\r':
+        escaped += "\\r";
+        break;
+      case '\t':
+        escaped += "\\t";
+        break;
+      default:
+        escaped.push_back(ch);
+        break;
+    }
+  }
+
+  return escaped;
+}
+
+[[nodiscard]] std::string build_structured_key_value_message(
+    const LogEvent& event,
+    std::string_view rendered_message) {
+  std::string payload;
+
+  const auto append_field = [&](std::string_view key, std::string_view value) {
+    if (!payload.empty()) {
+      payload.push_back(' ');
+    }
+
+    payload += std::string(key) + "=\"" + escape_key_value(value) + "\"";
+  };
+
+  append_field("schema_version", StructuredFormatter::kSchemaVersion);
+  append_field("level", level_name(event.level));
+  append_field("module", event.module);
+  append_field("message", rendered_message);
+  append_field("ts_ms",
+               event.ts.has_value() ? std::to_string(*event.ts) : std::string("null"));
+
+  for (const auto& [key, value] : event.attrs) {
+    append_field(std::string("attr.") + key, value);
+  }
+
+  return payload;
+}
+
 }  // namespace
+
+StructuredFormatter::StructuredFormatter(StructuredFormatterOptions options) {
+  set_options(std::move(options));
+}
+
+void StructuredFormatter::set_options(StructuredFormatterOptions options) {
+  if (options.format == LoggingFormat::Unspecified) {
+    options.format = LoggingFormat::JsonLine;
+  }
+
+  options_ = options;
+}
 
 LogEvent StructuredFormatter::format(const LogEvent& event) const {
   auto formatted = event;
@@ -138,7 +207,11 @@ LogEvent StructuredFormatter::format(const LogEvent& event) const {
                                    build_idempotency_key(formatted, correlation_id));
 
   const auto rendered_message = formatted.message;
-  formatted.message = build_structured_message(formatted, rendered_message);
+  if (options_.format == LoggingFormat::KeyValue) {
+    formatted.message = build_structured_key_value_message(formatted, rendered_message);
+  } else {
+    formatted.message = build_structured_message(formatted, rendered_message);
+  }
   return formatted;
 }
 

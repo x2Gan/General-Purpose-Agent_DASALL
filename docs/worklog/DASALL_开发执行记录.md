@@ -1,3 +1,43 @@
+## 记录 #838
+
+- 日期：2026-05-27
+- 阶段：infrastructure / logging live config projection
+- 任务：推进 `INF-LOG-FIX-005`，把 `LoggingConfigAdapter` 与 live composition / runtime_support profile projection 接到 deterministic queue contract
+- 状态：已完成（L3 build-tree live composition evidence 已闭合；本轮不使用 qemu / kvm）
+
+### 执行前提
+
+1. 用户要求继续按 `project-implementation-cycle` 串行推进 `INF-LOG-FIX-005`，并保持同样的规则：必要时回链详设/SSOT、完成后单独提交推送。
+2. 近端核验确认：`compose_live_observability()` 仍直接默认构造 `LoggingFacade` 并绕过 `LoggingConfigAdapter`，`LoggingConfigAdapter::parse_uint32_value()` 还会吞掉 trailing junk，`StructuredFormatter` / `RedactionFilter` 也缺少 live projection 所需的最小 config surface。
+3. 前置依赖已满足：`INF-LOG-FIX-003` 与 `INF-LOG-FIX-004` 已分别冻结 file sink/rotation 和 deterministic queue contract，因此本轮只需把 typed logging config 接到 live logger 主链，而不重新扩写 queue owner 语义。
+
+### 改动
+
+1. 更新 `infra/src/logging/LoggingConfigAdapter.h` 与 `infra/src/logging/LoggingConfigAdapter.cpp`，公开并修复 `parse_uint32_value()`，要求消费完整字符串，拒绝 `8192junk`、`50MB` 这类 trailing junk 配置。
+2. 更新 `infra/include/logging/RedactionFilter.h`、`infra/src/logging/RedactionFilter.cpp`、`infra/include/logging/StructuredFormatter.h`、`infra/src/logging/StructuredFormatter.cpp`、`infra/src/logging/LoggingFacade.h` 与 `infra/src/logging/LoggingFacade.cpp`，补齐 formatter/redaction/live logger 的最小 config surface，使 `format`、`redaction_enabled`、`redaction_ruleset` 真正进入 live path。
+3. 更新 `infra/include/ObservabilityLiveComposition.h` 与 `infra/src/ObservabilityLiveComposition.cpp`，引入 typed logging config projection、`StaticLoggingConfigCenter`、queue-backed/direct dispatch backend 选择，以及 active logging config 的 live composition evidence。
+4. 更新 `apps/runtime_support/src/RuntimeLiveDependencyComposition.cpp`，把当前 `RuntimePolicySnapshot` 里已存在的 `ops_policy.log_level` 与 `remote_diagnostics_enabled` 投影给 `compose_live_observability()`，并保持其余 frozen logging keys 继续通过 typed config entries / adapter fallback 进入 live composition。
+5. 新增 `tests/unit/infra/logging/LoggingConfigAdapterStrictParseTest.cpp` 与 `tests/integration/infra/logging/LoggingLiveCompositionConfigTest.cpp`，并更新 `tests/unit/CMakeLists.txt`、`tests/unit/infra/CMakeLists.txt`、`tests/integration/CMakeLists.txt`、`tests/integration/infra/logging/CMakeLists.txt` 完成注册。
+6. 更新 `docs/ssot/LoggingProductionAcceptanceMatrix.md`、`docs/architecture/DASALL_infra_logging模块详细设计.md`、`docs/todos/DASALL_子系统查漏补缺专项记录.md`，回写 `INF-LOG-FIX-005` / `BLK-INF-LOG-005` 的 minimal profile projection 与 fail-closed parsing 口径，并新增 `docs/todos/infrastructure/deliverables/INF-LOG-FIX-005-live-config-projection收口.md`。
+
+### 验证
+
+1. `Build_CMakeTools(buildTargets=["dasall_logging_config_adapter_strict_parse_unit_test","dasall_logging_live_composition_config_integration_test","dasall_access_daemon_runtime_live_dependency_composition_integration_test"])`
+   - 结果：通过。
+2. `RunCtest_CMakeTools(tests=["LoggingConfigAdapterStrictParseTest","LoggingLiveCompositionConfigTest","DaemonRuntimeLiveDependencyCompositionTest"])`
+   - 结果：命中仓库既有泛化 `生成失败`。
+3. fallback 直接执行：
+   - `./build/vscode-linux-ninja/tests/unit/infra/dasall_logging_config_adapter_strict_parse_unit_test`
+   - `./build/vscode-linux-ninja/tests/integration/infra/logging/dasall_logging_live_composition_config_integration_test`
+   - `./build/vscode-linux-ninja/tests/integration/access/dasall_access_daemon_runtime_live_dependency_composition_integration_test`
+   - 结果：3/3 通过。
+
+### 结果
+
+1. `INF-LOG-FIX-005` 已闭合：typed logging config 现可驱动 live composition 的 formatter/sink/queue/rotation/redaction policy，且 `async_enabled=true` 时继续复用上一轮已冻结的 deterministic queue contract。
+2. `BLK-INF-LOG-005` 已解阻：logging config key SSOT 与最小 profile projection 现已写成正式口径，当前 `RuntimePolicySnapshot` 只投影 `log_level` / `remote_diagnostics_enabled`，其余 frozen keys 明确走 typed config entries / adapter fallback，不再隐式扩 public schema。
+3. 本轮结论仍只到 L3 build-tree live composition evidence；recovery/fallback、metrics/health、diagnostics artifact 与 installed package proof 继续留给 `INF-LOG-FIX-006~011`。
+
 ## 记录 #837
 
 - 日期：2026-05-27

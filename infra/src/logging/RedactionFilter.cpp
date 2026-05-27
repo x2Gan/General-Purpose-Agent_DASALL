@@ -9,6 +9,8 @@ namespace dasall::infra::logging {
 
 namespace {
 
+constexpr std::string_view kDefaultRedactionRuleset = "default_v1";
+
 constexpr std::array<std::string_view, 11> kSensitiveValuePrefixes = {
     "bearer ",
     "token=",
@@ -109,7 +111,23 @@ void redact_prefix_payload(std::string& text, std::string_view prefix) {
 
 }  // namespace
 
+RedactionFilter::RedactionFilter(RedactionFilterOptions options) {
+  set_options(std::move(options));
+}
+
+void RedactionFilter::set_options(RedactionFilterOptions options) {
+  if (options.ruleset.empty()) {
+    options.ruleset = std::string(kDefaultRedactionRuleset);
+  }
+
+  options_ = std::move(options);
+}
+
 LogEvent RedactionFilter::apply(const LogEvent& event) const {
+  if (!options_.enabled) {
+    return event;
+  }
+
   auto filtered = event;
   filtered.message = redact_text(filtered.message);
   filtered.attrs = event.redacted_attrs();

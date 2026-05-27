@@ -101,23 +101,6 @@ void append_unique_key(std::vector<std::string>& rejected_keys, std::string key_
   return false;
 }
 
-[[nodiscard]] bool parse_uint32_value(const std::string_view& serialized_value,
-                                      std::uint32_t& parsed_value) {
-  try {
-    const std::size_t consumed = 0;
-    const auto value = std::stoull(std::string(serialized_value));
-    (void)consumed;
-    if (value == 0 || value > std::numeric_limits<std::uint32_t>::max()) {
-      return false;
-    }
-
-    parsed_value = static_cast<std::uint32_t>(value);
-    return true;
-  } catch (...) {
-    return false;
-  }
-}
-
 [[nodiscard]] bool parse_log_level_value(const std::string_view& serialized_value,
                                          LogLevel& parsed_value) {
   const std::string normalized = to_ascii_lower(serialized_value);
@@ -218,7 +201,8 @@ void append_unique_key(std::vector<std::string>& rejected_keys, std::string key_
   }
 
   if (entry.key_path == "infra.logging.async.queue_size") {
-    if (!parse_uint32_value(entry.serialized_value, config.queue_size)) {
+    if (!LoggingConfigAdapter::parse_uint32_value(entry.serialized_value,
+                                                  config.queue_size)) {
       append_unique_key(parse_errors, entry.key_path);
       return false;
     }
@@ -247,7 +231,8 @@ void append_unique_key(std::vector<std::string>& rejected_keys, std::string key_
   }
 
   if (entry.key_path == "infra.logging.file.rotate.max_size_mb") {
-    if (!parse_uint32_value(entry.serialized_value, config.rotate_max_size_mb)) {
+    if (!LoggingConfigAdapter::parse_uint32_value(entry.serialized_value,
+                                                  config.rotate_max_size_mb)) {
       append_unique_key(parse_errors, entry.key_path);
       return false;
     }
@@ -256,7 +241,8 @@ void append_unique_key(std::vector<std::string>& rejected_keys, std::string key_
   }
 
   if (entry.key_path == "infra.logging.file.rotate.max_files") {
-    if (!parse_uint32_value(entry.serialized_value, config.rotate_max_files)) {
+    if (!LoggingConfigAdapter::parse_uint32_value(entry.serialized_value,
+                                                  config.rotate_max_files)) {
       append_unique_key(parse_errors, entry.key_path);
       return false;
     }
@@ -309,6 +295,24 @@ void append_unique_key(std::vector<std::string>& rejected_keys, std::string key_
 
 LoggingConfigAdapter::LoggingConfigAdapter(const config::IConfigCenter& config_center)
     : config_center_(&config_center) {}
+
+bool LoggingConfigAdapter::parse_uint32_value(std::string_view serialized_value,
+                                              std::uint32_t& parsed_value) {
+  try {
+    const std::string raw(serialized_value);
+    std::size_t consumed = 0;
+    const auto value = std::stoull(raw, &consumed);
+    if (consumed != raw.size() || value == 0 ||
+        value > std::numeric_limits<std::uint32_t>::max()) {
+      return false;
+    }
+
+    parsed_value = static_cast<std::uint32_t>(value);
+    return true;
+  } catch (...) {
+    return false;
+  }
+}
 
 LoggingConfigApplyResult LoggingConfigAdapter::load_and_apply() {
   if (config_center_ == nullptr) {
