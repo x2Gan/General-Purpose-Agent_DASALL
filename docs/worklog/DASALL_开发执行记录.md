@@ -1,3 +1,33 @@
+## 记录 #829
+
+- 日期：2026-05-27
+- 阶段：runtime_support/组件专项 TODO 阶段 D closeout
+- 任务：RTSUP-FIX-005 建立 installed / release-preflight composition gate（qemu 继续归 packaging）
+- 状态：已完成（fresh rebuilt `.deb` + local installed smoke authoritative 证据已闭合；本轮未使用 qemu / kvm）
+
+### 改动
+
+1. 更新 `tests/integration/access/GatewayBinaryUnarySmokeTest.cpp`：将 `wait_for_ready()` deadline 延长到 30 秒，使真实 gateway startup / runtime composition 成本不再误判为 `/health/ready` 红灯，`Gate-INT-10` 对真实 app main path 的 build-tree gate 重新稳定。
+2. 新增 `docs/todos/runtime/deliverables/RTSUP-FIX-005-installed-release-preflight-composition-closeout.md`，把本轮 installed / release-preflight acceptance boundary、fresh rebuilt package artifact、installed proof family 与 qemu handoff owner 逐项落盘。
+3. 更新 `docs/todos/runtime/DASALL_runtime_support组件专项TODO.md`、`docs/todos/DASALL_子系统查漏补缺专项记录.md` 与 `docs/ssot/BusinessChainIntegrationMatrix.md`：将 009/005 从历史 Blocked / Todo 同步为 Done，并把 qemu / `autopkgtest` 固定回 packaging / release owner。
+
+### 验证
+
+1. `./build-ci/tests/integration/access/dasall_access_gateway_binary_unary_smoke_integration_test_bin`
+   - 结果：通过，`GatewayBinaryUnarySmokeTest` 恢复绿色。
+2. `cmake --build build-ci --target dasall_gate_int_10 -j2`
+   - 结果：通过，build-tree release-preflight 关键 gate 恢复稳定。
+3. `shell: copilot-rt-fix-006-rebuild-deb`
+   - 结果：fresh rebuilt `dasall-common` / `dasall-cli` / `dasall-daemon` / `dasall` 四包已重新生成并复制到 `/home/gangan/`。
+4. `cd /home/gangan/DASALL && artifact_dir=/tmp/rtsup-fix-005-installed-smoke && DASALL_PACKAGE_SMOKE_ARTIFACT_DIR="$artifact_dir" bash scripts/packaging/pkg_smoke_install.sh --explicit-start-check`
+   - 结果：通过，重新生成 `runtime-installed-proof.json`、`runtime-proof.json`、`access-installed-gateway-http-proof.json` 与 `access-installed-async-receipt-proof.json` 等 installed artifact。
+
+### 结果
+
+1. `RTSUP-FIX-005` 已闭合：runtime_support shared helper 现同时具备 L3 release-preflight 与 L4 local installed authoritative evidence，不再停留在 focused / app-binary partial。
+2. `pkg_smoke_install.sh --explicit-start-check` 已在 fresh rebuilt packages 上重新证明 gateway unary `READY/default-ready` + `submit.status=200`、async receipt owner mismatch fail-closed 与 runtime tool/recovery artifact family。
+3. qemu / `autopkgtest` 继续保留为 packaging / release 环境复核，不再作为 runtime_support owner 的当前 blocker。
+
 ## 记录 #828
 
 - 日期：2026-05-27

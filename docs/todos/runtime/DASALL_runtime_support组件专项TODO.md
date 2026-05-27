@@ -1,9 +1,9 @@
 # DASALL runtime_support 组件专项 TODO
 
-最近更新时间：2026-05-14
+最近更新时间：2026-05-27
 阶段：Detailed Design -> Special TODO
 适用范围：`apps/runtime_support/` 共享 app-level runtime live composition helper、`apps/daemon/src/main.cpp`、`apps/gateway/src/main.cpp`、相关 focused composition tests，以及与 runtime/tools/services/knowledge/infra 的组合根边界
-当前结论：`apps/runtime_support::compose_minimal_live_dependency_set()` 已把 daemon / gateway 的 runtime dependency owner 收敛为共享 helper，并已完成 install layout + SQLite memory baseline、production LLM manager、cognition/response ports、minimal ToolManager、typed multi-agent seam、runtime production services backend 注入、production observability/health sinks、knowledge ready / degraded / unavailable 语义与 installed positive probe，以及 owner / fail-closed / marker regression matrix。当前 build-tree release-preflight / `gate-int-10` gate 已通过，但 authoritative installed-package qemu autopkgtest 仍受本机 qemu image/KVM 环境限制；`autopkgtest-build-qemu` 也因缺少 `fakemachine` / `vmdb2` / `zerofree` 且无 `/dev/kvm` 写权限而无法生成镜像。
+当前结论：`apps/runtime_support::compose_minimal_live_dependency_set()` 已把 daemon / gateway 的 runtime dependency owner 收敛为共享 helper，并已完成 install layout + SQLite memory baseline、production LLM manager、cognition/response ports、minimal ToolManager、typed multi-agent seam、runtime production services backend 注入、production observability/health sinks、knowledge ready / degraded / unavailable 语义与 installed positive probe，以及 owner / fail-closed / marker regression matrix。当前 build-tree release-preflight / `gate-int-10` gate 已通过；2026-05-27 fresh rebuilt `.deb` 在 `pkg_smoke_install.sh --explicit-start-check` 下重新产出 `runtime-installed-proof.json`、`runtime-proof.json`、`access-installed-gateway-http-proof.json` 与 `access-installed-async-receipt-proof.json`，因此 runtime_support 自有证据已提升到 L3 release-preflight + L4 local installed。qemu / `autopkgtest` 继续归 packaging / release owner，不再作为本专项 blocker。
 
 ## 1. 文档头
 
@@ -96,7 +96,7 @@
 | `DaemonRuntimeLiveDependencyCompositionTest` | 已覆盖 daemon live composition 的 ready baseline、knowledge degraded path 与 marker stratification | focused evidence 已证明 owner、knowledge degraded marker 与 positive path，对 installed gate 仍不外推 |
 | `GatewayRuntimeLiveDependencyCompositionTest` | 已覆盖 gateway live composition 的 ready baseline、knowledge degraded path 与 marker stratification | gateway 与 daemon 的 helper symmetry 已进入 focused regression baseline |
 | `RuntimeLiveCompositionFailureMatrixTest` | 已覆盖 ready / degraded / fail-closed matrix，并验证 daemon / gateway owner symmetry | helper 的 required-missing fail-closed 与 marker stratification 已进入 focused regression gate |
-| release-preflight / `gate-int-10` gate | `dasall_packaging_preflight_tests` 与 `dasall_gate_int_10` 已通过真实 daemon/gateway binary smoke 与 discoverability | build-tree package/release-preflight gate 已收口；authoritative installed-package qemu 仍待外部 image / virt-server 环境 |
+| release-preflight / `gate-int-10` gate | `dasall_packaging_preflight_tests` 与 `dasall_gate_int_10` 已通过真实 daemon/gateway binary smoke 与 discoverability；fresh rebuilt `.deb` 已在 local installed smoke 下重新生成 runtime/access artifact family | build-tree package/release-preflight gate 与 local installed package smoke 已分层收口；qemu / `autopkgtest` 继续归 packaging / release owner |
 | `MultiAgent*IntegrationTest` | 已通过 shared helper 消费 typed `multi_agent_enabled()` | helper 已进入 multi-agent enabled / disabled seam |
 | tool path | 已通过 `services::compose_live_services()` 与 `ServiceLiveComposition` public seam 向 `BuiltinExecutorLane` 注入 concrete `IExecutionService` / `IDataService` | `agent.dataset` / `agent.terminal` 已不再回落 tools default service，并有 direct + app composition focused evidence |
 | observability / health | helper 已通过 `infra::compose_live_observability()` 统一提供 audit / metrics / trace sinks，并注册 tools/services probes 到 health monitor | production observability / health hot path 已有 direct tools focused evidence 与 app composition health aggregate evidence |
@@ -112,7 +112,7 @@
 | tool path 需要真实 services backend，而非 default service | tools / capability services 专项 TODO | 已完成，helper 通过 services public live composition seam 注入 production backend | RTSUP-TODO-005 |
 | production observability / health sinks 需要 shared helper 注入 | infra / runtime / tools / services 专项 TODO | 已完成，shared helper 已注入 concrete sinks 并保活 health monitor/probes | RTSUP-TODO-006 |
 | evidence marker 与 owner / fail-closed regression 需要单独 gate | SystemIntegrationGateMatrix、BusinessChainIntegrationMatrix | 已完成，focused regression matrix 与 discoverability 已建立 | RTSUP-TODO-008 |
-| installed / qemu / release-preflight 需要单列证据 | Gate-INT-10、packaging / release 规则 | 未完成 | RTSUP-TODO-009 |
+| installed local / release-preflight 需要单列证据，qemu handoff 继续归 packaging / release owner | Gate-INT-10、packaging / release 规则 | 已完成 | RTSUP-TODO-009 |
 
 ## 5. Build Track 映射
 
@@ -124,7 +124,7 @@
 | production services backend | `RuntimeLiveDependencyComposition.cpp`、`services/include/ServiceLiveComposition.h`、`services/src/ServiceLiveComposition.cpp` | `ToolServicesProductionBridgeIntegrationTest`、daemon/gateway composition tests | 已完成，tool path 已通过 live services backend 收口 |
 | production observability / health sinks | helper + infra public observability composition helper | `ToolProductionObservabilityIntegrationTest`、`RuntimeProductionHealthCompositionTest`、扩展 daemon/gateway composition tests | 已完成，shared sinks 与 health aggregate 已进入 focused regression 面 |
 | knowledge optional degraded semantics | helper + knowledge installed seam | `KnowledgeInstalledAssetProbeIntegrationTest`、扩展 daemon/gateway composition tests | 已完成，knowledge ready / degraded / unavailable 语义与 installed positive path 已固定 |
-| installed / qemu / release-preflight matrix | packaging scripts、package smoke、system gate docs | Gate-INT-10 / qemu probes | build-tree release-preflight 已通过；authoritative installed-package qemu 仍受环境 blocker 限制 |
+| installed local / release-preflight matrix | packaging scripts、package smoke、system gate docs | Gate-INT-10 / local package smoke | 已完成；build-tree release-preflight 与 local installed package smoke 已形成分层 authoritative evidence，qemu handoff 保持 packaging / release owner |
 
 ## 6. 原子任务清单
 
@@ -155,7 +155,7 @@
 | Task ID | 状态 | 任务标题 | 设计依据 | 精确范围 | 粒度 | 代码目标 | 目标函数/接口/数据结构 | 测试目标 | 验收命令 | 前置任务 | 关联阻塞项 | 解阻条件 | 交付物 | 完成判定 |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | RTSUP-TODO-008 | Done | 建立 owner / fail-closed / marker regression matrix | SystemIntegrationGateMatrix、BusinessChainIntegrationMatrix、runtime_support focused evidence | required-missing、daemon/gateway symmetry、multi-agent enablement、knowledge unavailable、marker stratification | L2 | `tests/integration/access/CMakeLists.txt`、`tests/integration/access/DaemonRuntimeLiveDependencyCompositionTest.cpp`、`tests/integration/access/GatewayRuntimeLiveDependencyCompositionTest.cpp`、`tests/integration/access/RuntimeLiveCompositionFailureMatrixTest.cpp` | required ports missing、knowledge degraded marker stratification、gateway symmetry、discoverability | `RuntimeLiveCompositionFailureMatrixTest`、扩展 daemon/gateway composition tests、`MultiAgentDisabledByProfileIntegrationTest` | `RunCtest_CMakeTools(tests=["DaemonRuntimeLiveDependencyCompositionTest","GatewayRuntimeLiveDependencyCompositionTest","MultiAgentDisabledByProfileIntegrationTest","RuntimeLiveCompositionFailureMatrixTest"])`；回退：`cmake -S . -B build-rtsup005 -G "Unix Makefiles" && cmake --build build-rtsup005 --target dasall_access_daemon_runtime_live_dependency_composition_integration_test dasall_access_gateway_runtime_live_dependency_composition_integration_test dasall_access_runtime_live_composition_failure_matrix_integration_test dasall_multi_agent_disabled_by_profile_integration_test -j2 && ctest --test-dir build-rtsup005 -R '^(DaemonRuntimeLiveDependencyCompositionTest|GatewayRuntimeLiveDependencyCompositionTest|RuntimeLiveCompositionFailureMatrixTest|MultiAgentDisabledByProfileIntegrationTest)$' --output-on-failure && ctest --test-dir build-rtsup005 -N | rg 'RuntimeLiveCompositionFailureMatrixTest|DaemonRuntimeLiveDependencyCompositionTest|GatewayRuntimeLiveDependencyCompositionTest'` | RTSUP-TODO-005、006、007 | RTSUP-BLK-001、002 | 已通过 failure matrix focused tests 与 discoverability 验证形成稳定 helper contract | 更新后的 focused tests 与 CMake 注册 | 修改 helper 后，不会再出现 owner 不清、fail-closed 丢失或 evidence marker 混写；daemon/gateway symmetry、knowledge degraded marker 与 multi-agent disabled seam 均有 focused regression 证据 |
-| RTSUP-TODO-009 | Blocked | 建立 installed / qemu / release-preflight composition gate | Gate-INT-10、packaging / release 规则、系统总记录证据分层 | daemon/gateway shared helper 的 package / qemu / release-preflight matrix | L2 | `apps/daemon/src/main.cpp`、`apps/gateway/src/main.cpp`、`tests/integration/access/DaemonBinaryUnarySmokeTest.cpp`、`tests/integration/access/GatewayBinaryUnarySmokeTest.cpp`、`tests/integration/access/GatewayBinaryMissingBackendRegressionTest.cpp`、必要时 `scripts/packaging/*` 与相关文档回写 | build-tree binary smoke state-root override、release-preflight / gate-int-10 matrix、qemu handoff script | `dasall_packaging_preflight_tests`、`dasall_gate_int_10`、`debian/tests/pkg-smoke-local-control-plane`、`scripts/packaging/validate_gate_int_10_installed_package_qemu.sh` | `Build_CMakeTools(target=dasall_gate_int_10)`、qemu / package smoke | `cmake --build build-rtsup005 --target dasall_packaging_preflight_tests dasall_gate_int_10 -j2`；`autopkgtest-build-qemu noble /tmp/dasall-gate-int-10.qcow2`；`sh scripts/packaging/validate_gate_int_10_installed_package_qemu.sh --disable-kvm -- /usr/bin/autopkgtest-virt-qemu --timeout-reboot=180 <image>` | RTSUP-TODO-005、006、007、008 | RTSUP-BLK-003 | build-tree gate 已通过；当前既无可用 qemu image，`autopkgtest-buildvm-ubuntu-cloud` 因 `/dev/kvm` 写权限失败，`autopkgtest-build-qemu` 又缺 `fakemachine` / `vmdb2` / `zerofree` 且同样无 `/dev/kvm` 写权限，无法完成 authoritative installed-package qemu autopkgtest | build-tree gate blocker fix、更新后的 binary smoke tests、qemu blocker 证据回写 | 只有在 authoritative installed-package qemu autopkgtest 真正跑通后，`apps/runtime_support` 的证据层级才能从 L2/L3 partial 提升到 L4/L5 候选 |
+| RTSUP-TODO-009 | Done | 建立 installed / release-preflight composition gate（qemu 继续归 packaging） | Gate-INT-10、packaging / release 规则、系统总记录证据分层 | daemon/gateway shared helper 的 local package smoke / release-preflight matrix；qemu handoff 明确不再作为本专项 blocker | L3/L4 | `apps/daemon/src/main.cpp`、`apps/gateway/src/main.cpp`、`tests/integration/access/DaemonBinaryUnarySmokeTest.cpp`、`tests/integration/access/GatewayBinaryUnarySmokeTest.cpp`、`tests/integration/access/GatewayBinaryMissingBackendRegressionTest.cpp`、`scripts/packaging/pkg_smoke_install.sh`、相关文档回写 | build-tree binary smoke state-root override、release-preflight / gate-int-10 matrix、installed package smoke artifact family | `dasall_packaging_preflight_tests`、`dasall_gate_int_10`、`scripts/packaging/pkg_smoke_install.sh` | `Build_CMakeTools(target=dasall_gate_int_10)`、local package smoke | `cmake --build build-ci --target dasall_packaging_preflight_tests dasall_gate_int_10 -j2`；`DASALL_PACKAGE_SMOKE_ARTIFACT_DIR=/tmp/rtsup-fix-005-installed-smoke bash scripts/packaging/pkg_smoke_install.sh --explicit-start-check` | RTSUP-TODO-005、006、007、008 | RTSUP-BLK-003 | fresh rebuilt `.deb` 已在 local installed smoke 下产出 `runtime-installed-proof.json`、`runtime-proof.json`、`access-installed-gateway-http-proof.json` 与 `access-installed-async-receipt-proof.json`；qemu / `autopkgtest` 继续归 packaging / release owner | build-tree gate、更新后的 binary smoke tests、installed proof artifact 与 closeout 文档 | runtime_support 自有证据已从 L2/L3 partial 推进到 L3 release-preflight + L4 local installed，且不把 local installed 结果外推为 qemu / release-runner ready |
 | RTSUP-TODO-010 | Done | 回写专项 TODO 与系统查漏补缺总账 | 当前任务需求；总记录与 design/TODO 边界修正 | runtime_support 组件专项 TODO、系统总记录补充章节 | L2 | `docs/todos/runtime/DASALL_runtime_support组件专项TODO.md`、`docs/todos/DASALL_子系统查漏补缺专项记录.md` | 文档一致性检查 | `rg -n "runtime_support 组件专项 TODO|runtime_support / app live composition|RTSUP-GAP|RTSUP-FIX|RTSUP-TODO" docs/todos/runtime/DASALL_runtime_support组件专项TODO.md docs/todos/DASALL_子系统查漏补缺专项记录.md` | RTSUP-TODO-001 | 无 | 已完成本轮回写 | 新增专项 TODO 与更新后的系统总记录 | `apps/runtime_support` 的 owner、当前缺口与后续任务不再散落在 runtime/access/tools/services 多份文档里 |
 
 ## 7. 执行顺序建议
@@ -167,7 +167,7 @@
 | A 边界与基线冻结 | 001 ~ 004、010 | 已完成 | owner、install layout、shared helper、minimal baseline 与总记录回写已经到位 |
 | B production backend 收口 | 005、006 | 005 先，006 可并行准备 | 先解决 tool path default service，再补 observability / health sinks |
 | C optional knowledge 与 regression | 007、008 | 已完成 | knowledge degraded 语义与 regression matrix 已稳定 |
-| D installed / qemu / release 证据 | 009 | 当前 Blocked | build-tree production completeness 已稳定，但 authoritative qemu gate 缺 image / virt-server 环境 |
+| D installed local / release-preflight 证据 | 009 | 已完成 | build-tree production completeness 与 local installed smoke 已稳定；qemu / `autopkgtest` 继续归 packaging / release owner |
 
 ### 7.2 必过门禁表
 
@@ -178,7 +178,7 @@
 | Gate-RTSUP-03 | services backend gate | tool path 不再回落 default service，而是通过 concrete services backend | 005、008 |
 | Gate-RTSUP-04 | observability / health gate | shared helper 组合的 live path 可发出真实 sink event 与 health snapshot | 006、008 |
 | Gate-RTSUP-05 | knowledge optional gate | knowledge ready / degraded / unavailable 语义固定，installed positive probe 可复验 | 007、008 |
-| Gate-RTSUP-06 | installed / qemu / release gate | daemon / gateway composition 在 package / qemu / release-preflight 中有正式证据 | 009 |
+| Gate-RTSUP-06 | installed local / release-preflight gate | daemon / gateway composition 在 package smoke 与 release-preflight 中有正式证据，qemu handoff 不再回流 runtime_support owner | 009 |
 
 ## 8. 阻塞项与解阻条件
 
@@ -186,7 +186,7 @@
 |---|---|---|---|---|
 | RTSUP-BLK-001 | 已解阻：runtime_support 已通过 `ServiceLiveComposition` public seam 获得真实 services composition root，tool path 不再回落 default service | 008、009 | services facade / lanes / adapters 在 helper 侧具备最小 production composition 口径 | 保持 direct tools->services 与 daemon/gateway composition focused tests 作为后续 regression baseline |
 | RTSUP-BLK-002 | 已解阻：infra provider / tracer / audit logger / health provider 已通过 `infra::compose_live_observability()` 收口，并在 helper 中统一注册 tools/services probes | 008、009 | runtime/tools/services/infra 就 helper 注入口径达成一致，或在 helper 中收口最小 provider seam | 保持 direct tools observability test、runtime health composition test 与 daemon/gateway composition tests 作为后续 regression baseline |
-| RTSUP-BLK-003 | 已部分解阻：build-tree `dasall_packaging_preflight_tests` / `dasall_gate_int_10` 已通过，但 authoritative installed-package qemu 仍缺可用 image；本机 `autopkgtest-buildvm-ubuntu-cloud` 与 `autopkgtest-build-qemu` 都被 `/dev/kvm` 权限与镜像生成依赖缺失阻塞 | 009 | knowledge installed probe 正向可复验，Gate-INT-10 / qemu harness 可运行且具备可用 image / virt-server、`fakemachine` / `vmdb2` / `zerofree` 依赖齐备 | 保持 build-tree preflight/gate-int-10 作为当前 baseline，并把 qemu 环境不足诚实记账为 Environment Blocker |
+| RTSUP-BLK-003 | 已解阻并移交：build-tree `dasall_packaging_preflight_tests` / `dasall_gate_int_10` 已通过，fresh rebuilt `.deb` 在 `pkg_smoke_install.sh --explicit-start-check` 下已生成 runtime/access authoritative local artifacts；qemu / `autopkgtest` 继续归 packaging / release owner | 009 | fresh rebuilt package 与 local installed smoke artifact family 完整 | 若后续需要 L5 复核，沿用 packaging / release 环境单独执行 qemu / `autopkgtest`，不再回流为 runtime_support blocker |
 
 ## 9. 测试矩阵与统一验收命令
 
@@ -199,13 +199,13 @@
 | services backend | tool path 不再回落 default service | `ToolServicesSmokeIntegrationTest`、`ToolServicesProductionBridgeIntegrationTest` | 证明 composition 后的 tool path 进入真实 services backend |
 | observability / health | runtime/tools/services sink injection | `ToolProductionObservabilityIntegrationTest`、`RuntimeProductionHealthCompositionTest`、`RuntimeHealthMaintenanceIntegrationTest` | 证明 production hot path 有真实 sink / health snapshot |
 | knowledge optional seam | installed asset knowledge ready / degraded / unavailable | `KnowledgeInstalledAssetProbeIntegrationTest`、扩展 daemon/gateway composition tests | 固定 knowledge optional 语义与 installed positive path |
-| installed / qemu / release | package / qemu composition probe | `Gate-INT-10` 相关 package smoke、qemu probes | 把 focused / app-binary 证据提升到 installed / qemu 层 |
+| installed local / release-preflight | package smoke / release-preflight composition probe | `Gate-INT-10` 相关 package smoke、release-preflight gate | 把 focused / app-binary 证据提升到 local installed / release-preflight 层，并把 qemu handoff 留在 packaging / release owner |
 
 ### 9.2 统一验收命令建议
 
 1. focused baseline：`RunCtest_CMakeTools(tests=["DaemonRuntimeLiveDependencyCompositionTest","GatewayRuntimeLiveDependencyCompositionTest","MultiAgentDisabledByProfileIntegrationTest","MultiAgentCoordinatorPipelineTest","MultiAgentRecoveryFoldIntegrationTest"])`
 2. production completeness：`RunCtest_CMakeTools(tests=["ToolServicesSmokeIntegrationTest","ToolServicesProductionBridgeIntegrationTest","ToolProductionObservabilityIntegrationTest","RuntimeHealthMaintenanceIntegrationTest","KnowledgeInstalledAssetProbeIntegrationTest"])`
-3. installed / qemu：`Build_CMakeTools(target=dasall_gate_int_10)` 与 `sh scripts/packaging/validate_gate_int_10_installed_package_qemu.sh -- qemu <image-or-config>`
+3. installed local / release-preflight：`cmake --build build-ci --target dasall_packaging_preflight_tests dasall_gate_int_10 -j2` 与 `DASALL_PACKAGE_SMOKE_ARTIFACT_DIR=/tmp/rtsup-fix-005-installed-smoke bash scripts/packaging/pkg_smoke_install.sh --explicit-start-check`
 
 ## 10. 风险与回退策略
 
@@ -214,7 +214,7 @@
 | RTSUP-RISK-001 | helper 膨胀成第二个 runtime control plane | 在 helper 内新增编排、恢复、状态推进逻辑 | 回退到“只做装配与 seam 选择”的边界，所有控制逻辑继续留在 runtime / access |
 | RTSUP-RISK-002 | tool path 继续由 default service 假装 production backend | services backend 未接完就把 focused 结果写成 ready | 保持 explicit gap，直到 005 和 Gate-RTSUP-03 通过 |
 | RTSUP-RISK-003 | knowledge optional 语义漂移 | unavailable / degraded / ready 在不同文档和测试中口径不一 | 以 007 固定 marker / readiness / installed probe 语义 |
-| RTSUP-RISK-004 | build-tree 绿灯被误写成 installed / qemu ready | 未建立 009 就引用 focused composition tests 作为 release 证据 | 严格按证据层级回写，package / qemu 之前保持 L2/L3 partial |
+| RTSUP-RISK-004 | build-tree 或 local installed 绿灯被误写成 qemu / release-runner ready | 把 009 的 L3/L4 结果继续外推为 L5/L6 | 严格按证据层级回写，把 qemu / release-runner 继续记到 packaging / release 环境复核 |
 | RTSUP-RISK-005 | daemon / gateway entry 回流 runtime internals wiring | app entry 为了局部修复开始手工拼 cognition / llm / memory / tools / services | 回退到 shared helper，保留 daemon/gateway 只作为 owner + entry bootstrap |
 
 ## 11. 可行性结论
@@ -223,13 +223,13 @@
 
 可以，但不应把范围再放大。
 
-当前最小可执行闭环是：保持 `RTSUP-TODO-009` 的 build-tree gate 通过状态，并在具备可用 qemu image / virt-server 后继续执行 `scripts/packaging/validate_gate_int_10_installed_package_qemu.sh`，把证据提升到 authoritative installed / qemu 层。
+当前最小可执行闭环是：保持 `RTSUP-TODO-009` 的 build-tree gate 与 fresh rebuilt `.deb` local installed smoke artifact family 通过，把 runtime_support 自有证据固定在 L3 release-preflight + L4 local installed；qemu / `autopkgtest` 若需复核，继续由 packaging / release 环境单独执行。
 
 ### 11.2 当前最细可安全落盘粒度
 
-1. L3：authoritative installed-package qemu autopkgtest 与 package smoke。
-2. L2：已通过的 release-preflight gate harness、gate-int-10 package smoke 脚本与 blocker 证据回写。
-3. L1：更宽 release runner / soak / chaos 证据，以及 helper 之外的系统级 release hardening。
+1. L4：fresh rebuilt `.deb` + `pkg_smoke_install.sh --explicit-start-check` 产出的 authoritative local installed artifact family。
+2. L3：已通过的 release-preflight gate harness、`dasall_gate_int_10` 与 `dasall_packaging_preflight_tests`。
+3. L5/L6：更宽 qemu / release-runner / soak / chaos 证据，以及 helper 之外的系统级 release hardening，继续归 packaging / release 环境复核。
 
 ## 12. 未决问题处置表
 

@@ -210,7 +210,8 @@ class ScopedGatewayProcess {
   client.set_connection_timeout(1, 0);
   client.set_read_timeout(1, 0);
 
-  for (int attempt = 0; attempt < 100; ++attempt) {
+  const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(30);
+  while (std::chrono::steady_clock::now() < deadline) {
     if (auto response = client.Get("/health/ready")) {
       if (response->status == 200 && response->body.starts_with("READY")) {
         return true;
