@@ -119,6 +119,41 @@ classify_span_status(const std::string_view event_name) {
   return it->value;
 }
 
+[[nodiscard]] bool should_emit_log_attr(const std::string_view key) {
+  static constexpr std::string_view kAllowedKeys[] = {
+      "warning_count",
+      "warning",
+      "dropped_section_count",
+      "compression_note_count",
+      "degraded",
+      "result_code",
+      "fact_count",
+      "experience_count",
+      "conflict_count",
+      "partial",
+      "retryable",
+      "turn_id",
+      "summary_id",
+      "new_fact_id",
+      "existing_fact_id",
+      "reason",
+      "confidence_delta",
+      "checkpoint_requested",
+      "retention_requested",
+      "quarantine_requested",
+      "vector_rebuild_requested",
+      "checkpoint_executed",
+      "turns_purged",
+      "facts_purged",
+      "experiences_purged",
+      "quarantine_cleaned",
+      "duration_ms",
+  };
+
+  return std::find(std::begin(kAllowedKeys), std::end(kAllowedKeys), key) !=
+         std::end(kAllowedKeys);
+}
+
 [[nodiscard]] infra::LogEvent::AttributeMap make_log_attrs(
     const std::string_view event_name,
     const MemoryTelemetryContext& context,
@@ -131,7 +166,7 @@ classify_span_status(const std::string_view event_name) {
   attrs.emplace("stage", fallback_unknown(context.stage));
   attrs.emplace("profile_id", fallback_unknown(context.profile_id));
   for (const auto& field : fields) {
-    if (!field.key.empty()) {
+    if (!field.key.empty() && should_emit_log_attr(field.key)) {
       attrs[field.key] = field.value;
     }
   }

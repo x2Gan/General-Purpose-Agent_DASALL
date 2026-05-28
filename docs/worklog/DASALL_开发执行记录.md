@@ -1,3 +1,38 @@
+## 记录 #848
+
+- 日期：2026-05-28
+- 阶段：infrastructure / memory production logging evidence
+- 任务：完成 `INF-LOG-SYS-FIX-003`，把 memory logging 从 in-memory dispatch 证明推进到 persisted runtime.log / query artifact build-tree evidence
+- 状态：已完成（L2/L3 build-tree memory logging evidence 已闭合；本轮不使用 qemu / kvm）
+
+### 执行前提
+
+1. `INF-LOG-SYS-FIX-001` 与 `INF-LOG-SYS-FIX-002` 已先后闭合，`KeySubsystemLoggingFieldMatrix` 已冻结 memory ordinary log 只能保留 request/session/stage correlation 与 owner-safe count/bool/enum 摘要字段。
+2. 近端核验确认：memory 当前虽然已有 `ILogger` 与 `InfraTelemetrySink::emit_log()`，但 `MemoryObservability::make_log_attrs()` 仍会把任意 field 直接透传进 attrs；`MemoryObservabilityBridgeTest` 也只证明了 `LoggingFacade` 收到 in-memory dispatched record，没有证明 persisted runtime.log / query artifact 路径。
+3. 本轮 owner 验收继续只接受 build-tree / local installed authoritative evidence；本轮不使用 qemu / kvm，不把 qemu/kvm 路径写成 memory logging closeout。
+
+### 改动
+
+1. 更新 `memory/src/observability/MemoryObservability.cpp`，将 `make_log_attrs()` 改为 allowlist 过滤，只保留 `warning_count`、`warning`、`degraded`、`result_code`、`fact_count`、`experience_count`、`conflict_count`、`partial`、`retryable`、`turn_id`、`summary_id`、冲突摘要字段，以及 maintenance 计数/布尔字段。
+2. raw `summary_text`、`goal_summary`、`latest_observation_digest_summary`、`agent_response`、`fact_text`、retrieval evidence 正文与其他未知 field 现不再进入 memory ordinary log attrs，避免后续 owner code 把 context/writeback payload 当作 free-form attrs 混入 runtime.log。
+3. 新增 `tests/integration/memory/MemoryProductionLoggingIntegrationTest.cpp`，在 temp `state_root/logging/runtime.log` 上触发 `writeback`、`context`、`maintenance` 三条路径，并使用 `FileLogReader + LogQueryService` 按 `session_id` 查询 redacted artifact。
+4. 更新 `tests/integration/memory/MemoryObservabilityBridgeTest.cpp` 与 `tests/integration/memory/CMakeLists.txt`，让 bridge test 同时断言 `LoggingFacade::last_dispatched_event()` 不含 raw context / writeback payload 字段，并注册新的 focused integration target。
+
+### 验证
+
+1. `cmake --build build/vscode-linux-ninja --target dasall_memory_production_logging_integration_test dasall_memory_observability_bridge_integration_test`
+   - 结果：通过。
+2. `./build/vscode-linux-ninja/tests/integration/memory/dasall_memory_production_logging_integration_test`
+   - 结果：通过。
+3. `./build/vscode-linux-ninja/tests/integration/memory/dasall_memory_observability_bridge_integration_test`
+   - 结果：通过。
+
+### 结果
+
+1. `INF-LOG-SYS-FIX-003` 已闭合：memory `writeback` / `context` / `maintenance` 事件现在都能在 live composition 下进入 shared runtime.log，且 `LogQueryService` 可按 `session_id` materialize redacted query artifact。
+2. memory ordinary log 与 query artifact 现已不再包含 raw `summary_text`、`goal_summary`、`latest_observation_digest_summary`、`agent_response`、`fact_text` 或 retrieval evidence 正文；`LoggingFacade` in-memory dispatch 也同步守住这一 allowlist 边界。
+3. 当前结论已到 L2/L3 build-tree owner evidence；installed/package authoritative proof、跨子系统 e2e 与 package artifact schema 继续留给 `INF-LOG-SYS-FIX-007` / `INF-LOG-FIX-011`。本轮不使用 qemu / kvm。
+
 ## 记录 #847
 
 - 日期：2026-05-28

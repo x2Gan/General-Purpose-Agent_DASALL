@@ -517,6 +517,15 @@ key 域冻结规则：
 5. 若 cognition telemetry event 同时带有 audit refs，logging 侧只保留 `audit_ref_pending`、`audit_trace_id`、`audit_task_id`、`evidence_ref`、`evidence_kind` 这组 correlation anchor；完整 audit payload 继续停留在 audit owner persistence，不把 `audit=true` 或 actor/action/target/outcome 语义混入 cognition ordinary log。
 6. focused build-tree 证据现固定为 `CognitionProductionLoggingIntegrationTest` 与扩展后的 `CognitionProductionTelemetryIntegrationTest`；它们共同验证 `stage.completed`、`stage.failed`、`response.degraded` 在 live composition 下可落到 shared logging sink，并且 runtime.log 不泄漏 `payload_excerpt`、raw prompt、token 或其他 forbidden attrs。当前结论只到 L2 build-tree owner evidence，不外推成 package / qemu authoritative proof。
 
+### 6.10.15 memory production logging evidence 收口补充
+
+`INF-LOG-SYS-FIX-003` 现已把 memory 从“只有 in-memory dispatched record 断言”推进到 build-tree persisted/query evidence：
+
+1. `MemoryObservability::make_log_attrs()` 现改为 allowlist 过滤，只允许 `warning_count`、`warning`、`degraded`、`result_code`、`fact_count`、`experience_count`、`conflict_count`、`partial`、`retryable`、`turn_id`、`summary_id`、冲突摘要字段以及 maintenance 计数/布尔字段进入 ordinary log。
+2. raw `summary_text`、`goal_summary`、`latest_observation_digest_summary`、`agent_response`、`fact_text`、retrieval evidence 正文与其他未知 field 现不再进入 memory ordinary log attrs；memory owner 继续只通过 request/session/stage correlation 与 owner-safe count/bool/enum 摘要暴露状态。
+3. focused build-tree 证据现固定为 `MemoryProductionLoggingIntegrationTest` 与更新后的 `MemoryObservabilityBridgeTest`：前者在 temp `state_root/logging/runtime.log` 上验证 `writeback.completed`、`context.assembled`、`maintenance.completed` 落盘，并用 `FileLogReader + LogQueryService` 按 `session_id` 产出 redacted query artifact；后者继续守住 `LoggingFacade` in-memory dispatch 与 payload allowlist。
+4. 当前 memory logging 结论已到 L2/L3 build-tree persisted/query owner evidence，但不外推成 installed/package authoritative proof；package artifact 与跨子系统 e2e 继续留给 `INF-LOG-SYS-FIX-007` / `INF-LOG-FIX-011`。本轮不使用 qemu / kvm。
+
 ---
 
 ## 7. Design -> Build 映射（建议级）

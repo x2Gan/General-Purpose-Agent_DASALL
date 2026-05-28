@@ -91,6 +91,11 @@ void seed_old_quarantine_record(const std::filesystem::path& database_path,
                      });
 }
 
+[[nodiscard]] bool has_attr(const dasall::infra::LogEvent::AttributeMap& attrs,
+                            const std::string& key) {
+  return attrs.find(key) != attrs.end();
+}
+
 [[nodiscard]] dasall::memory::MemoryConfig make_sqlite_config(
     const std::filesystem::path& database_path) {
   dasall::memory::MemoryConfig config;
@@ -285,6 +290,13 @@ void test_memory_observability_bridge_emits_context_writeback_conflict_and_maint
   assert_true(logger->last_dispatched_event().attrs.at("event_name") ==
                   "maintenance.completed",
               "maintenance should be the last emitted memory telemetry event in this scenario");
+  assert_true(!has_attr(logger->last_dispatched_event().attrs, "summary_text") &&
+                  !has_attr(logger->last_dispatched_event().attrs, "goal_summary") &&
+                  !has_attr(logger->last_dispatched_event().attrs,
+                            "latest_observation_digest_summary") &&
+                  !has_attr(logger->last_dispatched_event().attrs, "agent_response") &&
+                  !has_attr(logger->last_dispatched_event().attrs, "fact_text"),
+              "memory observability bridge should not leak raw context or writeback payload fields into log attrs");
   assert_true(metrics_facade->record_attempt_count() > 0U,
               "metrics facade should record memory telemetry samples");
   assert_true(tracer_provider->tracer_count() > 0U,
