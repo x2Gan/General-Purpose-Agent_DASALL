@@ -495,6 +495,17 @@ key 域冻结规则：
 5. `LogRetentionPolicy::apply()` 现按 `created_at` retention window 与 max artifact count 清理 query artifact / index 自身；它只会删除 query artifact root 中过期或溢出的 artifact 文件，不会删除、截断或重写 primary runtime log、rotation family、audit owner persistence 或 diagnostics retained snapshot store。
 6. focused 证据现固定为 `LogQueryServicePersistedReaderTest`、`LoggingDiagnosticsArtifactIntegrationTest` 与 `LogRetentionPolicyTest`；相邻回归继续使用 `LogQueryServiceTest` 与 `LogQueryIntegrationTest` 守住既有 exact selector + local artifact summary 契约。当前结论已到 L2/L3 build-tree persisted reader/index/materialization/cleanup evidence，但仍不外推成 installed/package authoritative evidence。
 
+### 6.10.13 KeySubsystemLoggingFieldMatrix 冻结补充
+
+`INF-LOG-SYS-FIX-001` 现已把跨子系统 logging 的 field/correlation 规则冻结到 `docs/ssot/KeySubsystemLoggingFieldMatrix.md`，用于解阻 `BLK-INF-LOG-009` 并约束后续 `INF-LOG-SYS-FIX-002~006` 与 `INF-LOG-FIX-010`：
+
+1. cognition logging 只允许把 `stage`、`profile_id`、`request_id`、`trace_id`、`goal_id`、`decision_kind`、`confidence`、`selected_node_id`、`error_code`、`fallback_mode` 等 owner-safe 摘要字段投影为 ordinary log attrs；`clarification_question`、`response_summary`、raw prompt、raw `candidate_scores` 与 raw `payload_excerpt` 继续保持 redacted 或直接禁止落盘。
+2. memory 当前虽然已经有 `ILogger`，但 `make_log_attrs()` 现阶段仍会把任意 field 透传到 attrs；后续 owner task 必须收紧为 allowlist，只保留 `request_id/session_id/trace_id/stage/profile_id` 与 bounded enum/count/bool 字段，禁止 raw context body、retrieval payload、summary text 与 embedding payload 进入 ordinary log。
+3. knowledge 当前 primary/fallback logger 已经共享 `make_knowledge_log_event()`，因此本轮冻结 `request_id`、`component`、`snapshot_id`、`profile_id`、`query_kind`、`retrieval_mode`、`warning_summary`、`selected_corpora`、`reason_codes` 与 `telemetry_path` 为普通日志 attrs；raw `query/body`、ingest payload 与 corpus document text 继续留在 subsystem owner，不允许靠 fallback path 外泄。
+4. runtime 当前只有 `RuntimeEventBus` / `RuntimeTelemetryBridge`，还没有 logger seam；后续 `RuntimeLoggingBridge` 只能投影 `RuntimeEventEnvelope` 中的 operational attrs，例如 `request_id`、`session_id`、`trace_id`、`turn_id`、`checkpoint_id`、`runtime_instance_id`、state/budget/recovery/safe-mode summary。`audit=true` envelope 继续交给 audit owner，logging 侧只写 redacted operational record。
+5. services 当前只有 `ServiceAuditBridge`、`ServiceMetricsBridge` 与 `ServiceTraceBridge`；后续新增的 `ServiceLoggingBridge` 只允许写入 `request_id`、`capability_id`、`target_id`、`operation_name`、route metadata 与 outcome summary，禁止 raw `payload_json`、catalog/result body 或 adapter secret 落盘。现有 `request ledger` 不再充当 production logging 证据。
+6. installed/package 侧统一冻结为 `logging-installed-proof.json.subsystems` 与 `logging-runtime-proof.json.subsystems`；每个 subsystem summary 至少要给出 `record_count`、`event_names`、`correlation_fields_present`、`redaction_proof`、`query_proof_ref`、`flush_observed` 与 `evidence_level`。当前 owner 验收上限仍是 local installed authoritative evidence，不外推到 qemu / kvm。
+
 ---
 
 ## 7. Design -> Build 映射（建议级）

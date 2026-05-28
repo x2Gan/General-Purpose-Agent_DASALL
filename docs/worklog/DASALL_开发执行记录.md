@@ -1,3 +1,39 @@
+## 记录 #846
+
+- 日期：2026-05-28
+- 阶段：infrastructure / logging key subsystem field matrix freeze
+- 任务：关闭 `BLK-INF-LOG-009`，完成 `INF-LOG-SYS-FIX-001`，为后续 `INF-LOG-FIX-010` 固定 `KeySubsystemLoggingFieldMatrix`
+- 状态：已完成（L1 design / docs contract closeout 已闭合；本轮不使用 qemu / kvm）
+
+### 执行前提
+
+1. 用户原目标是继续推进 `INF-LOG-FIX-010`，但系统总账中 `BLK-INF-LOG-009` 仍处于 Open，必须先按 blocker recovery round 完成最小解阻任务。
+2. 近端核验确认：真正缺口不是 build graph，而是仓库缺少正式的 `KeySubsystemLoggingFieldMatrix` SSOT，导致 cognition / memory / knowledge / runtime / services 的 owner-safe attrs、correlation、audit split 与 installed artifact 字段没有统一口径。
+3. 本轮 owner 验收继续只接受 local installed authoritative evidence；本轮不使用 qemu / kvm，不把 qemu/kvm 结果写成 logging owner 的 authoritative completion。
+
+### 改动
+
+1. 新增 `docs/ssot/KeySubsystemLoggingFieldMatrix.md`，冻结五个关键子系统的 ordinary log allowlist、forbidden fields、correlation anchors、audit split，以及 `logging-installed-proof.json.subsystems` / `logging-runtime-proof.json.subsystems` 的基础字段。
+2. 更新 `docs/architecture/DASALL_infra_logging模块详细设计.md`，新增 `6.10.13 KeySubsystemLoggingFieldMatrix 冻结补充`，把 `payload_excerpt`、`query/body`、`payload_json`、`request ledger` 与 `audit=true` 的 owner boundary 回链到 logging 详设。
+3. 更新系统总账 `docs/todos/DASALL_子系统查漏补缺专项记录.md`，将 `BLK-INF-LOG-009` 标记为 Closed，并将 `INF-LOG-SYS-FIX-001` 标记为 Done，固定后续 owner tasks 只能沿字段矩阵推进。
+4. 既有 `tests/contract/smoke/KeySubsystemLoggingFieldMatrixContractTest.cpp` 继续作为本轮 docs contract，统一扫描 SSOT / logging 详设 / 系统总账 / worklog 四份文档，阻止后续再把字段口径退回口头约定。
+
+### 验证
+
+1. `Build_CMakeTools(buildTargets=["dasall_key_subsystem_logging_field_matrix_contract_test"])`
+   - 结果：通过。
+2. `RunCtest_CMakeTools(tests=["KeySubsystemLoggingFieldMatrixContractTest"])`
+   - 结果：命中仓库既有泛化 `生成失败`。
+3. fallback 直接执行：
+   - `./build/vscode-linux-ninja/tests/contract/dasall_key_subsystem_logging_field_matrix_contract_test`
+   - 结果：通过。
+
+### 结果
+
+1. `INF-LOG-SYS-FIX-001` 的 `KeySubsystemLoggingFieldMatrix` 已经落盘，`BLK-INF-LOG-009` 的 design 缺口从“口头字段约定”收口为可扫描的 SSOT / design / todo / worklog 契约。
+2. cognition、memory、knowledge、runtime、services 五个 owner 子系统现在都有统一的 ordinary log allowlist、forbidden fields、correlation anchors、audit split 与 installed artifact 字段基线，后续 `INF-LOG-SYS-FIX-002~007` 不再允许临场扩字段。
+3. 本轮不使用 qemu / kvm；logging owner 的 authoritative evidence 继续以 local installed authoritative evidence 与 focused contract/binary fallback 为准。
+
 ## 记录 #845
 
 - 日期：2026-05-27

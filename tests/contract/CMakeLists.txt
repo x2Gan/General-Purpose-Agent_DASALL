@@ -237,6 +237,12 @@ dasall_register_logging_contract_test(
   smoke/LoggingProductionAcceptanceContractTest.cpp
 )
 
+dasall_register_logging_contract_test(
+  dasall_key_subsystem_logging_field_matrix_contract_test
+  KeySubsystemLoggingFieldMatrixContractTest
+  smoke/KeySubsystemLoggingFieldMatrixContractTest.cpp
+)
+
 target_include_directories(dasall_contract_log_event_boundary_test
   PRIVATE
     ${CMAKE_SOURCE_DIR}/infra/include
