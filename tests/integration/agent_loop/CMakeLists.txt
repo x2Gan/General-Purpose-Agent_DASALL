@@ -237,9 +237,28 @@ dasall_add_runtime_agent_loop_integration_test(
   RuntimeHealthMaintenanceIntegrationTest.cpp
 )
 
+dasall_add_runtime_agent_loop_integration_test(
+  dasall_runtime_production_logging_integration_test
+  RuntimeProductionLoggingIntegrationTest
+  RuntimeProductionLoggingIntegrationTest.cpp
+)
+
 target_include_directories(dasall_runtime_health_maintenance_integration_test
   PRIVATE
     ${CMAKE_SOURCE_DIR}/infra/src
+)
+
+target_include_directories(dasall_runtime_production_logging_integration_test
+  PRIVATE
+    ${CMAKE_SOURCE_DIR}/apps/runtime_support/include
+    ${CMAKE_SOURCE_DIR}/infra/src
+)
+
+target_link_libraries(dasall_runtime_production_logging_integration_test
+  PRIVATE
+    dasall_apps_runtime_support
+    dasall_infra
+    dasall_profiles
 )
 
 dasall_add_runtime_agent_loop_integration_test(

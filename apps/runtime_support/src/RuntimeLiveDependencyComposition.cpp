@@ -74,6 +74,7 @@
 #include "skills/SkillRegistry.h"
 #include "skills/SkillRuntime.h"
 #include "telemetry/RuntimeEventBus.h"
+#include "telemetry/RuntimeLoggingBridge.h"
 #include "telemetry/RuntimeTelemetryBridge.h"
 #include "tracing/ISpan.h"
 #include "tracing/ITracer.h"
@@ -3245,6 +3246,14 @@ RuntimeDependencyCompositionResult compose_minimal_live_dependency_set(
                 return current_time_ms();
               },
           });
+  if (dependency_set->runtime_event_bus != nullptr && dependency_set->logger != nullptr) {
+    auto runtime_logging_bridge =
+        std::make_shared<runtime::RuntimeLoggingBridge>(dependency_set->logger);
+    (void)dependency_set->runtime_event_bus->subscribe(
+        [runtime_logging_bridge](const runtime::RuntimeEventEnvelope& event) {
+          (void)runtime_logging_bridge->handle(event);
+        });
+  }
   dependency_set->background_maintenance_hooks =
       std::make_shared<runtime::BackgroundMaintenanceHooks>(
           dependency_set->runtime_event_bus,

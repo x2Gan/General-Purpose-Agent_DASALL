@@ -1,3 +1,44 @@
+## 记录 #850
+
+- 日期：2026-05-28
+- 阶段：infrastructure / runtime control-plane logging bridge
+- 任务：完成 `INF-LOG-SYS-FIX-005`，把 runtime control-plane 事件从 `RuntimeEventBus` / snapshot 证据推进到 shared runtime.log build-tree evidence
+- 状态：已完成（L2/L3 build-tree runtime logging evidence 已闭合；本轮不使用 qemu / kvm）
+
+### 执行前提
+
+1. `INF-LOG-SYS-FIX-001~004` 已先后闭合，`KeySubsystemLoggingFieldMatrix` 已冻结 runtime ordinary log 只能保留 control-plane correlation 与 owner-safe operational attrs，并要求 `audit=true` 事件不得把完整审计 payload 写回普通日志。
+2. 近端核验确认：`RuntimeTelemetryBridge` 虽然已经会把 transition / budget / recovery / safe-mode 事件发到 `RuntimeEventBus`，但 runtime_support 之前没有把 event bus 订阅到 shared logger，因此 shared runtime.log 中缺少 runtime control-plane persisted evidence。
+3. `BLK-INF-LOG-004` 与 `BLK-INF-LOG-009` 已闭合，因此本轮只做 runtime owner 的 build-tree logging bridge 与 focused evidence 补齐；installed/package authoritative evidence 与跨子系统 e2e 继续留给 `INF-LOG-SYS-FIX-007` / `INF-LOG-FIX-011`。本轮不使用 qemu / kvm。
+
+### 改动
+
+1. 新增 `runtime/src/telemetry/RuntimeLoggingBridge.h` / `.cpp`，把 `RuntimeEventEnvelope` 的 `event_name`、`category`、`severity`、request/session/trace/turn/checkpoint correlation 字段，以及 runtime owner allowlist attrs 投影为 module=`runtime` 的 `LogEvent`；ordinary log message 固定使用 event name，不复制 detail 文本。
+2. `RuntimeLoggingBridge` 对 `audit=true` envelope 只补 `audit_ref_pending=true`，不把 actor/action/target/outcome、`checkpoint_ref` 或完整 audit payload 写回 ordinary log；raw detail、`payload_json` 等非 allowlisted attrs 会被直接丢弃。
+3. 更新 `apps/runtime_support/src/RuntimeLiveDependencyComposition.cpp`，在 `RuntimeEventBus` 与 shared logger 都已存在时注册 logging subscriber，并通过捕获 `shared_ptr<RuntimeLoggingBridge>` 保持桥接对象生命周期；subscriber 只做 best-effort `handle(event)`，不回写 recovery、不持有 runtime 主循环锁。
+4. 新增 `tests/unit/runtime/RuntimeLoggingBridgeTest.cpp` 与 `tests/integration/agent_loop/RuntimeProductionLoggingIntegrationTest.cpp`，分别守住 runtime allowlist/redaction contract 与 live composition runtime.log 持久化；`RuntimeHealthMaintenanceIntegrationTest` 同轮复验，继续守住 event-bus/backpressure 相邻路径。
+
+### 验证
+
+1. `Build_CMakeTools(buildTargets=["dasall_runtime_logging_bridge_unit_test"])`
+   - 结果：通过。
+2. `RunCtest_CMakeTools(tests=["RuntimeLoggingBridgeTest"])`
+   - 结果：命中仓库既有泛化“生成失败”；authoritative 结果以下面的 direct binary 为准。
+3. `./build/vscode-linux-ninja/tests/unit/runtime/dasall_runtime_logging_bridge_unit_test`
+   - 结果：通过。
+4. `cmake --build build/vscode-linux-ninja --target dasall_runtime_production_logging_integration_test`
+   - 结果：通过。
+5. `./build/vscode-linux-ninja/tests/integration/agent_loop/dasall_runtime_production_logging_integration_test`
+   - 结果：通过。
+6. `cmake --build build/vscode-linux-ninja --target dasall_runtime_health_maintenance_integration_test && ./build/vscode-linux-ninja/tests/integration/agent_loop/dasall_runtime_health_maintenance_integration_test`
+   - 结果：通过。
+
+### 结果
+
+1. `INF-LOG-SYS-FIX-005` 已闭合：runtime `transition`、`budget.reject`、`recovery.reject`、`safe_mode` control-plane 事件现在都能在 live composition 下进入 shared runtime.log。
+2. runtime ordinary log 现已固定为 allowlisted operational attrs；`audit=true` 事件只保留 `audit_ref_pending` marker，raw detail、`checkpoint_ref` 与完整 audit payload 不再出现在 `LoggingFacade::last_dispatched_event()` 或 runtime.log 中。
+3. `RuntimeHealthMaintenanceIntegrationTest` 继续证明 event bus/backpressure 相邻路径未被本轮 logging subscriber 打破；当前结论只到 L2/L3 build-tree owner evidence，installed/package authoritative proof、跨子系统 e2e 与 package artifact schema 继续留给 `INF-LOG-SYS-FIX-007` / `INF-LOG-FIX-011`。本轮不使用 qemu / kvm。
+
 ## 记录 #849
 
 - 日期：2026-05-28

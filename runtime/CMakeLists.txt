@@ -16,6 +16,7 @@ target_sources(dasall_runtime
     src/scheduling/Scheduler.cpp
     src/session/SessionManager.cpp
     src/telemetry/RuntimeEventBus.cpp
+    src/telemetry/RuntimeLoggingBridge.cpp
     src/telemetry/RuntimeTelemetryBridge.cpp
 )
 

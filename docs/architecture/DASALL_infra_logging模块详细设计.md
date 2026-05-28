@@ -536,6 +536,16 @@ key 域冻结规则：
 4. `KnowledgeTelemetryFieldSetTest`、`KnowledgeTelemetryDegradeEventTest` 与 `KnowledgeTelemetryTest` 继续守住 invalid-payload fallback 与 sink-failure fail-open contract，证明 logging sink 自保护不会阻断 knowledge retrieve 主路径。
 5. 当前 knowledge logging 结论已到 L2/L3 build-tree persisted/query owner evidence，但不外推成 installed/package authoritative proof；knowledge startup/retrieve installed evidence 与跨子系统 e2e 继续留给 `INF-LOG-SYS-FIX-007` / `INF-LOG-FIX-011`。本轮不使用 qemu / kvm。
 
+### 6.10.17 runtime control-plane production logging evidence 收口补充
+
+`INF-LOG-SYS-FIX-005` 现已把 runtime 从“只有 `RuntimeEventBus` envelope / in-memory snapshot 证据”推进到 build-tree runtime.log 证据：
+
+1. 新增 `runtime::RuntimeLoggingBridge`，把 `RuntimeEventEnvelope` 的 `event_name`、`category`、`severity`、request/session/trace/turn/checkpoint correlation 字段，以及 runtime owner allowlist attrs 投影为 module=`runtime` 的 `LogEvent`；ordinary log message 固定使用 event name，不复制 detail 文本。
+2. `apps/runtime_support::RuntimeLiveDependencyComposition` 现会在 `RuntimeEventBus` 与 shared logger 都存在时注册 logging subscriber，并通过捕获 `shared_ptr<RuntimeLoggingBridge>` 保持桥接生命周期；subscriber 只做 best-effort 投影，不持有 runtime 主循环锁，也不回写 recovery。
+3. runtime ordinary log allowlist 现固定为 `event_name`、`category`、`severity`、`request_id`、`session_id`、`trace_id`、`turn_id`、`checkpoint_id`、`runtime_instance_id`、`from_state`、`to_state`、`violation`、`budget_type`、`executed_action`、`final_runtime_state`、`previous_mode`、`target_mode`、`action`、`selected_fallback`、`error_code` 与 `audit_ref_pending`；raw detail、`checkpoint_ref`、payload/context body 与完整 audit payload 继续禁止进入 ordinary log。
+4. focused build-tree 证据现固定为 `RuntimeLoggingBridgeTest`、`RuntimeProductionLoggingIntegrationTest` 与邻近的 `RuntimeHealthMaintenanceIntegrationTest`：前两者分别证明 allowlist/redaction contract 与 live composition runtime.log 持久化，后者继续守住 event-bus/backpressure 相邻路径未因 logging subscriber 回归。
+5. 当前 runtime logging 结论已到 L2/L3 build-tree persisted/flush owner evidence，但不外推成 installed/package authoritative proof；跨子系统 e2e 与 installed logging proof 继续留给 `INF-LOG-SYS-FIX-007` / `INF-LOG-FIX-011`。本轮不使用 qemu / kvm。
+
 ---
 
 ## 7. Design -> Build 映射（建议级）

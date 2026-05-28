@@ -72,6 +72,10 @@ add_executable(dasall_runtime_telemetry_bridge_unit_test
   RuntimeTelemetryBridgeTest.cpp
 )
 
+add_executable(dasall_runtime_logging_bridge_unit_test
+  RuntimeLoggingBridgeTest.cpp
+)
+
 add_executable(dasall_runtime_health_probe_unit_test
   RuntimeHealthProbeTest.cpp
 )
@@ -266,6 +270,19 @@ target_include_directories(dasall_runtime_telemetry_bridge_unit_test
     ${PROJECT_SOURCE_DIR}/runtime/src
 )
 
+target_link_libraries(dasall_runtime_logging_bridge_unit_test
+  PRIVATE
+    dasall_test_support
+    dasall_runtime
+    dasall_infra
+)
+
+target_include_directories(dasall_runtime_logging_bridge_unit_test
+  PRIVATE
+    ${PROJECT_SOURCE_DIR}/runtime/src
+    ${PROJECT_SOURCE_DIR}/infra/src
+)
+
 target_link_libraries(dasall_runtime_health_probe_unit_test
   PRIVATE
     dasall_test_support
@@ -352,6 +369,7 @@ dasall_apply_common_options(dasall_runtime_scheduler_surface_unit_test)
 dasall_apply_common_options(dasall_runtime_safe_mode_controller_unit_test)
 dasall_apply_common_options(dasall_runtime_event_bus_unit_test)
 dasall_apply_common_options(dasall_runtime_telemetry_bridge_unit_test)
+dasall_apply_common_options(dasall_runtime_logging_bridge_unit_test)
 dasall_apply_common_options(dasall_runtime_health_probe_unit_test)
 dasall_apply_common_options(dasall_runtime_background_maintenance_hook_unit_test)
 dasall_apply_common_options(dasall_runtime_checkpoint_state_mapper_unit_test)
@@ -414,6 +432,9 @@ set_tests_properties(RuntimeEventBusTest PROPERTIES LABELS "unit")
 
 add_test(NAME RuntimeTelemetryBridgeTest COMMAND dasall_runtime_telemetry_bridge_unit_test)
 set_tests_properties(RuntimeTelemetryBridgeTest PROPERTIES LABELS "unit")
+
+add_test(NAME RuntimeLoggingBridgeTest COMMAND dasall_runtime_logging_bridge_unit_test)
+set_tests_properties(RuntimeLoggingBridgeTest PROPERTIES LABELS "unit")
 
 add_test(NAME RuntimeHealthProbeTest COMMAND dasall_runtime_health_probe_unit_test)
 set_tests_properties(RuntimeHealthProbeTest PROPERTIES LABELS "unit")
