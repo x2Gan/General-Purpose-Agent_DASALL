@@ -492,6 +492,7 @@ target_include_directories(dasall-daemon_runtime_installed_proof_runner_unit_tes
     ${CMAKE_SOURCE_DIR}/apps/daemon/src
     ${CMAKE_SOURCE_DIR}/cognition/include
     ${CMAKE_SOURCE_DIR}/memory/include
+    ${CMAKE_SOURCE_DIR}/runtime/src
 )
 
 target_link_libraries(dasall-daemon_runtime_installed_proof_runner_unit_test

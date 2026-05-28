@@ -67,6 +67,14 @@ namespace {
          !operation_name.empty() && !selection.adapter_id.empty();
 }
 
+[[nodiscard]] std::string context_value_or_unknown(std::string_view value) {
+  if (value.empty()) {
+    return std::string("unknown");
+  }
+
+  return std::string(value);
+}
+
 }  // namespace
 
 ServiceLoggingBridge::ServiceLoggingBridge(
@@ -160,6 +168,10 @@ infra::logging::LogWriteResult ServiceLoggingBridge::write_route_event(
   log_event.ts = options_.now_ms ? options_.now_ms() : current_time_ms();
   log_event.attrs.emplace("event_name", event_name);
   log_event.attrs.emplace("request_id", context.request_id);
+  log_event.attrs.emplace("session_id", context_value_or_unknown(context.session_id));
+  log_event.attrs.emplace("trace_id", context_value_or_unknown(context.trace_id));
+  log_event.attrs.emplace("tool_call_id", context_value_or_unknown(context.tool_call_id));
+  log_event.attrs.emplace("goal_id", context_value_or_unknown(context.goal_id));
   log_event.attrs.emplace("capability_id", capability_id);
   log_event.attrs.emplace("target_id", target_id);
   log_event.attrs.emplace("request_kind", request_kind);

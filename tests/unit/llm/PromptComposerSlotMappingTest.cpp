@@ -141,12 +141,48 @@ void test_prompt_composer_keeps_unmatched_slots_as_literal_warnings() {
               "PromptComposer should surface unmatched slots as composition warnings for PromptPolicy and audit consumers");
 }
 
+void test_prompt_composer_maps_session_summary_into_dedicated_slot() {
+  using dasall::tests::support::assert_equal;
+  using dasall::tests::support::assert_true;
+
+  PromptComposeRequest request = make_request();
+  request.stage = CompositionStage::Response;
+  request.task_type = "answer";
+  request.tags = std::vector<std::string>{
+      "user_goal=repeat the marker",
+      "constraints=must answer concisely",
+      "session_summary=mem-fix-006-local-proof",
+  };
+
+  PromptRelease release = make_release();
+  release.prompt_id = "responder";
+  release.stage = CompositionStage::Response;
+  release.system_instructions = "Stage={{stage}} task={{task_type}}";
+  release.task_template =
+      "Goal={{user_goal}} Summary={{session_summary}} Constraints={{constraints}}";
+  release.few_shot_refs = std::nullopt;
+
+  PromptComposer composer;
+  assert_true(composer.init({.template_engine = "simple_var", .max_few_shot_count = 2U}),
+              "PromptComposer should initialize before session summary slot verification");
+
+  const auto result = composer.compose(
+      request, release, ModelBudgetHint{.context_window = 512U, .max_output_tokens = 64U});
+
+  assert_true(result.messages.has_value(),
+              "PromptComposer should emit messages when session_summary is provided as a first-class tag");
+  assert_equal(std::string("user: Goal=repeat the marker Summary=mem-fix-006-local-proof Constraints=must answer concisely"),
+               result.messages->back(),
+               "PromptComposer should render session_summary into its dedicated prompt slot instead of burying it inside constraints");
+}
+
 }  // namespace
 
 int main() {
   try {
     test_prompt_composer_maps_request_fields_and_injects_capped_few_shots();
     test_prompt_composer_keeps_unmatched_slots_as_literal_warnings();
+    test_prompt_composer_maps_session_summary_into_dedicated_slot();
   } catch (const std::exception& ex) {
     std::cerr << ex.what() << std::endl;
     return 1;

@@ -1,3 +1,51 @@
+## 记录 #852
+
+- 日期：2026-05-28
+- 阶段：infrastructure / key subsystem installed logging evidence
+- 任务：完成 `INF-LOG-SYS-FIX-007`，把关键子系统 production logging e2e 与 installed authoritative proof 收口到同一轮 owner evidence
+- 状态：已完成（L3 build-tree e2e + L4 local installed authoritative logging evidence 已闭合；本轮不使用 qemu / kvm）
+
+### 执行前提
+
+1. `INF-LOG-SYS-FIX-002~006` 已先后闭合，cognition / memory / knowledge / runtime / services 五个 owner 子系统均已有 build-tree logging seam 或 bridge 与 focused evidence。
+2. `KeySubsystemLoggingFieldMatrix`、logging 详设与系统总账已经冻结 installed artifact 的字段、redaction、correlation 与 evidence level；当前 owner 验收只接受 local installed authoritative evidence，不外推到 qemu / soak。
+3. 近端核验确认：`KeySubsystemProductionLoggingE2ETest` build-tree e2e 已能覆盖五个子系统同一 live composition runtime.log，但 package smoke 仍存在三类 installed blocker：same-session recall 未稳定消费 session summary、runtime installed proof helper 默认把 scenario state root 写到临时目录、helper tool-positive path 虽能触发 cognition/memory/knowledge/services 日志却没有显式 runtime transition log。
+
+### 改动
+
+1. 更新 `runtime/src/AgentOrchestrator.cpp`、`llm/src/prompt/PromptComposer.cpp`、`llm/assets/prompts/responder/default/manifest.yaml` 与 `llm/assets/prompts/responder/default/task.md`：把 `session_summary` 从 buried constraints 升级为 first-class prompt slot，installed same-session recall 现在通过 runtime tag -> prompt compose -> responder prompt 主链消费摘要。
+2. 更新 `scripts/packaging/pkg_smoke_install.sh`：daemon readiness wait 窗口从 30 秒扩到 90 秒，并在 reset 阶段额外清理 `/var/lib/dasall/tool-positive`、`/var/lib/dasall/recovery-positive`、`/var/lib/dasall/recovery-negative`，避免 runtime installed proof helper 的固定 session/turn id 与旧 state 冲突。
+3. 更新 `apps/daemon/src/RuntimeInstalledProofRunner.cpp`、`apps/daemon/CMakeLists.txt`、`tests/unit/apps/daemon/CMakeLists.txt` 与 `tests/unit/apps/daemon/RuntimeInstalledProofRunnerTest.cpp`：
+   - helper 默认 state root 现对齐 `InstallLayout.state_root`，不再落到临时目录；
+   - tool-positive path 在关闭 live LLM bridge 后仍保留 cognition observability 依赖，不再丢失 `module=cognition` 日志；
+   - helper 显式通过 `RuntimeTelemetryBridge -> RuntimeEventBus -> RuntimeLoggingBridge` 发出一条 redaction-safe `runtime.transition`，并避免把 checkpoint ref 写进 runtime ordinary log；
+   - 单测新增默认 state root / cognition log / runtime transition log 三条回归断言。
+
+### 验证
+
+1. `Build_CMakeTools(buildTargets=["dasall-daemon_runtime_installed_proof_runner_unit_test"])`
+   - 结果：通过。
+2. `RunCtest_CMakeTools(tests=["RuntimeInstalledProofRunnerTest"])`
+   - 结果：命中仓库既有泛化“生成失败”；authoritative 结果以下面的 direct binary 为准。
+3. `./build/vscode-linux-ninja/tests/unit/apps/daemon/dasall-daemon_runtime_installed_proof_runner_unit_test && echo PASS`
+   - 结果：`PASS`。
+4. `Build_CMakeTools(buildTargets=["dasall_infra_key_subsystem_production_logging_e2e_test"])`
+   - 结果：通过。
+5. `RunCtest_CMakeTools(tests=["KeySubsystemProductionLoggingE2ETest"])`
+   - 结果：命中仓库既有泛化“生成失败”；authoritative 结果以下面的 direct binary 为准。
+6. `./build/vscode-linux-ninja/tests/integration/infra/dasall_infra_key_subsystem_production_logging_e2e_test && echo PASS`
+   - 结果：`PASS`。
+7. `shell: copilot-rt-fix-006-rebuild-deb`
+   - 结果：两轮 clean-copy `dpkg-buildpackage -us -uc -b` 均成功，`build_rc=0`，fresh `dasall-daemon_0.1.0-1_amd64.deb` 已包含更新后的 `/usr/lib/dasall/dasall-runtime-installed-proof`。
+8. `shell: copilot-rt-fix-006-package-smoke`
+   - 结果：`[pkg-smoke-install] install smoke passed`；artifact 目录 `/tmp/dasall-rt-fix-006-pkg-smoke` 同轮落盘 `logging-installed-proof.json`、`logging-runtime-proof.json`、`logging-query-proof.json`、`runtime-installed-proof.json` 与 `runtime-proof.json`。
+
+### 结果
+
+1. `INF-LOG-SYS-FIX-007` 已闭合：build-tree `KeySubsystemProductionLoggingE2ETest` 与 installed package smoke 现共同证明 cognition、memory、knowledge、runtime、services 五个关键子系统都能在同一 structured logging pipeline 中落盘、可 query、可 flush。
+2. installed authoritative artifact schema 已冻结：`logging-installed-proof.json` / `logging-runtime-proof.json` 当前都包含 `runtime_log_artifacts`、`subsystems.<name>.record_count`、`event_names`、`correlation_fields_present`、`redaction_proof`、`query_proof_ref`、`flush_observed` 与 `evidence_level`；runtime slice 额外证明 `transition_event_total=1` 且 checkpoint token 全部 absent=true。
+3. `BLK-INF-LOG-010` 已解阻：installed package proof 现在拥有正式 artifact schema、真实 runtime log artifact、redaction proof 与 query proof。当前结论只到 local installed authoritative evidence，不外推到 qemu / soak。
+
 ## 记录 #851
 
 - 日期：2026-05-28

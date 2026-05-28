@@ -19,6 +19,7 @@
 #include "agent/AgentRequest.h"
 #include "agent/AgentResult.h"
 #include "config/InstallLayout.h"
+#include "telemetry/RuntimeTelemetryBridge.h"
 
 namespace dasall::apps::daemon {
 namespace {
@@ -184,12 +185,25 @@ compose_runtime_dependency_set(
 void disable_live_llm_bridge(
   std::shared_ptr<runtime::RuntimeDependencySet>& dependency_set) {
   dependency_set->llm_manager.reset();
+
+  const cognition::CognitionRuntimeDependencies cognition_dependencies{
+      .llm_manager = nullptr,
+    .policy_snapshot = nullptr,
+      .logger = dependency_set->logger,
+      .audit_logger = dependency_set->audit_logger,
+      .metrics_provider = dependency_set->metrics_provider,
+      .tracer_provider = dependency_set->tracer_provider,
+  };
   dependency_set->cognition_engine =
     std::shared_ptr<dasall::cognition::ICognitionEngine>(
-      cognition::create_cognition_engine().release());
+      cognition::create_cognition_engine(cognition::CognitionConfig{},
+                       cognition_dependencies)
+        .release());
   dependency_set->response_builder =
     std::shared_ptr<dasall::cognition::IResponseBuilder>(
-      cognition::create_response_builder().release());
+      cognition::create_response_builder(cognition::CognitionConfig{},
+                       cognition_dependencies)
+        .release());
   auto& evidence = dependency_set->external_evidence;
   evidence.erase(
     std::remove_if(
@@ -255,6 +269,40 @@ make_runtime_local_stub_dependency_set(
   return true;
 }
 
+[[nodiscard]] bool emit_runtime_transition_probe(
+    const std::shared_ptr<runtime::RuntimeDependencySet>& dependency_set,
+    const runtime::RuntimeTelemetryContext& context,
+    std::string* error) {
+  if (dependency_set == nullptr || dependency_set->runtime_telemetry_bridge == nullptr ||
+      dependency_set->runtime_event_bus == nullptr) {
+    if (error != nullptr) {
+      *error = "runtime installed proof missing runtime telemetry bridge";
+    }
+    return false;
+  }
+
+  const auto record = dependency_set->runtime_telemetry_bridge->emit_transition(
+      runtime::RuntimeState::Planning,
+      runtime::RuntimeState::Reasoning,
+      context,
+      "runtime-secret-transition=hidden");
+  if (record.envelope.event_name != "runtime.transition") {
+    if (error != nullptr) {
+      *error = "runtime installed proof failed to emit runtime transition";
+    }
+    return false;
+  }
+
+  if (dependency_set->runtime_event_bus->dispatch_pending() == 0U) {
+    if (error != nullptr) {
+      *error = "runtime installed proof runtime transition did not dispatch through the event bus";
+    }
+    return false;
+  }
+
+  return true;
+}
+
 }  // namespace
 
 RuntimeInstalledProofResult collect_runtime_installed_proof(
@@ -279,10 +327,8 @@ RuntimeInstalledProofResult collect_runtime_installed_proof(
   }
 
   result.effective_profile_id = load_result.entry_config->effective_profile_id;
-  const auto base_state_root = options.state_root_override.value_or(
-      fs::temp_directory_path() /
-      ("dasall-runtime-installed-proof-" +
-       std::to_string(current_time_millis())));
+  const auto base_state_root =
+      options.state_root_override.value_or(install_layout.state_root);
 
   {
     const auto composition = compose_runtime_dependency_set(
@@ -340,6 +386,17 @@ RuntimeInstalledProofResult collect_runtime_installed_proof(
         extract_runtime_path_tag(tool_result).value_or(std::string{});
     result.tool_checkpoint_ref = tool_result.checkpoint_ref.value_or(std::string{});
     result.tool_response_text = tool_result.response_text.value_or(std::string{});
+    if (!emit_runtime_transition_probe(
+        dependency_set,
+        runtime::RuntimeTelemetryContext{
+          .request_id = std::string("req-runtime-installed-proof-tool"),
+          .session_id = std::string("session-runtime-installed-proof-tool"),
+          .trace_id = std::string("trace-runtime-installed-proof-tool"),
+          .turn_id = std::string("turn-runtime-installed-proof-tool"),
+        },
+        &result.error)) {
+      return result;
+    }
     if (!result.agent_dataset_visible || !result.agent_terminal_visible) {
       result.error =
           "runtime installed proof composition did not expose both dataset and terminal tools";

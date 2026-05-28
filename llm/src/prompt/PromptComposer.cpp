@@ -130,6 +130,8 @@ TemplateVariables make_template_variables(const PromptComposeRequest& request,
   variables["prompt_version"] = optional_string(release.version);
   variables["release_scope"] = optional_string(release.release_scope);
   variables["trusted_source"] = optional_string(release.trusted_source);
+  variables["session_summary"] =
+      tag_value(request.tags, "session_summary").value_or(std::string());
   if (auto user_goal = tag_value(request.tags, "user_goal"); user_goal.has_value()) {
     variables["user_goal"] = std::move(*user_goal);
   }

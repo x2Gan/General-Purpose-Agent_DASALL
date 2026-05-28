@@ -152,10 +152,11 @@ void test_runtime_profile_projection_tracks_budget_degrade_and_enablement_matrix
                require_value(edge_minimal_budget.max_tool_calls,
                              "edge_minimal should expose max_tool_calls in RuntimeBudget"),
                "edge_minimal should project the narrowest tool-call budget");
-  assert_equal(8000U,
+  assert_equal(45000U,
                require_value(desktop_budget.max_latency_ms,
                              "desktop_full should expose max_latency_ms in RuntimeBudget"),
                "desktop_full should keep the broadest latency budget");
+
   assert_equal(7000U,
                require_value(edge_balanced_budget.max_latency_ms,
                              "edge_balanced should expose max_latency_ms in RuntimeBudget"),

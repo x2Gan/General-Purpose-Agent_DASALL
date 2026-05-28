@@ -1,7 +1,10 @@
 #include <chrono>
+#include <cstdlib>
 #include <exception>
 #include <filesystem>
+#include <fstream>
 #include <iostream>
+#include <sstream>
 #include <stdexcept>
 #include <string>
 #include <system_error>
@@ -48,6 +51,35 @@ class TempDir {
   std::filesystem::path path_;
 };
 
+  class ScopedEnvVar {
+   public:
+    ScopedEnvVar(const char* name, std::string value)
+        : name_(name), had_old_value_(false) {
+      if (const char* old_value = std::getenv(name_); old_value != nullptr) {
+        had_old_value_ = true;
+        old_value_ = old_value;
+      }
+
+      if (setenv(name_, value.c_str(), 1) != 0) {
+        throw std::runtime_error(std::string("failed to set env var: ") + name_);
+      }
+    }
+
+    ~ScopedEnvVar() {
+      if (had_old_value_) {
+        (void)setenv(name_, old_value_.c_str(), 1);
+        return;
+      }
+
+      (void)unsetenv(name_);
+    }
+
+   private:
+    const char* name_;
+    bool had_old_value_;
+    std::string old_value_;
+  };
+
 void copy_installed_runtime_assets(const std::filesystem::path& assets_root) {
   const auto root = source_root();
   std::filesystem::create_directories(assets_root / "sql");
@@ -61,6 +93,13 @@ void copy_installed_runtime_assets(const std::filesystem::path& assets_root) {
   std::filesystem::copy(root / "llm" / "assets" / "providers",
                         assets_root / "llm" / "providers",
                         std::filesystem::copy_options::recursive);
+}
+
+[[nodiscard]] std::string read_text_file(const std::filesystem::path& path) {
+  std::ifstream input(path);
+  std::ostringstream buffer;
+  buffer << input.rdbuf();
+  return buffer.str();
 }
 
 void runtime_installed_proof_runner_collects_tool_and_recovery_evidence() {
@@ -117,11 +156,49 @@ void runtime_installed_proof_runner_collects_tool_and_recovery_evidence() {
               "runtime installed proof runner should surface the binding rejection detail");
 }
 
+void runtime_installed_proof_runner_defaults_to_install_layout_state_root() {
+  const TempDir assets_root("dasall-runtime-installed-proof-default-assets");
+  const TempDir state_root("dasall-runtime-installed-proof-default-state");
+  copy_installed_runtime_assets(assets_root.path());
+  const ScopedEnvVar scoped_state_root("DASALL_STATE_ROOT",
+                                       state_root.path().string());
+
+  const auto result = dasall::apps::daemon::collect_runtime_installed_proof(
+      dasall::apps::daemon::RuntimeInstalledProofOptions{
+          .requested_profile_id = kDefaultProfileId,
+          .deployment_config_path = std::nullopt,
+          .readonly_assets_root_override = assets_root.path(),
+          .state_root_override = std::nullopt,
+      });
+
+  assert_true(result.ok(),
+              "runtime installed proof runner should use install layout state root by default: " +
+                  result.error);
+  assert_true(std::filesystem::exists(state_root.path() / "tool-positive" / "logging" /
+                                      "runtime.log"),
+              "runtime installed proof runner should write tool-positive logs under the install layout state root");
+  assert_true(std::filesystem::exists(state_root.path() / "recovery-positive" /
+                                      "logging" / "runtime.log"),
+              "runtime installed proof runner should write recovery-positive logs under the install layout state root");
+  assert_true(std::filesystem::exists(state_root.path() / "recovery-negative" /
+                                      "logging" / "runtime.log"),
+              "runtime installed proof runner should write recovery-negative logs under the install layout state root");
+  const auto tool_positive_log =
+      read_text_file(state_root.path() / "tool-positive" / "logging" /
+                     "runtime.log");
+  assert_true(tool_positive_log.find("\"module\":\"cognition\"") !=
+                  std::string::npos,
+              "runtime installed proof runner should preserve cognition logging in the tool-positive runtime log");
+  assert_true(tool_positive_log.find("runtime.transition") != std::string::npos,
+              "runtime installed proof runner should emit runtime logging in the tool-positive runtime log");
+}
+
 }  // namespace
 
 int main() {
   try {
     runtime_installed_proof_runner_collects_tool_and_recovery_evidence();
+    runtime_installed_proof_runner_defaults_to_install_layout_state_root();
   } catch (const std::exception& exception) {
     std::cerr << exception.what() << '\n';
     return 1;

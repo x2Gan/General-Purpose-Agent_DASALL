@@ -25,7 +25,7 @@ runtime_budget:
 	max_tokens: 64000
 	max_turns: 24
 	max_tool_calls: 24
-	max_latency_ms: 8000
+	max_latency_ms: 45000
 	max_replan_count: 3
 model_profile:
 	planning:

@@ -17,6 +17,7 @@ task_types:
 template_slots:
   - user_goal
   - constraints
+  - session_summary
 tool_hints: []
 tags:
   - responder

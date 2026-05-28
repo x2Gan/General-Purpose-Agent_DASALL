@@ -6,6 +6,11 @@ REPO_ROOT=$(CDPATH= cd -- "${SCRIPT_DIR}/../.." && pwd)
 ARTIFACT_DIR=$(CDPATH= cd -- "${REPO_ROOT}/.." && pwd)
 ARCH=$(dpkg --print-architecture)
 VERSION=$(cd "${REPO_ROOT}" && dpkg-parsechangelog -SVersion)
+INSTALLED_STATE_ROOT=/var/lib/dasall
+INSTALLED_RUNTIME_LOG_PATH=${INSTALLED_STATE_ROOT}/logging/runtime.log
+RUNTIME_TOOL_POSITIVE_LOG_PATH=${INSTALLED_STATE_ROOT}/tool-positive/logging/runtime.log
+RUNTIME_RECOVERY_POSITIVE_LOG_PATH=${INSTALLED_STATE_ROOT}/recovery-positive/logging/runtime.log
+RUNTIME_RECOVERY_NEGATIVE_LOG_PATH=${INSTALLED_STATE_ROOT}/recovery-negative/logging/runtime.log
 
 COMMON_DEB="${ARTIFACT_DIR}/dasall-common_${VERSION}_all.deb"
 CLI_DEB="${ARTIFACT_DIR}/dasall-cli_${VERSION}_${ARCH}.deb"
@@ -36,6 +41,7 @@ GATEWAY_HTTP_PROOF_PID=
 GATEWAY_HTTP_PROOF_PORT=
 GATEWAY_HTTP_PROOF_LOG=
 GATEWAY_HTTP_PROOF_STATE_ROOT=
+LOGGING_PROOF_START_TS_MS=
 
 log() {
   printf '[pkg-smoke-install] %s\n' "$*"
@@ -193,6 +199,16 @@ write_artifact_file() {
   [ -n "$PACKAGE_SMOKE_ARTIFACT_DIR" ] || return 0
   ensure_artifact_dir
   printf '%s\n' "$file_content" > "$PACKAGE_SMOKE_ARTIFACT_DIR/$file_name"
+}
+
+capture_root_file_to_artifact() {
+  artifact_name=$1
+  source_path=$2
+
+  [ -n "$PACKAGE_SMOKE_ARTIFACT_DIR" ] || return 0
+  ensure_artifact_dir
+  run_root test -f "$source_path" || fail "missing installed artifact source: $source_path"
+  run_root cat "$source_path" > "$PACKAGE_SMOKE_ARTIFACT_DIR/$artifact_name"
 }
 
 wait_for_path() {
@@ -717,7 +733,7 @@ cleanup() {
 
 wait_for_daemon_ready() {
   attempt=0
-  while [ "${attempt}" -lt 30 ]; do
+  while [ "${attempt}" -lt 90 ]; do
     if run_root_sh 'systemctl is-enabled --quiet dasall-daemon.service >/dev/null 2>&1 &&
        systemctl is-active --quiet dasall-daemon.service >/dev/null 2>&1 &&
        [ -S /run/dasall/daemon.sock ] &&
@@ -808,6 +824,9 @@ reset_existing_state() {
     dpkg -P dasall dasall-daemon dasall-cli dasall-common >/dev/null 2>&1 || true
     rm -f /var/lib/dasall/pkg-smoke-state
     rm -rf /var/lib/dasall/memory
+    rm -rf /var/lib/dasall/tool-positive
+    rm -rf /var/lib/dasall/recovery-positive
+    rm -rf /var/lib/dasall/recovery-negative
     rm -rf /var/lib/dasall/secrets
   '
 }
@@ -927,6 +946,12 @@ verify_explicit_start() {
 
   require_command python3
   ensure_artifact_dir
+  LOGGING_PROOF_START_TS_MS=$(python3 - <<'PY'
+import time
+
+print(int(time.time() * 1000))
+PY
+)
   if [ -n "$PACKAGE_SMOKE_ARTIFACT_DIR" ]; then
     log "writing package smoke artifacts to ${PACKAGE_SMOKE_ARTIFACT_DIR}"
   fi
@@ -938,7 +963,11 @@ verify_explicit_start() {
   MEMORY_FIRST_REQUEST='{"prompt":"Remember this exact marker for this session: mem-fix-006-local-proof. Reply with that marker once and do not use any tools."}'
   MEMORY_SECOND_REQUEST='{"prompt":"In this same session, what exact marker did I ask you to remember? Reply with the exact marker once and do not use any tools."}'
 
-  FIRST_RUN_JSON=$(run_dasall_cli dasall-cli run "$MEMORY_FIRST_REQUEST" --session "$MEMORY_SESSION_HINT" --request-id pkg-smoke-memory-turn-001 --json --timeout-ms 120000)
+  set +e
+  FIRST_RUN_JSON=$(run_dasall_cli dasall-cli run "$MEMORY_FIRST_REQUEST" --session "$MEMORY_SESSION_HINT" --request-id pkg-smoke-memory-turn-001 --json --timeout-ms 120000 2>&1)
+  FIRST_RUN_CODE=$?
+  set -e
+  [ "$FIRST_RUN_CODE" -eq 0 ] || fail "first run smoke failed: ${FIRST_RUN_JSON}"
   assert_json_contains "$FIRST_RUN_JSON" '"disposition":"completed"' 'first run smoke'
   assert_json_contains "$FIRST_RUN_JSON" '"task_completed":true' 'first run smoke'
   assert_json_contains "$FIRST_RUN_JSON" 'llm.origin=deepseek-prod/' 'first llm response payload'
@@ -967,7 +996,11 @@ verify_explicit_start() {
   MEMORY_FIRST_TURN_ID=$(query_sqlite_scalar_with_params "${MEMORY_DB_PATH}" 'SELECT turn_id FROM turns WHERE session_id = ?1 AND user_input = ?2 ORDER BY created_at ASC LIMIT 1;' "$MEMORY_SESSION_ID" "$MEMORY_FIRST_REQUEST")
   assert_non_empty "$MEMORY_FIRST_TURN_ID" 'first-run turn_id'
 
-  SECOND_RUN_JSON=$(run_dasall_cli dasall-cli run "$MEMORY_SECOND_REQUEST" --session "$MEMORY_SESSION_ID" --request-id pkg-smoke-memory-turn-002 --json --timeout-ms 120000)
+  set +e
+  SECOND_RUN_JSON=$(run_dasall_cli dasall-cli run "$MEMORY_SECOND_REQUEST" --session "$MEMORY_SESSION_ID" --request-id pkg-smoke-memory-turn-002 --json --timeout-ms 120000 2>&1)
+  SECOND_RUN_CODE=$?
+  set -e
+  [ "$SECOND_RUN_CODE" -eq 0 ] || fail "second run smoke failed: ${SECOND_RUN_JSON}"
   assert_json_contains "$SECOND_RUN_JSON" '"disposition":"completed"' 'second run smoke'
   assert_json_contains "$SECOND_RUN_JSON" '"task_completed":true' 'second run smoke'
   assert_json_contains "$SECOND_RUN_JSON" 'llm.origin=deepseek-prod/' 'second llm response payload'
@@ -1246,6 +1279,14 @@ PY
     encoding='ascii',
   )
 PY
+
+    capture_root_file_to_artifact 'logging-main-runtime.log' "$INSTALLED_RUNTIME_LOG_PATH"
+    capture_root_file_to_artifact 'logging-runtime-tool-positive.log' "$RUNTIME_TOOL_POSITIVE_LOG_PATH"
+    capture_root_file_to_artifact 'logging-runtime-recovery-positive.log' "$RUNTIME_RECOVERY_POSITIVE_LOG_PATH"
+    capture_root_file_to_artifact 'logging-runtime-recovery-negative.log' "$RUNTIME_RECOVERY_NEGATIVE_LOG_PATH"
+    python3 "${SCRIPT_DIR}/generate_logging_package_proof.py" \
+      "$PACKAGE_SMOKE_ARTIFACT_DIR" \
+      "$LOGGING_PROOF_START_TS_MS"
   fi
 
   run_root test -f /usr/share/dasall/docs/architecture/DASALL_Engineering_Blueprint.md

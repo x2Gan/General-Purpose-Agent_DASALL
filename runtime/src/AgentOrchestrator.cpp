@@ -377,13 +377,25 @@ void bind_deadline_if_present(
     const contracts::ContextPacket& context_packet) {
   std::string constraints =
       "installed package run must answer through ILLMManager and must not use agent.dataset";
-  if (context_packet.summary_memory.has_value() && !context_packet.summary_memory->empty()) {
-    std::string prompt_visible_summary = *context_packet.summary_memory;
-    const auto body_offset = prompt_visible_summary.find('\n');
-    if (body_offset != std::string::npos && body_offset + 1U < prompt_visible_summary.size()) {
-      prompt_visible_summary = prompt_visible_summary.substr(body_offset + 1U);
+  const auto prompt_visible_summary = [&context_packet]() -> std::optional<std::string> {
+    if (!context_packet.summary_memory.has_value() || context_packet.summary_memory->empty()) {
+      return std::nullopt;
     }
-    constraints += "; session_summary=" + prompt_visible_summary;
+
+    std::string summary = *context_packet.summary_memory;
+    const auto body_offset = summary.find('\n');
+    if (body_offset != std::string::npos && body_offset + 1U < summary.size()) {
+      summary = summary.substr(body_offset + 1U);
+    }
+
+    if (summary.empty()) {
+      return std::nullopt;
+    }
+
+    return summary;
+  }();
+  if (prompt_visible_summary.has_value()) {
+    constraints += "; session_summary=" + *prompt_visible_summary;
   }
   return constraints;
 }
@@ -421,6 +433,16 @@ void bind_deadline_if_present(
         request.user_input.value_or(std::string{})),
       std::string("constraints=") + make_runtime_constraints_tag(context_packet),
   };
+  if (context_packet.summary_memory.has_value() && !context_packet.summary_memory->empty()) {
+    std::string prompt_visible_summary = *context_packet.summary_memory;
+    const auto body_offset = prompt_visible_summary.find('\n');
+    if (body_offset != std::string::npos && body_offset + 1U < prompt_visible_summary.size()) {
+      prompt_visible_summary = prompt_visible_summary.substr(body_offset + 1U);
+    }
+    if (!prompt_visible_summary.empty()) {
+      llm_request.tags->push_back(std::string("session_summary=") + prompt_visible_summary);
+    }
+  }
 
   return llm::LLMGenerateRequest{
       .stage = "response",

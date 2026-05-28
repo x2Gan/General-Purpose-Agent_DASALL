@@ -145,6 +145,14 @@ void test_service_logging_bridge_projects_allowlisted_route_attrs() {
   assert_true(has_attr(dispatched.attrs, "event_name", "service.execution.route") &&
                   has_attr(dispatched.attrs, "request_id",
                            "req-services-logging-bridge") &&
+                  has_attr(dispatched.attrs, "session_id",
+                           "session-services-logging-bridge") &&
+                  has_attr(dispatched.attrs, "trace_id",
+                           "trace-services-logging-bridge") &&
+                  has_attr(dispatched.attrs, "tool_call_id",
+                           "tool-call-services-logging-bridge") &&
+                  has_attr(dispatched.attrs, "goal_id",
+                           "goal-services-logging-bridge") &&
                   has_attr(dispatched.attrs, "capability_id", "cap.exec") &&
                   has_attr(dispatched.attrs, "target_id", "target-services-logging") &&
                   has_attr(dispatched.attrs, "request_kind", "action") &&

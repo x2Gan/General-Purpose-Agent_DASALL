@@ -143,6 +143,7 @@ target_include_directories(dasall_runtime_installed_proof_tool
     ${CMAKE_SOURCE_DIR}/cognition/include
     ${CMAKE_SOURCE_DIR}/infra/src
     ${CMAKE_SOURCE_DIR}/memory/include
+    ${CMAKE_SOURCE_DIR}/runtime/src
 )
 
 set_target_properties(dasall_runtime_installed_proof_tool PROPERTIES
