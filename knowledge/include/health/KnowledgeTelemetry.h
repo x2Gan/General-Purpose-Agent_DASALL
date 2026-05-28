@@ -15,6 +15,7 @@ namespace dasall::knowledge {
 struct KnowledgeTelemetryEvent {
   std::string event_name;
   std::string request_id;
+  std::string session_id;
   std::string component;
   std::string snapshot_id;
   std::string result;

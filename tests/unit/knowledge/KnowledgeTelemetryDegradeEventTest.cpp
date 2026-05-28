@@ -21,6 +21,7 @@ using dasall::tests::support::assert_true;
   return KnowledgeTelemetryEvent{
       .event_name = "knowledge_query_degraded",
       .request_id = "req-knowledge-degrade",
+      .session_id = std::string(),
       .component = "RecallCoordinator",
       .snapshot_id = "snapshot-knowledge-2",
       .result = "degraded",
@@ -31,6 +32,7 @@ using dasall::tests::support::assert_true;
       .profile_id = "edge_balanced",
       .query_kind = KnowledgeQueryKind::DiagnosticContext,
       .retrieval_mode = RetrievalMode::Hybrid,
+      .warning_summary = {},
       .corpus_count = 1U,
       .result_count = 2U,
       .error_category = "provider",

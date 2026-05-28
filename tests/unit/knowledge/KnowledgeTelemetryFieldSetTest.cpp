@@ -30,6 +30,7 @@ void test_knowledge_telemetry_invalid_payloads_are_marked_and_fallback_logged() 
   telemetry.emit_retrieve_event(KnowledgeTelemetryEvent{
       .event_name = "knowledge_query_failed",
       .request_id = "",
+      .session_id = std::string(),
       .component = "KnowledgeServiceFacade",
       .snapshot_id = "snapshot-knowledge-1",
       .result = "failure",
@@ -40,6 +41,7 @@ void test_knowledge_telemetry_invalid_payloads_are_marked_and_fallback_logged() 
       .profile_id = "",
       .query_kind = std::nullopt,
       .retrieval_mode = std::nullopt,
+        .warning_summary = {},
       .corpus_count = 1U,
       .result_count = 0U,
       .error_category = "runtime",

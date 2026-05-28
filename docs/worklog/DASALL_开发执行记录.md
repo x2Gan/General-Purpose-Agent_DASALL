@@ -1,3 +1,42 @@
+## 记录 #849
+
+- 日期：2026-05-28
+- 阶段：infrastructure / knowledge production logging evidence
+- 任务：完成 `INF-LOG-SYS-FIX-004`，把 knowledge logging 从“只有 audit/metrics/trace telemetry 证据”推进到 runtime.log / diagnostics artifact build-tree evidence
+- 状态：已完成（L2/L3 build-tree knowledge logging evidence 已闭合；本轮不使用 qemu / kvm）
+
+### 执行前提
+
+1. `INF-LOG-SYS-FIX-001~003` 已先后闭合，`KeySubsystemLoggingFieldMatrix` 已冻结 knowledge ordinary log 必须保留 `request_id`、`profile_id`、`snapshot_id`、`telemetry_path` 等 owner-safe attrs，并要求 success/failure/fallback 有 focused 覆盖。
+2. 近端核验确认：knowledge 当前虽然已有 `make_knowledge_log_sink()` 与 `make_knowledge_log_event()`，但现有 `KnowledgeProductionTelemetryIntegrationTest` 只证明了 audit/metrics/trace production telemetry，没有证明 runtime.log 落盘、fallback path 标记或 diagnostics artifact 查询；同时 ordinary log 也没有 session-scoped selector 可以直接喂给 `LogQueryService`。
+3. `BLK-INF-LOG-004` 与 `BLK-INF-LOG-009` 已闭合，因此本轮只做 knowledge owner 的 build-tree logging 证据补齐；installed/package authoritative evidence 继续留给 `INF-LOG-SYS-FIX-007` / `INF-LOG-FIX-011`。本轮不使用 qemu / kvm。
+
+### 改动
+
+1. 更新 `knowledge/include/health/KnowledgeTelemetry.h` 与 `knowledge/src/facade/KnowledgeService.cpp`，给 `KnowledgeTelemetryEvent` 增加 `session_id`，并在 success / fail_closed 路径上透传 `KnowledgeQuery.session_id`。
+2. 更新 `apps/runtime_support/src/RuntimeLiveDependencyComposition.cpp`，让 `make_knowledge_log_event()` 把 `session_id` 一起写入 knowledge ordinary log attrs，供 `FileLogReader + LogQueryService` 按 session selector 拉取 diagnostics artifact。
+3. 新增 `tests/integration/knowledge/KnowledgeProductionLoggingIntegrationTest.cpp` 与对应 CMake target，在 live composition 下触发 success、primary failure、fallback invalid-payload 三条路径，验证 runtime.log 中存在 `knowledge.retrieve.completed`、`knowledge.retrieve.failed`、`knowledge.retrieve.invalid_payload` 与 `telemetry_path=primary/fallback`。
+4. 同一 integration test 现用 `FileLogReader + LogQueryService` 按 `session_id` materialize diagnostics artifact；`KnowledgeTelemetryTest`、`KnowledgeTelemetryFieldSetTest` 与 `KnowledgeTelemetryDegradeEventTest` 只补齐 aggregate fixture 字段，保持 invalid-payload fallback 与 sink-failure fail-open contract 可执行。
+
+### 验证
+
+1. `cmake --build build/vscode-linux-ninja --target dasall_knowledge_production_logging_integration_test dasall_knowledge_production_telemetry_integration_test`
+   - 结果：通过。
+2. `./build/vscode-linux-ninja/tests/integration/knowledge/dasall_knowledge_production_logging_integration_test`
+   - 结果：通过。
+3. `./build/vscode-linux-ninja/tests/integration/knowledge/dasall_knowledge_production_telemetry_integration_test`
+   - 结果：通过。
+4. `cmake --build build/vscode-linux-ninja --target dasall_knowledge_telemetry_unit_test dasall_knowledge_observability_fields_unit_test dasall_knowledge_telemetry_degrade_event_unit_test`
+   - 结果：通过。
+5. `./build/vscode-linux-ninja/tests/unit/knowledge/dasall_knowledge_telemetry_unit_test && ./build/vscode-linux-ninja/tests/unit/knowledge/dasall_knowledge_observability_fields_unit_test && ./build/vscode-linux-ninja/tests/unit/knowledge/dasall_knowledge_telemetry_degrade_event_unit_test`
+   - 结果：通过。
+
+### 结果
+
+1. `INF-LOG-SYS-FIX-004` 已闭合：knowledge success、primary failure、fallback invalid-payload 事件现在都能在 live composition 下进入 shared runtime.log，并保留 `telemetry_path` 区分 primary / fallback。
+2. knowledge ordinary log 现已带有 `session_id` diagnostics selector，`LogQueryService` 可以按 session 从 persisted runtime.log materialize diagnostics artifact；runtime.log 与 artifact 都不泄漏 raw retrieve query/body。
+3. `KnowledgeTelemetryFieldSetTest` 与 `KnowledgeTelemetryDegradeEventTest` 继续证明 invalid-payload fallback 与 sink-failure fail-open contract 未被本轮改动打破；knowledge retrieve 主路径不会因为 logging 自保护而升级为 runtime recovery。当前结论只到 L2/L3 build-tree owner evidence，本轮不使用 qemu / kvm。
+
 ## 记录 #848
 
 - 日期：2026-05-28

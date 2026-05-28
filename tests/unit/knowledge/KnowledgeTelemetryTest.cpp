@@ -20,6 +20,7 @@ using dasall::tests::support::assert_true;
   return KnowledgeTelemetryEvent{
       .event_name = std::move(event_name),
       .request_id = "req-knowledge-1",
+      .session_id = std::string(),
       .component = "KnowledgeServiceFacade",
       .snapshot_id = "snapshot-knowledge-1",
       .result = "success",
@@ -30,6 +31,7 @@ using dasall::tests::support::assert_true;
       .profile_id = "desktop_full",
       .query_kind = KnowledgeQueryKind::FactLookup,
       .retrieval_mode = RetrievalMode::Hybrid,
+      .warning_summary = {},
       .corpus_count = 2U,
       .result_count = 3U,
       .error_category = "none",

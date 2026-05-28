@@ -1607,6 +1607,7 @@ struct RuntimeObservabilityBundle {
   log_event.message = knowledge_audit_action(event);
   log_event.attrs = {
       {"request_id", telemetry_value_or(event.request_id, "unknown")},
+      {"session_id", telemetry_value_or(event.session_id, "unknown")},
       {"component", telemetry_value_or(event.component, "unknown")},
       {"snapshot_id", telemetry_value_or(event.snapshot_id, "unknown")},
       {"profile_id", telemetry_value_or(event.profile_id, "unknown")},

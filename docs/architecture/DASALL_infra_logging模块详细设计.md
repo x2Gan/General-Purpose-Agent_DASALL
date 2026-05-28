@@ -526,6 +526,16 @@ key 域冻结规则：
 3. focused build-tree 证据现固定为 `MemoryProductionLoggingIntegrationTest` 与更新后的 `MemoryObservabilityBridgeTest`：前者在 temp `state_root/logging/runtime.log` 上验证 `writeback.completed`、`context.assembled`、`maintenance.completed` 落盘，并用 `FileLogReader + LogQueryService` 按 `session_id` 产出 redacted query artifact；后者继续守住 `LoggingFacade` in-memory dispatch 与 payload allowlist。
 4. 当前 memory logging 结论已到 L2/L3 build-tree persisted/query owner evidence，但不外推成 installed/package authoritative proof；package artifact 与跨子系统 e2e 继续留给 `INF-LOG-SYS-FIX-007` / `INF-LOG-FIX-011`。本轮不使用 qemu / kvm。
 
+### 6.10.16 knowledge production logging evidence 收口补充
+
+`INF-LOG-SYS-FIX-004` 现已把 knowledge 从“只有 audit/metrics/trace production telemetry 证据”推进到 build-tree runtime.log / diagnostics artifact 证据：
+
+1. `KnowledgeTelemetryEvent` 新增 `session_id`，`KnowledgeServiceFacade::retrieve()` / `fail_closed()` 现会把 `KnowledgeQuery.session_id` 注入 telemetry event；`make_knowledge_log_event()` 则把 `session_id` 连同 `request_id`、`snapshot_id`、`profile_id`、`telemetry_path` 一起投影到 module=`knowledge` 的 ordinary log attrs。
+2. `request_id` 继续是 knowledge ordinary log 的主 correlation key；`session_id` 只作为 build-tree diagnostics/query selector 增强，不把 knowledge 提升为 trace owner，也不替代既有 `request_id -> snapshot_id -> profile_id` 锚点。
+3. focused build-tree 证据现固定为 `KnowledgeProductionLoggingIntegrationTest` 与既有 `KnowledgeProductionTelemetryIntegrationTest`：前者验证 success、primary failure、fallback invalid-payload 三条路径进入 shared runtime.log，并通过 `FileLogReader + LogQueryService` 按 `session_id` materialize diagnostics artifact；后者继续守住 audit/metrics/trace 三路 production telemetry 接线。
+4. `KnowledgeTelemetryFieldSetTest`、`KnowledgeTelemetryDegradeEventTest` 与 `KnowledgeTelemetryTest` 继续守住 invalid-payload fallback 与 sink-failure fail-open contract，证明 logging sink 自保护不会阻断 knowledge retrieve 主路径。
+5. 当前 knowledge logging 结论已到 L2/L3 build-tree persisted/query owner evidence，但不外推成 installed/package authoritative proof；knowledge startup/retrieve installed evidence 与跨子系统 e2e 继续留给 `INF-LOG-SYS-FIX-007` / `INF-LOG-FIX-011`。本轮不使用 qemu / kvm。
+
 ---
 
 ## 7. Design -> Build 映射（建议级）

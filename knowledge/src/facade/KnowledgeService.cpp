@@ -484,6 +484,7 @@ KnowledgeRetrieveResult KnowledgeServiceFacade::retrieve(const KnowledgeQuery& q
     KnowledgeTelemetryEvent event;
     event.event_name = "knowledge_retrieve";
     event.request_id = query.request_id;
+    event.session_id = query.session_id.value_or(std::string());
     event.component = "knowledge_service_facade";
     event.snapshot_id = manifest.has_value() ? manifest->snapshot_id : "none";
     event.result = "success";
@@ -654,6 +655,7 @@ KnowledgeRetrieveResult KnowledgeServiceFacade::fail_closed(const KnowledgeQuery
     KnowledgeTelemetryEvent event;
     event.event_name = "knowledge_retrieve";
     event.request_id = query.request_id;
+    event.session_id = query.session_id.value_or(std::string());
     event.component = "knowledge_service_facade";
     event.snapshot_id = "none";
     event.result = "failure";
