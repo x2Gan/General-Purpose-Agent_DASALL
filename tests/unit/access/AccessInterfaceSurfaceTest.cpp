@@ -31,6 +31,7 @@ void access_public_surface_is_discoverable() {
       .payload = "{\"op\":\"ping\"}",
       .trace_id = std::nullopt,
       .session_hint = std::nullopt,
+      .deadline_ms = std::nullopt,
       .async_preferred = false,
       .stream_requested = false,
   };

@@ -130,6 +130,7 @@ bool DaemonProtocolAdapter::parse_uds_request_frame(InboundPacket& packet) const
     packet.trace_id = decoded.frame.trace_id;
   }
   packet.session_hint = decoded.frame.session_hint;
+  packet.deadline_ms = decoded.frame.deadline_ms;
   packet.async_preferred =
       decoded.frame.async_preference == DaemonAsyncPreference::PreferAsync;
 

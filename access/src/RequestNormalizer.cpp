@@ -94,13 +94,14 @@ dasall::contracts::AgentRequest RequestNormalizer::project_agent_request(
     const RuntimeDispatchRequest& request,
     const TraceIdentityBundle& ids) const {
   dasall::contracts::AgentRequest agent_request;
+  const auto created_at_ms = now_epoch_millis();
 
   agent_request.request_id = ids.request_id;
   agent_request.session_id = ids.session_id;
   agent_request.trace_id = ids.trace_id;
   agent_request.user_input = request.packet.payload;
   agent_request.request_channel = map_request_channel(request.packet.entry_type);
-  agent_request.created_at = now_epoch_millis();
+  agent_request.created_at = created_at_ms;
 
   agent_request.goal_hint = context_value(request, "goal_hint");
   agent_request.domain_context = context_value(request, "domain_context");
@@ -122,6 +123,12 @@ dasall::contracts::AgentRequest RequestNormalizer::project_agent_request(
       // 非法 deadline 字符串不应阻断归一化主流程，降级使用 timeout 策略。
       agent_request.deadline_at = std::nullopt;
     }
+  }
+
+  if (!agent_request.deadline_at.has_value() && request.packet.deadline_ms.has_value() &&
+      *request.packet.deadline_ms > 0) {
+    agent_request.deadline_at =
+        created_at_ms + static_cast<std::int64_t>(*request.packet.deadline_ms);
   }
 
   if (!agent_request.deadline_at.has_value() &&
