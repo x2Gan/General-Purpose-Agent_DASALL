@@ -45,6 +45,12 @@ namespace dasall::infra {
 class IHealthMonitor;
 class IHealthProbe;
 
+namespace logging {
+
+class ILogger;
+
+}  // namespace logging
+
 namespace secret {
 
 class ISecretManager;
@@ -163,6 +169,7 @@ class RuntimeDependencySet final {
   std::shared_ptr<knowledge::IKnowledgeService> knowledge_service;
   std::shared_ptr<llm::ILLMManager> llm_manager;
   std::shared_ptr<infra::secret::ISecretManager> secret_manager;
+  std::shared_ptr<infra::logging::ILogger> logger;
   std::shared_ptr<infra::audit::IAuditLogger> audit_logger;
   std::shared_ptr<infra::metrics::IMetricsProvider> metrics_provider;
   std::shared_ptr<infra::tracing::ITracerProvider> tracer_provider;

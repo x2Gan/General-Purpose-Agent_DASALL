@@ -3222,6 +3222,7 @@ RuntimeDependencyCompositionResult compose_minimal_live_dependency_set(
     return make_error(std::string("runtime observability composition failed for ") +
                       std::string(composition_owner) + ": " + observability.error);
   }
+  dependency_set->logger = observability.logger;
   dependency_set->audit_logger = observability.audit_logger;
   dependency_set->metrics_provider = observability.metrics_provider;
   dependency_set->tracer_provider = observability.tracer_provider;
@@ -3342,6 +3343,7 @@ RuntimeDependencyCompositionResult compose_minimal_live_dependency_set(
       cognition::CognitionRuntimeDependencies{
           .llm_manager = dependency_set->llm_manager,
           .policy_snapshot = policy_snapshot,
+        .logger = dependency_set->logger,
           .audit_logger = dependency_set->audit_logger,
           .metrics_provider = dependency_set->metrics_provider,
           .tracer_provider = dependency_set->tracer_provider,
@@ -3358,6 +3360,7 @@ RuntimeDependencyCompositionResult compose_minimal_live_dependency_set(
       cognition::CognitionRuntimeDependencies{
           .llm_manager = dependency_set->llm_manager,
           .policy_snapshot = policy_snapshot,
+          .logger = dependency_set->logger,
         .audit_logger = dependency_set->audit_logger,
         .metrics_provider = dependency_set->metrics_provider,
         .tracer_provider = dependency_set->tracer_provider,

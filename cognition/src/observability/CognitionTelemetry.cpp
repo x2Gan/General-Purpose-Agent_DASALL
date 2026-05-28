@@ -14,6 +14,7 @@
 
 #include "audit/IAuditLogger.h"
 #include "audit/AuditTypes.h"
+#include "logging/ILogger.h"
 #include "metrics/IMeter.h"
 #include "metrics/MetricTypes.h"
 #include "tracing/ISpan.h"
@@ -34,15 +35,28 @@ class NoopTelemetrySink final : public ICognitionTelemetrySink {
 
 class InfraTelemetrySink final : public ICognitionTelemetrySink {
  public:
-  InfraTelemetrySink(std::shared_ptr<infra::audit::IAuditLogger> audit_logger,
+  InfraTelemetrySink(std::shared_ptr<infra::logging::ILogger> logger,
+                     std::shared_ptr<infra::audit::IAuditLogger> audit_logger,
                      std::shared_ptr<infra::metrics::IMetricsProvider> metrics_provider,
                      std::shared_ptr<infra::tracing::ITracerProvider> tracer_provider)
-      : audit_logger_(std::move(audit_logger)),
+      : logger_(std::move(logger)),
+        audit_logger_(std::move(audit_logger)),
         metrics_provider_(std::move(metrics_provider)),
         tracer_provider_(std::move(tracer_provider)) {}
 
-  void emit_log(const TelemetryEvent&) override {
-    // Cognition production composition currently exposes audit/metrics/trace providers.
+  void emit_log(const TelemetryEvent& event) override {
+    if (logger_ == nullptr) {
+      return;
+    }
+
+    infra::LogEvent log_event{
+        .level = classify_log_level(event.name),
+        .module = "cognition",
+        .message = std::string{"cognition "} + event.name,
+        .attrs = make_log_attrs(event),
+        .ts = current_time_ms(),
+    };
+    (void)logger_->log(log_event);
   }
 
   void emit_metric(const TelemetryMetric& metric) override {
@@ -116,9 +130,96 @@ class InfraTelemetrySink final : public ICognitionTelemetrySink {
   }
 
  private:
+  [[nodiscard]] static bool is_failure_event(const std::string_view event_name) {
+    return event_name.find("failed") != std::string_view::npos;
+  }
+
+  [[nodiscard]] static bool is_degraded_event(const std::string_view event_name) {
+    return event_name.find("degraded") != std::string_view::npos;
+  }
+
   [[nodiscard]] static std::int64_t current_time_ms() {
     const auto now = std::chrono::system_clock::now().time_since_epoch();
     return std::chrono::duration_cast<std::chrono::milliseconds>(now).count();
+  }
+
+  [[nodiscard]] static infra::LogLevel classify_log_level(
+      const std::string_view event_name) {
+    if (is_failure_event(event_name)) {
+      return infra::LogLevel::Error;
+    }
+    if (is_degraded_event(event_name)) {
+      return infra::LogLevel::Warn;
+    }
+    return infra::LogLevel::Info;
+  }
+
+  [[nodiscard]] static bool should_emit_log_attr(const std::string_view key) {
+    static constexpr std::string_view kAllowedKeys[] = {
+        "request_id",
+        "goal_id",
+        "profile_id",
+        "stage",
+        "trace_id",
+        "model_hint_tier",
+        "fallback_used",
+        "result_code",
+        "structured_projection_enabled",
+        "structured_projection_required",
+        "structured_schema_version",
+        "structured_projection_source",
+        "structured_projection_failure_code",
+        "projected_node_count",
+        "projected_candidate_count",
+        "decision_kind",
+        "confidence",
+        "selected_node_id",
+        "clarification_needed",
+        "error_code",
+        "error_stage",
+        "retryable",
+        "safe_to_replan",
+        "fallback_mode",
+        "degrade_reason",
+        "omitted_details",
+    };
+
+    return std::find(std::begin(kAllowedKeys), std::end(kAllowedKeys), key) !=
+           std::end(kAllowedKeys);
+  }
+
+  [[nodiscard]] static bool has_audit_refs(const AuditReferenceSet& audit_refs) {
+    return !audit_refs.evidence_refs.empty() || !audit_refs.artifact_refs.empty() ||
+           audit_refs.source_ref.has_value();
+  }
+
+  [[nodiscard]] static infra::LogEvent::AttributeMap make_log_attrs(
+      const TelemetryEvent& event) {
+    infra::LogEvent::AttributeMap attrs;
+    attrs.emplace("event_name", event.name);
+    for (const auto& field : event.fields) {
+      if (!field.key.empty() && should_emit_log_attr(field.key)) {
+        attrs[field.key] = field.value;
+      }
+    }
+
+    if (has_audit_refs(event.audit_refs)) {
+      attrs["audit_ref_pending"] = "true";
+      attrs["audit_trace_id"] = event.context.trace_id.empty() ? "unknown"
+                                                                 : event.context.trace_id;
+      attrs["audit_task_id"] = event.context.stage.empty() ? "unknown"
+                                                             : event.context.stage;
+      if (!event.audit_refs.evidence_refs.empty()) {
+        attrs["evidence_ref"] = event.audit_refs.evidence_refs.front();
+        attrs["evidence_kind"] = "worker_task";
+      } else if (event.audit_refs.source_ref.has_value() &&
+                 !event.audit_refs.source_ref->empty()) {
+        attrs["evidence_ref"] = *event.audit_refs.source_ref;
+        attrs["evidence_kind"] = "source_ref";
+      }
+    }
+
+    return attrs;
   }
 
   [[nodiscard]] static std::string fallback_unknown(const std::string& value,
@@ -288,6 +389,7 @@ class InfraTelemetrySink final : public ICognitionTelemetrySink {
     });
   }
 
+  std::shared_ptr<infra::logging::ILogger> logger_;
   std::shared_ptr<infra::audit::IAuditLogger> audit_logger_;
   std::shared_ptr<infra::metrics::IMetricsProvider> metrics_provider_;
   std::shared_ptr<infra::tracing::ITracerProvider> tracer_provider_;
@@ -727,12 +829,14 @@ TelemetryEmitResult CognitionTelemetry::emit_event(TelemetryEvent event,
 
 std::shared_ptr<ICognitionTelemetrySink> make_live_telemetry_sink(
     const CognitionRuntimeDependencies& dependencies) {
-  if (dependencies.audit_logger == nullptr && dependencies.metrics_provider == nullptr &&
+  if (dependencies.logger == nullptr && dependencies.audit_logger == nullptr &&
+      dependencies.metrics_provider == nullptr &&
       dependencies.tracer_provider == nullptr) {
     return nullptr;
   }
 
-  return std::make_shared<InfraTelemetrySink>(dependencies.audit_logger,
+  return std::make_shared<InfraTelemetrySink>(dependencies.logger,
+                                              dependencies.audit_logger,
                                               dependencies.metrics_provider,
                                               dependencies.tracer_provider);
 }

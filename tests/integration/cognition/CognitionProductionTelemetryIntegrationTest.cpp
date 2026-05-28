@@ -10,6 +10,7 @@
 #include "ObservabilityLiveComposition.h"
 #include "audit/AuditService.h"
 #include "decision/ActionDecision.h"
+#include "logging/LoggingFacade.h"
 #include "metrics/MetricsFacade.h"
 #include "support/TestAssertions.h"
 #include "tracing/TracerProviderImpl.h"
@@ -58,30 +59,33 @@ void test_cognition_production_telemetry_sink_emits_completed_failed_and_degrade
       StructuredExecutionPayloadScenario::ValidDirectResponse);
   const auto snapshot = make_true_integration_policy_snapshot("desktop_full");
 
-  const auto observability = dasall::infra::compose_live_observability(
-      dasall::infra::ObservabilityLiveCompositionOptions{
-          .profile_id = snapshot->effective_profile_id(),
-          .metrics_granularity = snapshot->ops_policy().metrics_granularity,
-          .trace_sample_ratio = snapshot->ops_policy().trace_sample_ratio,
-      });
+    dasall::infra::ObservabilityLiveCompositionOptions options;
+    options.profile_id = snapshot->effective_profile_id();
+    options.metrics_granularity = snapshot->ops_policy().metrics_granularity;
+    options.trace_sample_ratio = snapshot->ops_policy().trace_sample_ratio;
+    const auto observability = dasall::infra::compose_live_observability(options);
   assert_true(observability.ok(),
               std::string("cognition production telemetry integration should compose live observability providers: ") +
                   observability.error);
 
   const auto audit_service =
       std::dynamic_pointer_cast<dasall::infra::audit::AuditService>(observability.audit_logger);
+    const auto logger =
+      std::dynamic_pointer_cast<dasall::infra::logging::LoggingFacade>(observability.logger);
   const auto metrics_facade =
       std::dynamic_pointer_cast<dasall::infra::metrics::MetricsFacade>(observability.metrics_provider);
   const auto tracer_provider = std::dynamic_pointer_cast<
       dasall::infra::tracing::TracerProviderImpl>(observability.tracer_provider);
-  assert_true(audit_service != nullptr && metrics_facade != nullptr && tracer_provider != nullptr,
-              "cognition production telemetry integration should keep concrete audit, metrics, and trace providers inspectable");
+    assert_true(logger != nullptr && audit_service != nullptr && metrics_facade != nullptr &&
+            tracer_provider != nullptr,
+          "cognition production telemetry integration should keep concrete logging, audit, metrics, and trace providers inspectable");
 
   auto engine = dasall::cognition::create_cognition_engine(
       *snapshot,
       dasall::cognition::CognitionRuntimeDependencies{
         .llm_manager = fixture.llm_manager(),
           .policy_snapshot = snapshot,
+        .logger = observability.logger,
           .audit_logger = observability.audit_logger,
           .metrics_provider = observability.metrics_provider,
           .tracer_provider = observability.tracer_provider,
@@ -103,7 +107,9 @@ void test_cognition_production_telemetry_sink_emits_completed_failed_and_degrade
   auto response_builder = dasall::cognition::create_response_builder(
       *snapshot,
       dasall::cognition::CognitionRuntimeDependencies{
+        .llm_manager = fixture.llm_manager(),
           .policy_snapshot = snapshot,
+        .logger = observability.logger,
           .audit_logger = observability.audit_logger,
           .metrics_provider = observability.metrics_provider,
           .tracer_provider = observability.tracer_provider,
@@ -152,6 +158,8 @@ void test_cognition_production_telemetry_sink_emits_completed_failed_and_degrade
               "production telemetry integration should record cognition metrics samples");
   assert_true(tracer_provider->tracer_count() > 0U,
               "production telemetry integration should open at least one cognition tracer scope");
+  assert_true(logger->dispatched_record_count() >= 3U,
+              "production telemetry integration should dispatch cognition logs for completed, failed, and degraded paths");
 }
 
 }  // namespace

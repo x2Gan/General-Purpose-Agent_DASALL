@@ -506,6 +506,17 @@ key 域冻结规则：
 5. services 当前只有 `ServiceAuditBridge`、`ServiceMetricsBridge` 与 `ServiceTraceBridge`；后续新增的 `ServiceLoggingBridge` 只允许写入 `request_id`、`capability_id`、`target_id`、`operation_name`、route metadata 与 outcome summary，禁止 raw `payload_json`、catalog/result body 或 adapter secret 落盘。现有 `request ledger` 不再充当 production logging 证据。
 6. installed/package 侧统一冻结为 `logging-installed-proof.json.subsystems` 与 `logging-runtime-proof.json.subsystems`；每个 subsystem summary 至少要给出 `record_count`、`event_names`、`correlation_fields_present`、`redaction_proof`、`query_proof_ref`、`flush_observed` 与 `evidence_level`。当前 owner 验收上限仍是 local installed authoritative evidence，不外推到 qemu / kvm。
 
+### 6.10.14 cognition production logging bridge 收口补充
+
+`INF-LOG-SYS-FIX-002` 现已把 cognition 从“只有 audit/metrics/trace telemetry provider”推进到真正的 production logging bridge：
+
+1. `CognitionRuntimeDependencies` 现显式持有 `logger`，并由 `RuntimeLiveDependencyComposition`、`RuntimeDependencySet` 与 `AgentFacade` 共同下发到 cognition engine / response builder，避免 runtime live unary 路径继续漏接 cognition logging。
+2. `CognitionTelemetry::emit_event()` 仍先执行 redaction；`InfraTelemetrySink::emit_log()` 只把 redacted `TelemetryEvent` 投影为 module=`cognition` 的 `LogEvent`，并固定 message 为 `cognition <event_name>`。
+3. cognition ordinary log allowlist 现收紧为 `request_id`、`goal_id`、`profile_id`、`stage`、`trace_id`、`model_hint_tier`、`result_code`、structured projection summary、`decision_kind`、`confidence`、`selected_node_id`、`clarification_needed`、`error_code`、`error_stage`、`retryable`、`safe_to_replan`、`fallback_mode`、`degrade_reason` 与 `omitted_details`。
+4. `payload_excerpt`、`response_summary`、`clarification_question`、`candidate_scores` 与 raw prompt/token 现不再进入 cognition ordinary log；即使 degraded path 仍保留 `response.degraded` 事件，也只允许通过 `fallback_mode` / `degrade_reason` / redaction notes 暴露 owner-safe 摘要，不允许把原始 payload 重新拼回 logging attrs。
+5. 若 cognition telemetry event 同时带有 audit refs，logging 侧只保留 `audit_ref_pending`、`audit_trace_id`、`audit_task_id`、`evidence_ref`、`evidence_kind` 这组 correlation anchor；完整 audit payload 继续停留在 audit owner persistence，不把 `audit=true` 或 actor/action/target/outcome 语义混入 cognition ordinary log。
+6. focused build-tree 证据现固定为 `CognitionProductionLoggingIntegrationTest` 与扩展后的 `CognitionProductionTelemetryIntegrationTest`；它们共同验证 `stage.completed`、`stage.failed`、`response.degraded` 在 live composition 下可落到 shared logging sink，并且 runtime.log 不泄漏 `payload_excerpt`、raw prompt、token 或其他 forbidden attrs。当前结论只到 L2 build-tree owner evidence，不外推成 package / qemu authoritative proof。
+
 ---
 
 ## 7. Design -> Build 映射（建议级）

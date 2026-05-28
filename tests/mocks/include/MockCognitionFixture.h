@@ -565,6 +565,10 @@ class MockCognitionFixture {
         dasall::cognition::CognitionRuntimeDependencies{
             .llm_manager = llm_manager_,
             .policy_snapshot = nullptr,
+            .logger = nullptr,
+            .audit_logger = nullptr,
+            .metrics_provider = nullptr,
+            .tracer_provider = nullptr,
         });
     return std::shared_ptr<dasall::cognition::ICognitionEngine>(std::move(engine));
   }
@@ -576,6 +580,10 @@ class MockCognitionFixture {
         dasall::cognition::CognitionRuntimeDependencies{
             .llm_manager = llm_manager_,
             .policy_snapshot = nullptr,
+                        .logger = nullptr,
+                        .audit_logger = nullptr,
+                        .metrics_provider = nullptr,
+                        .tracer_provider = nullptr,
         });
     return std::shared_ptr<dasall::cognition::IResponseBuilder>(std::move(builder));
   }

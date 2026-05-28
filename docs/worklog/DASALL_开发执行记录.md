@@ -1,3 +1,38 @@
+## 记录 #847
+
+- 日期：2026-05-28
+- 阶段：infrastructure / cognition production logging bridge
+- 任务：完成 `INF-LOG-SYS-FIX-002`，把 cognition telemetry 接入 shared production logging sink，为后续 `INF-LOG-FIX-010` 提供第一个 build-tree owner bridge
+- 状态：已完成（L2 build-tree cognition logging bridge evidence 已闭合；本轮不使用 qemu / kvm）
+
+### 执行前提
+
+1. `INF-LOG-SYS-FIX-001` 已闭合，`KeySubsystemLoggingFieldMatrix` 已冻结 cognition owner-safe attrs、forbidden fields 与 audit split，因此本轮只做 build-track logger seam 和 focused integration evidence，不再重新定义字段口径。
+2. 近端核验确认：`CognitionTelemetry::emit_event()` 虽然已经会走 log/metric/trace/audit 四路接口，但 `InfraTelemetrySink::emit_log()` 仍为空实现；`CognitionProductionTelemetryIntegrationTest` 也只覆盖 audit/metrics/trace，没有证明 live logger 或 runtime.log 落盘。
+3. 本轮 owner 验收继续只接受 local build-tree / installed authoritative evidence；本轮不使用 qemu / kvm，不把 qemu/kvm 路径写成 cognition logging closeout。
+
+### 改动
+
+1. 更新 `cognition/include/CognitionDependencies.h` 与 `runtime/include/RuntimeDependencySet.h`，新增 `logger` seam；`apps/runtime_support/src/RuntimeLiveDependencyComposition.cpp` 与 `runtime/src/AgentFacade.cpp` 现会把 live logger 与 audit/metrics/trace 一起注入 cognition engine / response builder。
+2. 更新 `cognition/src/observability/CognitionTelemetry.cpp`，让 `InfraTelemetrySink::emit_log()` 把 redacted `TelemetryEvent` 投影为 module=`cognition` 的 `LogEvent`，同时按 `KeySubsystemLoggingFieldMatrix` 收紧 attrs allowlist，只保留 request / goal / profile / stage / trace、decision/error/fallback 和 structured projection 摘要字段。
+3. 明确禁止 `payload_excerpt`、`response_summary`、`clarification_question`、`candidate_scores`、raw prompt 与 token 进入 cognition ordinary log；若存在 audit refs，logging 侧只保留 `audit_ref_pending`、`audit_trace_id`、`audit_task_id`、`evidence_ref`、`evidence_kind` 这组 correlation anchor。
+4. 新增 `tests/integration/cognition/CognitionProductionLoggingIntegrationTest.cpp`，并扩展 `CognitionProductionTelemetryIntegrationTest.cpp` / `tests/integration/cognition/CMakeLists.txt`，用 temp runtime.log 和 `LoggingFacade` 断言 cognition `stage.completed`、`stage.failed`、`response.degraded` 三类事件已进入 shared logging sink 且不泄漏 forbidden attrs。
+
+### 验证
+
+1. `cmake --build build/vscode-linux-ninja --target dasall_cognition_production_logging_integration_test dasall_cognition_production_telemetry_integration_test`
+   - 结果：通过。
+2. `./build/vscode-linux-ninja/tests/integration/cognition/dasall_cognition_production_logging_integration_test`
+   - 结果：通过。
+3. `./build/vscode-linux-ninja/tests/integration/cognition/dasall_cognition_production_telemetry_integration_test`
+   - 结果：通过。
+
+### 结果
+
+1. `INF-LOG-SYS-FIX-002` 已闭合：cognition 正常、失败、降级三类 telemetry event 现在都能在 live composition 下进入 shared logging sink，并写入 redacted runtime.log。
+2. cognition ordinary log 现已固定为 allowlisted summary attrs；`payload_excerpt`、`response_summary`、`clarification_question`、`candidate_scores`、raw prompt、token 不再出现在 `LoggingFacade::last_dispatched_event()` 或 runtime.log 中。
+3. `RuntimeDependencySet` 现已同步持有 logger carrier，为后续 `INF-LOG-SYS-FIX-005` 的 runtime control-plane logging bridge 预留统一的 observability 注入面；跨子系统 e2e 与 installed/package authoritative proof 继续留给 `INF-LOG-SYS-FIX-007` / `INF-LOG-FIX-011`。本轮不使用 qemu / kvm。
+
 ## 记录 #846
 
 - 日期：2026-05-28
