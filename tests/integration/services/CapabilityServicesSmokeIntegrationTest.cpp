@@ -13,6 +13,8 @@
 #include "CapabilityServicesLoopbackFixture.h"
 #include "audit/IAuditLogger.h"
 #include "bridges/ServiceAuditBridge.h"
+#include "bridges/ServiceLoggingBridge.h"
+#include "logging/LoggingFacade.h"
 #include "bridges/ServiceTraceBridge.h"
 #include "support/TestAssertions.h"
 #include "tracing/ISpan.h"
@@ -64,6 +66,49 @@ class RecordingAuditLogger final : public dasall::infra::audit::IAuditLogger {
   std::vector<dasall::infra::AuditEvent> events;
   std::vector<dasall::infra::AuditContext> contexts;
 };
+
+class RecordingDispatchBackend final : public dasall::infra::logging::ILogDispatchBackend {
+ public:
+  dasall::infra::logging::LogWriteResult dispatch(
+      const dasall::infra::LogEvent& event) override {
+    events.push_back(event);
+    return dasall::infra::logging::LogWriteResult::success();
+  }
+
+  dasall::infra::logging::LogWriteResult flush(
+      const dasall::infra::logging::LogFlushDeadline&) override {
+    return dasall::infra::logging::LogWriteResult::success();
+  }
+
+  std::vector<dasall::infra::LogEvent> events;
+};
+
+[[nodiscard]] std::shared_ptr<dasall::infra::logging::LoggingFacade> make_logger(
+    RecordingDispatchBackend** backend_out) {
+  auto backend = std::make_unique<RecordingDispatchBackend>();
+  *backend_out = backend.get();
+  auto logger =
+      std::make_shared<dasall::infra::logging::LoggingFacade>(std::move(backend));
+  assert_true(logger->init(dasall::infra::InfraContext{
+                          .request_id = std::string("req-services-smoke-logging"),
+                          .session_id = std::string("session-services-smoke-logging"),
+                          .trace_id = std::string("trace-services-smoke-logging"),
+                          .task_id = std::string("task-services-smoke-logging"),
+                          .parent_task_id =
+                              std::string("parent-services-smoke-logging"),
+                          .lease_id = std::string("lease-services-smoke-logging"),
+                      })
+                      .ok,
+              "services smoke integration should initialize the shared logger before injecting the services logging bridge");
+  return logger;
+}
+
+[[nodiscard]] bool has_log_attr(const dasall::infra::LogEvent::AttributeMap& attrs,
+                                const std::string& key,
+                                const std::string& value) {
+  const auto it = attrs.find(key);
+  return it != attrs.end() && it->second == value;
+}
 
 [[nodiscard]] std::string hex_id(std::uint64_t value, std::size_t width) {
   std::ostringstream builder;
@@ -284,7 +329,13 @@ void assert_trace_chain(const StartedSpanRecord& root,
 }
 
 void test_capability_services_smoke_integration_registers_minimal_loopback_round_trip() {
-  CapabilityServicesLoopbackFixture fixture;
+  RecordingDispatchBackend* logging_backend = nullptr;
+  const auto logger = make_logger(&logging_backend);
+  dasall::services::internal::ServiceLoggingBridge logging_bridge(logger);
+
+  dasall::tests::mocks::CapabilityServicesLoopbackFixtureOptions fixture_options;
+  fixture_options.logging_bridge = &logging_bridge;
+  CapabilityServicesLoopbackFixture fixture(std::move(fixture_options));
 
   const auto execute_result = fixture.execution_service().execute(
       fixture.make_execute_request());
@@ -292,6 +343,8 @@ void test_capability_services_smoke_integration_registers_minimal_loopback_round
       fixture.make_query_request());
   const auto catalog_result = fixture.data_service().list_capabilities(
       fixture.make_catalog_request());
+  assert_true(logger->flush(dasall::infra::logging::LogFlushDeadline{.timeout_ms = 500}).ok,
+        "services smoke integration should flush the shared logger before inspecting dispatched services records");
 
   assert_true(!execute_result.error.has_value(),
               "smoke loopback execute should succeed without structured error");
@@ -319,15 +372,19 @@ void test_capability_services_smoke_integration_registers_minimal_loopback_round
   assert_equal(std::string("toggle"),
                fixture.local_requests().at(0).operation_name,
                "smoke execute should register the expected action name");
-  assert_equal(std::string("req-loopback-exec"),
-               fixture.local_requests().at(0).request_id,
-               "smoke execute should keep request_id observable on the loopback request ledger");
-  assert_equal(std::string("cap.exec"),
-               fixture.local_requests().at(0).capability_id,
-               "smoke execute should keep capability_id observable on the loopback request ledger");
-  assert_equal(std::string("loopback.target"),
-               fixture.local_requests().at(0).target_id,
-               "smoke execute should keep target_id observable on the loopback request ledger");
+  assert_equal(3,
+               static_cast<int>(logging_backend->events.size()),
+               "smoke integration should emit one structured services log record for execute, query, and catalog routes");
+  assert_true(has_log_attr(logging_backend->events.at(0).attrs,
+                           "request_id",
+                           "req-loopback-exec") &&
+                  has_log_attr(logging_backend->events.at(0).attrs,
+                               "capability_id",
+                               "cap.exec") &&
+                  has_log_attr(logging_backend->events.at(0).attrs,
+                               "target_id",
+                               "loopback.target"),
+              "smoke execute should keep request_id, capability_id, and target_id observable on the structured services logging sink");
   assert_equal(std::string("status"),
                fixture.local_requests().at(1).operation_name,
                "smoke query should register the expected projection name");

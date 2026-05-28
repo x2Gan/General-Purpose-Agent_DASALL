@@ -1,3 +1,44 @@
+## 记录 #851
+
+- 日期：2026-05-28
+- 阶段：infrastructure / services production logging bridge
+- 任务：完成 `INF-LOG-SYS-FIX-006`，把 services route observability 从 loopback request ledger 迁移到 shared structured logging sink build-tree evidence
+- 状态：已完成（L2/L3 build-tree services logging evidence 已闭合；本轮不使用 qemu / kvm）
+
+### 执行前提
+
+1. `INF-LOG-SYS-FIX-001~005` 已先后闭合，`KeySubsystemLoggingFieldMatrix` 已冻结 services ordinary log 只能保留 route correlation、route metadata 与 owner-safe outcome summary，并要求 `request ledger` 不得继续充当 services production logging 证据。
+2. 近端核验确认：services 之前虽然已有 `ServiceAuditBridge`、`ServiceMetricsBridge`、`ServiceTraceBridge`，但 `ServiceLiveCompositionOptions` 没有 logger seam，execution/data/catalog route receipt 只能在 loopback fixture 的 request ledger 上被观察，shared logging sink 中没有对应的 services structured record。
+3. `BLK-INF-LOG-009` 已闭合，因此本轮只做 services owner 的 build-tree logger seam、route logging bridge 与 focused evidence 补齐；installed/package authoritative evidence 与跨子系统 e2e 继续留给 `INF-LOG-SYS-FIX-007` / `INF-LOG-FIX-011`。本轮不使用 qemu / kvm。
+
+### 改动
+
+1. 新增 `services/src/bridges/ServiceLoggingBridge.h` / `.cpp`，把 execute/query/catalog route receipt 的 `request_id`、`capability_id`、`target_id`、`request_kind`、`operation_name`、`route_kind`、`adapter_id`、`trust_class`、`availability_state`、`transport_outcome`、`provider_status_code`、`latency_ms`、`side_effect_count` 与 `evidence_ref_count` 投影为 module=`services` 的 `LogEvent`；ordinary log message 固定使用 event name，不复制 payload body。
+2. 更新 `services/include/ServiceLiveComposition.h`、`services/src/ServiceLiveComposition.cpp` 与 `apps/runtime_support/src/RuntimeLiveDependencyComposition.cpp`，让 shared observability logger 可以透传到 `compose_live_services()`，并在 logger 存在时创建 `ServiceLoggingBridge` 下发到 `ExecutionCommandLane` / `DataQueryLane`。
+3. 更新 `services/src/execution/ExecutionCommandLane.*`、`services/src/data/DataQueryLane.*` 与 `tests/mocks/include/CapabilityServicesLoopbackFixture.h`，让 execute/query/catalog 三条 path 在 receipt 生成后写入 services structured logging sink，同时保持 request ledger 只作为 fixture / fallback discoverability 语义。
+4. 新增 `tests/unit/services/bridges/ServiceLoggingBridgeTest.cpp` 与 `tests/integration/services/CapabilityServicesLoggingIntegrationTest.cpp`，并更新 `tests/integration/services/CapabilityServicesSmokeIntegrationTest.cpp`，分别守住 services allowlist/logger contract、live composition logger seam，以及 request ledger 字段断言迁移到正式 logging sink 的 smoke contract。
+
+### 验证
+
+1. `cmake --build build/vscode-linux-ninja --target dasall_service_logging_bridge_unit_test`
+   - 结果：通过。
+2. `./build/vscode-linux-ninja/tests/unit/services/bridges/dasall_service_logging_bridge_unit_test`
+   - 结果：通过。
+3. `cmake --build build/vscode-linux-ninja --target dasall_services_logging_integration_test`
+   - 结果：通过。
+4. `./build/vscode-linux-ninja/tests/integration/services/dasall_services_logging_integration_test`
+   - 结果：通过。
+5. `cmake --build build/vscode-linux-ninja --target dasall_services_smoke_integration_test`
+   - 结果：通过。
+6. `./build/vscode-linux-ninja/tests/integration/services/dasall_services_smoke_integration_test`
+   - 结果：通过。
+
+### 结果
+
+1. `INF-LOG-SYS-FIX-006` 已闭合：services execute/query/catalog route receipt 现在都能在 live composition 与 loopback smoke 下进入 shared structured logging sink。
+2. services 正式可观测字段现已从 request ledger 迁移到 `ServiceLoggingBridge`；request ledger 只保留 fixture / fallback discoverability 语义，不再充当 production logging 证据。
+3. ordinary log 现已固定为 allowlisted route attrs，raw `payload_json`、catalog/result body、adapter secret 与未脱敏 side effect 原文不再进入 services logging sink。当前结论只到 L2/L3 build-tree owner evidence；installed/package authoritative proof 与跨子系统 e2e 继续留给 `INF-LOG-SYS-FIX-007` / `INF-LOG-FIX-011`。本轮不使用 qemu / kvm。
+
 ## 记录 #850
 
 - 日期：2026-05-28

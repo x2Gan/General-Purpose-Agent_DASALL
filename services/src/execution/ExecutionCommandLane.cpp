@@ -6,6 +6,7 @@
 #include <utility>
 
 #include "bridges/ServiceAuditBridge.h"
+#include "bridges/ServiceLoggingBridge.h"
 #include "bridges/ServiceMetricsBridge.h"
 #include "bridges/ServiceTraceBridge.h"
 #include "execution/CompensationCatalog.h"
@@ -462,6 +463,15 @@ ExecutionCommandResult ExecutionCommandLane::execute_impl(const ServiceCallConte
 
   if (!idempotency_cache_key.empty()) {
     cache_result(idempotency_cache_key, result);
+  }
+
+  if (dependencies_.logging_bridge != nullptr) {
+    (void)dependencies_.logging_bridge->write_execution_route(
+        context,
+        target,
+        action,
+        *route_decision.selection,
+        receipt);
   }
 
   if (dependencies_.metrics_bridge != nullptr) {

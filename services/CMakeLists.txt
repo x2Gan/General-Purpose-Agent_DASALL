@@ -8,6 +8,7 @@ target_sources(dasall_services
     src/ops/ServiceConfigAdapter.cpp
     src/ops/ServiceHealthProbe.cpp
     src/bridges/ServiceAuditBridge.cpp
+    src/bridges/ServiceLoggingBridge.cpp
     src/bridges/ServiceMetricsBridge.cpp
     src/bridges/ServiceTraceBridge.cpp
     src/adapters/AdapterRouter.cpp

@@ -32,6 +32,12 @@ class IMetricsProvider;
 
 }  // namespace metrics
 
+namespace logging {
+
+class ILogger;
+
+}  // namespace logging
+
 namespace tracing {
 
 class ITracerProvider;
@@ -124,6 +130,7 @@ struct ServiceLiveCompositionOptions {
   bool observability_enabled = false;
   std::string observability_level = "minimal";
   std::string toolchain_hint = "x86_64-linux-gnu";
+  std::shared_ptr<infra::logging::ILogger> logger;
   std::shared_ptr<infra::audit::IAuditLogger> audit_logger;
   std::shared_ptr<infra::metrics::IMetricsProvider> metrics_provider;
   std::shared_ptr<infra::tracing::ITracerProvider> tracer_provider;

@@ -18,6 +18,7 @@
 #include "adapters/LocalServiceAdapter.h"
 #include "adapters/RemoteServiceAdapter.h"
 #include "bridges/ServiceAuditBridge.h"
+#include "bridges/ServiceLoggingBridge.h"
 #include "bridges/ServiceMetricsBridge.h"
 #include "bridges/ServiceTraceBridge.h"
 #include "data/DataProjectionCache.h"
@@ -56,6 +57,7 @@ using internal::RemoteServiceAdapter;
 using internal::RemoteServiceAdapterOptions;
 using internal::ResultMapper;
 using internal::ServiceAuditBridge;
+using internal::ServiceLoggingBridge;
 using internal::ServiceConfigAdapter;
 using internal::ServiceFacade;
 using internal::ServiceFacadeDependencies;
@@ -810,6 +812,10 @@ class LiveServiceCompositionRoot final : public IExecutionService,
               .trace_sample_ratio = runtime_policy.ops_policy().trace_sample_ratio,
           });
     }
+    if (options.logger != nullptr) {
+      logger_owner_ = options.logger;
+      logging_bridge_ = std::make_unique<ServiceLoggingBridge>(logger_owner_);
+    }
 
     if (const auto* local_platform_binding =
         find_binding_for(effective_registry, ServiceLiveRouteKind::local_platform);
@@ -901,6 +907,7 @@ class LiveServiceCompositionRoot final : public IExecutionService,
         .audit_bridge = audit_bridge_.get(),
         .metrics_bridge = metrics_bridge_.get(),
         .trace_bridge = trace_bridge_.get(),
+        .logging_bridge = logging_bridge_.get(),
     });
 
     data_query_lane_ = std::make_unique<DataQueryLane>(DataQueryLaneDependencies{
@@ -926,6 +933,7 @@ class LiveServiceCompositionRoot final : public IExecutionService,
         },
         .metrics_bridge = metrics_bridge_.get(),
         .trace_bridge = trace_bridge_.get(),
+        .logging_bridge = logging_bridge_.get(),
     });
 
     facade_ = std::make_unique<ServiceFacade>(ServiceFacadeDependencies{
@@ -986,10 +994,12 @@ class LiveServiceCompositionRoot final : public IExecutionService,
   ServiceLiveCompositionOptions options_{};
   ServicePolicyView policy_view_{};
   std::vector<AdapterCandidateView> registered_candidates_;
+  std::shared_ptr<infra::logging::ILogger> logger_owner_;
   std::shared_ptr<infra::audit::IAuditLogger> audit_logger_owner_;
   std::shared_ptr<infra::metrics::IMetricsProvider> metrics_provider_owner_;
   std::shared_ptr<infra::tracing::ITracerProvider> tracer_provider_owner_;
   std::unique_ptr<ServiceAuditBridge> audit_bridge_;
+  std::unique_ptr<ServiceLoggingBridge> logging_bridge_;
   std::unique_ptr<ServiceMetricsBridge> metrics_bridge_;
   std::unique_ptr<ServiceTraceBridge> trace_bridge_;
   std::unique_ptr<LocalPlatformAdapter> local_platform_adapter_;

@@ -12,6 +12,7 @@
 
 namespace dasall::services::internal {
 
+class ServiceLoggingBridge;
 class ServiceMetricsBridge;
 class ServiceTraceBridge;
 
@@ -30,6 +31,7 @@ struct DataQueryLaneDependencies {
       resolve_route_view = {};
   ServiceMetricsBridge* metrics_bridge = nullptr;
   ServiceTraceBridge* trace_bridge = nullptr;
+  ServiceLoggingBridge* logging_bridge = nullptr;
 };
 
 class DataQueryLane {

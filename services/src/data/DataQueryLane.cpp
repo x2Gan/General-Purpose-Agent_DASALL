@@ -3,6 +3,7 @@
 #include <string_view>
 #include <utility>
 
+#include "bridges/ServiceLoggingBridge.h"
 #include "bridges/ServiceMetricsBridge.h"
 #include "bridges/ServiceTraceBridge.h"
 
@@ -207,6 +208,15 @@ DataQueryResult DataQueryLane::query(const ServiceCallContext& context,
           .payload_json = make_query_payload(request),
       });
 
+  if (dependencies_.logging_bridge != nullptr) {
+    (void)dependencies_.logging_bridge->write_data_query_route(
+        context,
+        request.dataset,
+        request.projection,
+        *route_decision.selection,
+        receipt);
+  }
+
   if (!receipt.side_effects.empty()) {
     return emit_query_metrics(make_query_error_result(
                                   request.dataset,
@@ -316,6 +326,14 @@ DataCatalogResult DataQueryLane::list_capabilities(const ServiceCallContext& con
           .operation_name = std::string(kCatalogOperation),
           .payload_json = make_catalog_payload(request),
       });
+
+  if (dependencies_.logging_bridge != nullptr) {
+    (void)dependencies_.logging_bridge->write_data_catalog_route(
+        context,
+        request.target_class,
+        *route_decision.selection,
+        receipt);
+  }
 
   if (!receipt.side_effects.empty()) {
     return emit_catalog_metrics(make_catalog_error_result(

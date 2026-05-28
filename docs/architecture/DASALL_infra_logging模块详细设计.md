@@ -503,7 +503,7 @@ key 域冻结规则：
 2. memory 当前虽然已经有 `ILogger`，但 `make_log_attrs()` 现阶段仍会把任意 field 透传到 attrs；后续 owner task 必须收紧为 allowlist，只保留 `request_id/session_id/trace_id/stage/profile_id` 与 bounded enum/count/bool 字段，禁止 raw context body、retrieval payload、summary text 与 embedding payload 进入 ordinary log。
 3. knowledge 当前 primary/fallback logger 已经共享 `make_knowledge_log_event()`，因此本轮冻结 `request_id`、`component`、`snapshot_id`、`profile_id`、`query_kind`、`retrieval_mode`、`warning_summary`、`selected_corpora`、`reason_codes` 与 `telemetry_path` 为普通日志 attrs；raw `query/body`、ingest payload 与 corpus document text 继续留在 subsystem owner，不允许靠 fallback path 外泄。
 4. runtime 当前只有 `RuntimeEventBus` / `RuntimeTelemetryBridge`，还没有 logger seam；后续 `RuntimeLoggingBridge` 只能投影 `RuntimeEventEnvelope` 中的 operational attrs，例如 `request_id`、`session_id`、`trace_id`、`turn_id`、`checkpoint_id`、`runtime_instance_id`、state/budget/recovery/safe-mode summary。`audit=true` envelope 继续交给 audit owner，logging 侧只写 redacted operational record。
-5. services 当前只有 `ServiceAuditBridge`、`ServiceMetricsBridge` 与 `ServiceTraceBridge`；后续新增的 `ServiceLoggingBridge` 只允许写入 `request_id`、`capability_id`、`target_id`、`operation_name`、route metadata 与 outcome summary，禁止 raw `payload_json`、catalog/result body 或 adapter secret 落盘。现有 `request ledger` 不再充当 production logging 证据。
+5. services owner boundary 现已固定为 `ServiceLoggingBridge` 的 route attr allowlist：只允许写入 `request_id`、`capability_id`、`target_id`、`request_kind`、`operation_name`、route metadata 与 outcome summary，禁止 raw `payload_json`、catalog/result body 或 adapter secret 落盘；`request ledger` 只保留 fixture / fallback discoverability 语义，不再充当 production logging 证据。
 6. installed/package 侧统一冻结为 `logging-installed-proof.json.subsystems` 与 `logging-runtime-proof.json.subsystems`；每个 subsystem summary 至少要给出 `record_count`、`event_names`、`correlation_fields_present`、`redaction_proof`、`query_proof_ref`、`flush_observed` 与 `evidence_level`。当前 owner 验收上限仍是 local installed authoritative evidence，不外推到 qemu / kvm。
 
 ### 6.10.14 cognition production logging bridge 收口补充
@@ -545,6 +545,16 @@ key 域冻结规则：
 3. runtime ordinary log allowlist 现固定为 `event_name`、`category`、`severity`、`request_id`、`session_id`、`trace_id`、`turn_id`、`checkpoint_id`、`runtime_instance_id`、`from_state`、`to_state`、`violation`、`budget_type`、`executed_action`、`final_runtime_state`、`previous_mode`、`target_mode`、`action`、`selected_fallback`、`error_code` 与 `audit_ref_pending`；raw detail、`checkpoint_ref`、payload/context body 与完整 audit payload 继续禁止进入 ordinary log。
 4. focused build-tree 证据现固定为 `RuntimeLoggingBridgeTest`、`RuntimeProductionLoggingIntegrationTest` 与邻近的 `RuntimeHealthMaintenanceIntegrationTest`：前两者分别证明 allowlist/redaction contract 与 live composition runtime.log 持久化，后者继续守住 event-bus/backpressure 相邻路径未因 logging subscriber 回归。
 5. 当前 runtime logging 结论已到 L2/L3 build-tree persisted/flush owner evidence，但不外推成 installed/package authoritative proof；跨子系统 e2e 与 installed logging proof 继续留给 `INF-LOG-SYS-FIX-007` / `INF-LOG-FIX-011`。本轮不使用 qemu / kvm。
+
+### 6.10.18 services production logging bridge 收口补充
+
+`INF-LOG-SYS-FIX-006` 现已把 services 从“只有 audit/metrics/trace provider 与 request ledger fixture”推进到 build-tree structured logging sink 证据：
+
+1. `ServiceLiveCompositionOptions` 现已新增 `std::shared_ptr<infra::logging::ILogger> logger`，`ServiceLiveComposition` 会在 logger 存在时创建 `ServiceLoggingBridge` 并将其传给 `ExecutionCommandLane` / `DataQueryLane`；`apps/runtime_support::RuntimeLiveDependencyComposition` 同步把 shared observability logger 透传给 `compose_live_services()`。
+2. 新增 `services::internal::ServiceLoggingBridge`，把 execution/data query/catalog route receipt 的 `request_id`、`capability_id`、`target_id`、`request_kind`、`operation_name`、`route_kind`、`adapter_id`、`trust_class`、`availability_state`、`transport_outcome`、`provider_status_code`、`latency_ms`、`side_effect_count` 与 `evidence_ref_count` 投影为 module=`services` 的 `LogEvent`；raw `payload_json`、catalog/result body 与 adapter secret 继续禁止进入 ordinary log。
+3. `ExecutionCommandLane` 与 `DataQueryLane` 现会在 route receipt 生成后调用 `ServiceLoggingBridge`，分别记录 `service.execution.route`、`service.data.query.route`、`service.data.catalog.route`；high-risk action 的 audit persistence 仍由 `ServiceAuditBridge` 持有，logging 不接管 audit owner 语义。
+4. focused build-tree 证据现固定为 `ServiceLoggingBridgeTest`、`CapabilityServicesLoggingIntegrationTest` 与迁移后的 `CapabilityServicesSmokeIntegrationTest`：前者证明 allowlist / logger 缺失 contract，第二个证明 live composition logger seam 真正把 execute/query/catalog 三类 route 记录写入 shared sink，第三个证明 request ledger 上的 request/capability/target 断言已迁移到正式 logging sink，同时保留 loopback route 行为断言。
+5. 当前 services logging 结论已到 L2/L3 build-tree sink/flush owner evidence，但不外推成 installed/package authoritative proof；跨子系统 e2e 与 installed logging proof 继续留给 `INF-LOG-SYS-FIX-007` / `INF-LOG-FIX-011`。本轮不使用 qemu / kvm。
 
 ---
 

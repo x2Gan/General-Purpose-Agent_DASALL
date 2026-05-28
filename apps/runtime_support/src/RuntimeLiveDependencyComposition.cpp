@@ -3411,6 +3411,7 @@ RuntimeDependencyCompositionResult compose_minimal_live_dependency_set(
           .observability_enabled = true,
           .observability_level = policy_snapshot->ops_policy().metrics_granularity,
             .toolchain_hint = services_toolchain_hint,
+          .logger = observability.logger,
           .audit_logger = observability.audit_logger,
           .metrics_provider = observability.metrics_provider,
           .tracer_provider = observability.tracer_provider,

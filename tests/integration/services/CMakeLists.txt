@@ -15,6 +15,8 @@ macro(dasall_add_services_integration_test target_name test_name source_file lab
     PRIVATE
       ${CMAKE_SOURCE_DIR}/services/src
       ${CMAKE_SOURCE_DIR}/infra/include
+      ${CMAKE_SOURCE_DIR}/infra/src
+      ${CMAKE_SOURCE_DIR}/profiles/include
   )
 
   dasall_apply_common_options(${target_name})
@@ -29,6 +31,13 @@ dasall_add_services_integration_test(
   dasall_services_smoke_integration_test
   CapabilityServicesSmokeIntegrationTest
   CapabilityServicesSmokeIntegrationTest.cpp
+  "integration"
+)
+
+dasall_add_services_integration_test(
+  dasall_services_logging_integration_test
+  CapabilityServicesLoggingIntegrationTest
+  CapabilityServicesLoggingIntegrationTest.cpp
   "integration"
 )
 

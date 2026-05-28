@@ -16,6 +16,7 @@ namespace dasall::services::internal {
 
 class CompensationCatalog;
 class ServiceAuditBridge;
+class ServiceLoggingBridge;
 class ServiceMetricsBridge;
 class ServiceTraceBridge;
 
@@ -49,6 +50,7 @@ struct ExecutionCommandLaneDependencies {
   ServiceAuditBridge* audit_bridge = nullptr;
   ServiceMetricsBridge* metrics_bridge = nullptr;
   ServiceTraceBridge* trace_bridge = nullptr;
+  ServiceLoggingBridge* logging_bridge = nullptr;
 };
 
 class ExecutionCommandLane {

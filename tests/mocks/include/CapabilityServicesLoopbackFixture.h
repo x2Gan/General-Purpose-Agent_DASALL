@@ -23,6 +23,7 @@
 
 namespace dasall::services::internal {
 class ServiceAuditBridge;
+class ServiceLoggingBridge;
 class ServiceMetricsBridge;
 class ServiceTraceBridge;
 }  // namespace dasall::services::internal
@@ -50,6 +51,7 @@ struct CapabilityServicesLoopbackFixtureOptions {
       const services::internal::AdapterReceipt& receipt)>
       lookup_compensation_hints;
   services::internal::ServiceAuditBridge* audit_bridge = nullptr;
+  services::internal::ServiceLoggingBridge* logging_bridge = nullptr;
   services::internal::ServiceMetricsBridge* metrics_bridge = nullptr;
   services::internal::ServiceTraceBridge* trace_bridge = nullptr;
   std::function<services::internal::AdapterInvocationResult(
@@ -127,6 +129,7 @@ class CapabilityServicesLoopbackFixture {
             .audit_bridge = options_.audit_bridge,
             .metrics_bridge = options_.metrics_bridge,
             .trace_bridge = options_.trace_bridge,
+            .logging_bridge = options_.logging_bridge,
         });
 
     data_query_lane_ = std::make_unique<services::internal::DataQueryLane>(
@@ -141,6 +144,7 @@ class CapabilityServicesLoopbackFixture {
             .registered_candidates = build_candidates(),
             .metrics_bridge = options_.metrics_bridge,
             .trace_bridge = options_.trace_bridge,
+            .logging_bridge = options_.logging_bridge,
         });
 
         subscription_hub_ = std::make_unique<services::internal::ExecutionSubscriptionHub>(
