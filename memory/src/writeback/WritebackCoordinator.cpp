@@ -206,22 +206,40 @@ void append_warning_once(std::vector<std::string>& warnings,
 [[nodiscard]] MemoryTelemetryContext make_observability_context(
     const MemoryWritebackRequest& request) {
   return MemoryTelemetryContext{
-      .request_id = request.turn.turn_id.value_or("writeback"),
+      .request_id = request.request_id.empty()
+                        ? request.turn.turn_id.value_or("writeback")
+                        : request.request_id,
       .session_id = request.session_id,
       .stage = "writeback",
-      .trace_id = {},
+      .trace_id = request.trace_id,
       .profile_id = {},
   };
 }
 
 [[nodiscard]] std::vector<MemoryTelemetryField> make_writeback_fields(
-    const WritebackResult& result) {
+    const WritebackResult& result,
+    std::string failure_reason = {}) {
   std::vector<MemoryTelemetryField> fields;
   fields.push_back(MemoryTelemetryField{.key = "warning_count",
                                         .value = std::to_string(result.warnings.size())});
   if (!result.warnings.empty()) {
     fields.push_back(MemoryTelemetryField{.key = "warning",
                                           .value = result.warnings.front()});
+
+    std::string warning_codes;
+    for (const auto& warning : result.warnings) {
+      if (warning.empty()) {
+        continue;
+      }
+      if (!warning_codes.empty()) {
+        warning_codes += ",";
+      }
+      warning_codes += warning;
+    }
+    if (!warning_codes.empty()) {
+      fields.push_back(MemoryTelemetryField{.key = "warning_codes",
+                                            .value = std::move(warning_codes)});
+    }
   }
   fields.push_back(MemoryTelemetryField{.key = "fact_count",
                                         .value = std::to_string(result.fact_ids.size())});
@@ -238,6 +256,10 @@ void append_warning_once(std::vector<std::string>& warnings,
   if (result.result_code.has_value()) {
     fields.push_back(MemoryTelemetryField{.key = "result_code",
                                           .value = std::to_string(static_cast<int>(*result.result_code))});
+  }
+  if (!failure_reason.empty()) {
+    fields.push_back(MemoryTelemetryField{.key = "failure_reason",
+                                          .value = std::move(failure_reason)});
   }
   if (result.persisted_turn_id.has_value()) {
     fields.push_back(MemoryTelemetryField{.key = "turn_id",
@@ -319,8 +341,15 @@ WritebackResult WritebackCoordinator::persist(
   MemoryWritebackRequest normalized_request = request;
   normalized_request.turn = normalize_turn(request);
 
-  if (!contracts::validate_turn_field_rules(normalized_request.turn).ok) {
-    return make_invalid_result("writeback_turn_invalid");
+  const auto turn_guard = contracts::validate_turn_field_rules(normalized_request.turn);
+  if (!turn_guard.ok) {
+    const auto result = make_invalid_result("writeback_turn_invalid");
+    if (observability_) {
+      observability_->emit("writeback.failed",
+                           make_observability_context(normalized_request),
+                           make_writeback_fields(result, std::string(turn_guard.reason)));
+    }
+    return result;
   }
 
   WritebackResult prep_result;

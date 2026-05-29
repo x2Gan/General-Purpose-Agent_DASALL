@@ -121,6 +121,7 @@ void test_memory_context_supporting_types_compile_and_expose_expected_defaults()
   MemoryContextRequest request;
   request.request_id = "req-001";
   request.session_id = "session-001";
+  request.trace_id = "trace-001";
   request.stage = "plan";
   request.goal_summary = "Produce a stable prompt packet";
   request.constraints_summary = "Stay within token budget";
@@ -132,6 +133,8 @@ void test_memory_context_supporting_types_compile_and_expose_expected_defaults()
                "memory context request should expose a runtime correlation id");
   assert_equal("session-001", request.session_id,
                "memory context request should expose a target session id");
+     assert_equal("trace-001", request.trace_id,
+                                    "memory context request should expose distributed trace correlation");
   assert_equal("plan", request.stage,
                "memory context request should expose the orchestration stage");
   assert_equal(4096, MemoryContextRequest{}.token_budget_hint,
@@ -255,7 +258,9 @@ void test_memory_writeback_supporting_types_compile_and_preserve_partial_retry_s
                                         "WritebackResult should keep the shared result code optional on success");
 
     MemoryWritebackRequest request;
+     request.request_id.assign("req-writeback-001");
     request.session_id = "session-001";
+     request.trace_id.assign("trace-writeback-001");
     request.turn.turn_id = "turn-001";
     request.turn.session_id = request.session_id;
     request.turn.user_input = "Summarize the latest tool run";
@@ -282,6 +287,10 @@ void test_memory_writeback_supporting_types_compile_and_preserve_partial_retry_s
 
     assert_equal("session-001", request.session_id,
          "memory writeback request should target a single session");
+     assert_equal("req-writeback-001", request.request_id,
+         "memory writeback request should expose request-level diagnostics correlation");
+    assert_equal("trace-writeback-001", request.trace_id,
+         "memory writeback request should expose distributed trace correlation");
     assert_true(request.turn.tool_call_refs.has_value() &&
         request.turn.tool_call_refs->size() == 2U,
         "memory writeback request should rely on Turn tool refs instead of duplicating them");
@@ -349,7 +358,8 @@ void test_memory_writeback_supporting_types_compile_and_preserve_partial_retry_s
          "memory storage should default busy timeout to the bounded local retry window");
     assert_equal(2, config.storage.writer_retry_count,
          "memory storage should default writer retry count to the design baseline");
-    assert_equal(encode_sqlite_version_number(3, 51, 3), config.storage.sqlite_min_version,
+     assert_equal(dasall::memory::encode_sqlite_version_number(3, 51, 3),
+           config.storage.sqlite_min_version,
          "memory storage should default sqlite_min_version to the WAL-reset fixed baseline");
     assert_equal(std::string("PASSIVE"), std::string(to_string_view(config.storage.checkpoint_mode)),
          "memory storage should default checkpoint mode to PASSIVE");
@@ -456,7 +466,8 @@ void test_memory_manager_supporting_types_and_factory_surface_compile_with_stabl
      using dasall::tests::support::assert_equal;
      using dasall::tests::support::assert_true;
 
-     using FactorySignature = std::unique_ptr<IMemoryManager> (*)(const MemoryConfig&);
+     using FactorySignature = std::unique_ptr<IMemoryManager> (*)(
+         const MemoryConfig&, const dasall::memory::MemoryRuntimeDependencies&);
      static_assert(std::is_same_v<decltype(&dasall::memory::create_memory_manager), FactorySignature>,
                                         "create_memory_manager should remain the config-driven public factory surface");
 
@@ -493,6 +504,8 @@ void test_memory_manager_supporting_types_and_factory_surface_compile_with_stabl
                                    "fresh working-memory export results should default to non-degraded");
 
      MaintenanceRequest maintenance_request;
+     maintenance_request.request_id = "req-maintenance-001";
+     maintenance_request.trace_id = "trace-maintenance-001";
      assert_true(maintenance_request.run_checkpoint,
                                    "maintenance requests should default checkpoint execution to enabled");
      assert_true(maintenance_request.run_retention,
@@ -501,6 +514,10 @@ void test_memory_manager_supporting_types_and_factory_surface_compile_with_stabl
                                    "maintenance requests should default quarantine cleanup to enabled");
      assert_true(!maintenance_request.run_vector_rebuild,
                                    "maintenance requests should default vector rebuild to disabled");
+     assert_equal("req-maintenance-001", maintenance_request.request_id,
+                                    "maintenance requests should expose request-level diagnostics correlation");
+     assert_equal("trace-maintenance-001", maintenance_request.trace_id,
+                                    "maintenance requests should expose distributed trace correlation");
 
      MaintenanceReport maintenance_report;
      assert_true(!maintenance_report.checkpoint_executed,

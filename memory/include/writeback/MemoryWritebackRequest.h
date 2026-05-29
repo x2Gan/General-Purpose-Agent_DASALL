@@ -22,7 +22,9 @@ struct ExperienceCandidate {
 };
 
 struct MemoryWritebackRequest {
+  std::string request_id;
   std::string session_id;
+  std::string trace_id;
   contracts::Turn turn;
   std::optional<contracts::SummaryMemory> summary_candidate;
   std::vector<FactCandidate> fact_candidates;

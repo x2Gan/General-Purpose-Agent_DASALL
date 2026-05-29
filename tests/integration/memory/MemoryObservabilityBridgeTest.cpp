@@ -196,6 +196,7 @@ void test_memory_observability_bridge_emits_context_writeback_conflict_and_maint
       dasall::memory::MemoryContextRequest{
           .request_id = "req-memory-obs-preinit",
           .session_id = "session-memory-obs",
+          .trace_id = "trace-memory-obs",
           .stage = "planning",
           .goal_summary = "pre-init failure should be observable",
       });
@@ -233,6 +234,7 @@ void test_memory_observability_bridge_emits_context_writeback_conflict_and_maint
       dasall::memory::MemoryContextRequest{
           .request_id = "req-memory-obs-context",
           .session_id = "session-memory-obs",
+          .trace_id = "trace-memory-obs",
           .stage = "reasoning",
           .goal_summary = "prove memory production observability sinks",
           .constraints_summary = "keep goal and latest observation visible",
@@ -254,9 +256,47 @@ void test_memory_observability_bridge_emits_context_writeback_conflict_and_maint
           .run_retention = false,
           .run_quarantine_cleanup = true,
           .run_vector_rebuild = false,
+          .request_id = "req-memory-obs-maintenance",
+          .trace_id = "trace-memory-obs",
       });
   assert_true(maintenance_report.quarantine_cleaned == 1,
               "maintenance should clean the seeded quarantine row on the observability path");
+
+  assert_true(logger->has_last_dispatched_event() &&
+                  logger->last_dispatched_event().attrs.at("event_name") ==
+                      "maintenance.completed" &&
+                  logger->last_dispatched_event().attrs.at("request_id") ==
+                      "req-memory-obs-maintenance" &&
+                  logger->last_dispatched_event().attrs.at("trace_id") ==
+                      "trace-memory-obs",
+              "maintenance telemetry should preserve request and trace correlation on the final event");
+
+  auto invalid_writeback_request = make_request(
+      "session-memory-obs",
+      "turn-memory-obs-invalid",
+      "invalid turn should still be observable",
+      "transient response",
+      "invalid fact should not persist",
+      50,
+      false);
+  invalid_writeback_request.request_id = "req-memory-obs-invalid-writeback";
+  invalid_writeback_request.trace_id = "trace-memory-obs";
+  invalid_writeback_request.turn.agent_response = "";
+  const auto invalid_writeback = manager->write_back(invalid_writeback_request);
+  assert_true(invalid_writeback.result_code.has_value(),
+              "invalid writeback should fail validation before storage persistence");
+  assert_true(logger->has_last_dispatched_event() &&
+                  logger->last_dispatched_event().attrs.at("event_name") ==
+                      "writeback.failed" &&
+                  logger->last_dispatched_event().attrs.at("request_id") ==
+                      "req-memory-obs-invalid-writeback" &&
+                  logger->last_dispatched_event().attrs.at("trace_id") ==
+                      "trace-memory-obs" &&
+                  logger->last_dispatched_event().attrs.at("warning_codes") ==
+                      "writeback_turn_invalid" &&
+                  logger->last_dispatched_event().attrs.at("failure_reason") ==
+                      "agent_response must be non-empty when present",
+              "invalid writeback telemetry should expose safe warning codes and validation reason");
 
   const auto audit_export = audit_service->export_audit(dasall::infra::ExportQuery{
       .start_ts = 1,
@@ -270,8 +310,12 @@ void test_memory_observability_bridge_emits_context_writeback_conflict_and_maint
 
   assert_true(export_has_action(audit_export, "memory.context.failed"),
               "audit export should include the front-door context failure event");
+  assert_true(export_has_action(audit_export, "memory.init.completed"),
+              "audit export should include the memory lifecycle initialization event");
   assert_true(export_has_action(audit_export, "memory.writeback.completed"),
               "audit export should include a successful writeback event");
+  assert_true(export_has_action(audit_export, "memory.writeback.failed"),
+              "audit export should include the invalid writeback validation failure event");
   assert_true(export_has_action(audit_export, "memory.writeback.degraded"),
               "audit export should include a degraded writeback event");
   assert_true(export_has_action(audit_export, "memory.conflict.superseded"),
@@ -283,13 +327,13 @@ void test_memory_observability_bridge_emits_context_writeback_conflict_and_maint
   assert_true(export_has_action(audit_export, "memory.maintenance.completed"),
               "audit export should include a successful maintenance event");
 
-  assert_true(logger->dispatched_record_count() >= 7U,
+  assert_true(logger->dispatched_record_count() >= 9U,
               "logging facade should receive multiple memory telemetry events");
   assert_true(logger->has_last_dispatched_event(),
               "logging facade should retain the last dispatched memory telemetry event");
   assert_true(logger->last_dispatched_event().attrs.at("event_name") ==
-                  "maintenance.completed",
-              "maintenance should be the last emitted memory telemetry event in this scenario");
+                  "writeback.failed",
+              "invalid writeback should be the last emitted memory telemetry event in this scenario");
   assert_true(!has_attr(logger->last_dispatched_event().attrs, "summary_text") &&
                   !has_attr(logger->last_dispatched_event().attrs, "goal_summary") &&
                   !has_attr(logger->last_dispatched_event().attrs,

@@ -300,6 +300,9 @@ void append_json_string(std::string& output, std::string_view value) {
   if (selector_name == "session_id") {
     return LogQuerySelectorKind::SessionId;
   }
+  if (selector_name == "request_id") {
+    return LogQuerySelectorKind::RequestId;
+  }
   return std::nullopt;
 }
 
@@ -553,6 +556,8 @@ std::string_view LogQueryService::selector_attr_key(
       return "trace_id";
     case LogQuerySelectorKind::SessionId:
       return "session_id";
+    case LogQuerySelectorKind::RequestId:
+      return "request_id";
     case LogQuerySelectorKind::Unspecified:
       break;
   }

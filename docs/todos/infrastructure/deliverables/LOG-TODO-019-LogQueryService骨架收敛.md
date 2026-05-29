@@ -8,13 +8,13 @@
 
 1. [docs/todos/infrastructure/DASALL_infrastructure_logging组件专项TODO.md](docs/todos/infrastructure/DASALL_infrastructure_logging组件专项TODO.md) 已将 `LOG-TODO-019` 定义为“实现 LogQueryService 受控查询与本地 artifact 导出骨架”，验收要求为 trace/session 精确 selector、`PolicyDenied`/`ValidationFieldMissing` 负例与本地 artifact 导出正例可稳定判定。
 2. [docs/todos/infrastructure/deliverables/LOG-BLK-005-LogQueryService设计收敛.md](docs/todos/infrastructure/deliverables/LOG-BLK-005-LogQueryService设计收敛.md) 已冻结 `LogQueryRequest`、`LogQueryAccessContext`、`LogQueryResult` 与“local artifact only”的边界。
-3. [docs/architecture/DASALL_infra_logging模块详细设计.md](docs/architecture/DASALL_infra_logging模块详细设计.md) 6.10.2 已明确 logging 只接受 trace/session 精确 selector、上游 allow 证明与 `infra.logging.export.enable_diag_pull` gate。
+3. [docs/architecture/DASALL_infra_logging模块详细设计.md](docs/architecture/DASALL_infra_logging模块详细设计.md) 6.10.2 已明确 logging 只接受 trace/session/request 精确 selector、上游 allow 证明与 `infra.logging.export.enable_diag_pull` gate。
 4. [docs/architecture/DASALL_infra_diagnostics模块详细设计.md](docs/architecture/DASALL_infra_diagnostics模块详细设计.md) 6.6/6.8/6.9 已冻结 diagnostics 的本地/远程导出分离、policy guard 和 artifact 摘要风格，说明 logging 不应发明第二套远程导出/鉴权体系。
 5. 现有代码已提供本轮需要复用的最小对象：
    - `policy::PolicyDecisionRef`
    - `InfraContext`
    - `logging::LoggingConfig` 中的 `enable_diag_pull` 语义
-   - `LogEvent.attrs["trace_id"]` / `LogEvent.attrs["session_id"]` 的上下文富化入口
+   - `LogEvent.attrs["trace_id"]` / `LogEvent.attrs["session_id"]` / `LogEvent.attrs["request_id"]` 的上下文富化入口
 
 ## 2. 研究学习结果
 
@@ -22,7 +22,7 @@
 
 1. `LogQueryService` 的职责只是在本地已脱敏日志上做受控检索并返回 artifact 摘要，不能直接返回原始记录容器，也不能接管 diagnostics 的 remote export。
 2. allow/deny 判定必须由上游 policy gate 完成；logging 只验证 allow 证明是否完整与可审计，不能在本模块内做二次确认。
-3. LoggingFacade 已把 `trace_id` / `session_id` 富化到 `LogEvent.attrs`，因此 019 可以在现有结构化字段上实现精确 selector，而不需要扩张 `LogEvent` 顶层字段。
+3. LoggingFacade 已把 `trace_id` / `session_id` / `request_id` 富化到 `LogEvent.attrs`，因此 019 与后续 request-scoped 补强可以在现有结构化字段上实现精确 selector，而不需要扩张 `LogEvent` 顶层字段。
 
 ### 2.2 外部参考
 
@@ -30,7 +30,7 @@
 
 ### 2.3 可落地启发
 
-1. 查询面必须保持有限形态，只接受 `trace_id`/`session_id` 的精确匹配与有序时间窗，不把自由检索 DSL 带进 logging。
+1. 查询面必须保持有限形态，只接受 `trace_id`/`session_id`/`request_id` 的精确匹配与有序时间窗，不把自由检索 DSL 带进 logging。
 2. 本地 artifact 只返回引用与摘要，不返回原始记录集合，从接口层就把数据暴露面压缩到最小。
 3. 本轮先用 internal record reader 抽象承接“本地索引/扫描”缺口，后续若引入真实索引优化，也必须留在同一 internal provider 边界后面。
 
@@ -81,13 +81,13 @@
 ## 5. Build 合规提醒
 
 1. `LogQueryService` 只能返回 artifact 摘要，不能把原始 `LogEvent` 集合暴露给调用方。
-2. 测试必须至少覆盖 1 个正例和 1 个负例；本轮以 trace/session 查询命中作为正例，以 `ValidationFieldMissing` 与 `PolicyDenied` 作为负例。
+2. 测试必须至少覆盖 1 个正例和 1 个负例；本轮以 trace/session 查询命中作为基础正例，2026-05-29 request-scoped 补强追加 request 查询正例，以 `ValidationFieldMissing` 与 `PolicyDenied` 作为负例。
 3. 由于本轮会触及 unit/integration 注册与 logging 标签 discoverability，Build 阶段除定向测试外还必须补 `ctest -N -L integration`、`ctest -L integration`、`ctest -N -L logging` 与 `ctest -L logging`。
 
 ## 6. Build 落地结果
 
 1. 新增 [infra/src/logging/LogQueryService.h](infra/src/logging/LogQueryService.h) 与 [infra/src/logging/LogQueryService.cpp](infra/src/logging/LogQueryService.cpp)，收敛 `LogQueryRequest`、`LogQueryAccessContext`、`LogQueryResult`、internal `ILogQueryRecordReader` 与 `LogQueryService`，并固定：
-   - 只接受 `trace_id` / `session_id` 精确 selector
+   - 只接受 `trace_id` / `session_id` / `request_id` 精确 selector
    - 只接受有序时间窗与正整数 `max_records`
    - 只接受上游 `PolicyDecision::Allow` 证明
    - 只返回 local artifact 摘要，不暴露原始记录集合
@@ -101,7 +101,7 @@
    - allow proof 缺失/非 Allow
    - `enable_diag_pull` gate 拒绝
    - 缺少 local record reader
-   - trace selector 正例与 local artifact 摘要返回
+   - trace/request selector 正例与 local artifact 摘要返回
 4. 新增 [tests/integration/infra/logging/LogQueryIntegrationTest.cpp](tests/integration/infra/logging/LogQueryIntegrationTest.cpp)，通过 `LoggingFacade` 富化 `trace_id` / `session_id`，验证 trace 与 session selector 都能命中已富化本地记录，并验证 `max_records` 截断与 artifact 摘要字段。
 5. 更新 [infra/CMakeLists.txt](infra/CMakeLists.txt)、[tests/unit/infra/CMakeLists.txt](tests/unit/infra/CMakeLists.txt)、[tests/unit/CMakeLists.txt](tests/unit/CMakeLists.txt)、[tests/integration/infra/logging/CMakeLists.txt](tests/integration/infra/logging/CMakeLists.txt) 与 [tests/integration/CMakeLists.txt](tests/integration/CMakeLists.txt)，将 `LogQueryService` 与新增 unit/integration target 纳入 `dasall_infra`、`unit;logging`、`integration;logging` 与顶层聚合目标。
 

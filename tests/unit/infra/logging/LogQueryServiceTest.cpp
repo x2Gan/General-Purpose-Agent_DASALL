@@ -40,6 +40,7 @@ class VectorLogQueryRecordReader final
 
 [[nodiscard]] dasall::infra::LogEvent make_record(std::string trace_id,
                                                   std::string session_id,
+                                                  std::string request_id,
                                                   std::string message,
                                                   std::int64_t ts) {
   return dasall::infra::LogEvent{
@@ -49,6 +50,7 @@ class VectorLogQueryRecordReader final
       .attrs = {
           {"trace_id", std::move(trace_id)},
           {"session_id", std::move(session_id)},
+            {"request_id", std::move(request_id)},
       },
       .ts = ts,
   };
@@ -214,9 +216,9 @@ void test_log_query_service_returns_local_artifact_summary_for_exact_trace_query
 
   auto reader = std::make_shared<VectorLogQueryRecordReader>(
       std::vector<dasall::infra::LogEvent>{
-          make_record("trace-a", "session-a", "matching-1", 1712140800001),
-          make_record("trace-a", "session-a", "matching-2", 1712140800002),
-          make_record("trace-b", "session-b", "non-match", 1712140800003),
+          make_record("trace-a", "session-a", "request-a", "matching-1", 1712140800001),
+          make_record("trace-a", "session-a", "request-b", "matching-2", 1712140800002),
+          make_record("trace-b", "session-b", "request-c", "non-match", 1712140800003),
       });
 
   LogQueryService service(reader,
@@ -243,9 +245,43 @@ void test_log_query_service_returns_local_artifact_summary_for_exact_trace_query
               "log query service should emit the frozen local artifact_ref namespace");
   assert_true(result.checksum.find("log-query:query-trace-001") == 0,
               "log query service should emit a stable local artifact checksum prefix");
-  assert_equal(1712140800100,
-               static_cast<int>(result.created_at),
-               "log query service should preserve the injected created_at timestamp for deterministic artifact summaries");
+  assert_true(result.created_at == 1712140800100,
+              "log query service should preserve the injected created_at timestamp for deterministic artifact summaries");
+}
+
+void test_log_query_service_returns_local_artifact_summary_for_exact_request_query() {
+  using dasall::infra::logging::LogQueryRequest;
+  using dasall::infra::logging::LogQuerySelectorKind;
+  using dasall::infra::logging::LogQueryService;
+  using dasall::tests::support::assert_equal;
+  using dasall::tests::support::assert_true;
+
+  auto reader = std::make_shared<VectorLogQueryRecordReader>(
+      std::vector<dasall::infra::LogEvent>{
+          make_record("trace-a", "session-a", "request-a", "non-match", 1712140800001),
+          make_record("trace-b", "session-b", "request-target", "matching", 1712140800002),
+      });
+
+  LogQueryService service(reader,
+                          {},
+                          []() { return static_cast<std::int64_t>(1712140800200); });
+  const auto result = service.query(LogQueryRequest{
+                                        .query_id = std::string("query-request-001"),
+                                        .selector_kind = LogQuerySelectorKind::RequestId,
+                                        .selector_value = std::string("request-target"),
+                                        .start_ts_ms = 1712140800000,
+                                        .end_ts_ms = 1712140800010,
+                                        .max_records = 4,
+                                    },
+                                    make_access_context());
+
+  assert_true(result.ok && result.has_success_payload(),
+              "log query service should return a local artifact summary for an exact request selector hit");
+  assert_equal(1,
+               static_cast<int>(result.match_count),
+               "log query service should count only the matching request_id record");
+  assert_true(result.artifact_ref == "diag://infra/logging/query/query-request-001",
+              "log query service should keep the frozen artifact namespace for request-id queries");
 }
 
 }  // namespace
@@ -257,6 +293,7 @@ int main() {
     test_log_query_service_respects_enable_diag_pull_gate();
     test_log_query_service_requires_a_local_record_reader();
     test_log_query_service_returns_local_artifact_summary_for_exact_trace_query();
+    test_log_query_service_returns_local_artifact_summary_for_exact_request_query();
   } catch (const std::exception& ex) {
     std::cerr << ex.what() << std::endl;
     return 1;

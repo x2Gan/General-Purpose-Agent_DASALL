@@ -202,6 +202,22 @@
 2. memory ordinary log 与 query artifact 现已不再包含 raw `summary_text`、`goal_summary`、`latest_observation_digest_summary`、`agent_response`、`fact_text` 或 retrieval evidence 正文；`LoggingFacade` in-memory dispatch 也同步守住这一 allowlist 边界。
 3. 当前结论已到 L2/L3 build-tree owner evidence；installed/package authoritative proof、跨子系统 e2e 与 package artifact schema 继续留给 `INF-LOG-SYS-FIX-007` / `INF-LOG-FIX-011`。本轮不使用 qemu / kvm。
 
+### 2026-05-29 补强
+
+1. 将 memory context / writeback / maintenance 请求面补齐 `request_id` 与 `trace_id` correlation，其中 runtime `AgentOrchestrator` 已把 runtime request / trace 语义透传到 memory owner；`MemoryObservability` ordinary log allowlist 同步扩展 `warning_codes`、`failure_reason`、`storage_backend`、`vector_enabled`、`auto_schedule`、`lifecycle_state` 等 owner-safe 字段。
+2. `MemoryManager` 现为 `init.completed`、`init.failed`、`init.skipped`、`shutdown.completed`、`shutdown.skipped` 发出 lifecycle telemetry；`WritebackCoordinator` 对 invalid turn fail-fast 发出 `writeback.failed`，只记录 bounded `warning_codes=writeback_turn_invalid` 与 contracts guard `failure_reason`，不写 raw turn payload。
+3. `LogQueryService` 受控 selector 从 `TraceId` / `SessionId` 扩展为 `TraceId` / `SessionId` / `RequestId`，memory production logging integration 现同时验证 session、trace、request 三类 redacted artifact，并继续断言 runtime.log 与 query artifact 不含 raw secret / payload。
+4. 同步回写 `DASALL_infra_logging模块详细设计`、`KeySubsystemLoggingFieldMatrix`、`LoggingProductionAcceptanceMatrix`、`INF-LOG-SYS-FIX-003` deliverable 以及历史 `LOG-BLK-005` / `LOG-TODO-019` 口径，补齐生产调试操作说明：单请求用 `request_id`，跨请求/异步链路用 `trace_id`，会话回放用 `session_id`。
+
+### 2026-05-29 验证
+
+1. `cmake --build build/vscode-linux-ninja --target dasall_memory_observability_bridge_integration_test dasall_memory_production_logging_integration_test dasall_log_query_service_unit_test dasall_memory_interface_compile_unit_test -j 4`
+   - 结果：通过。
+2. `./build/vscode-linux-ninja/tests/unit/infra/dasall_log_query_service_unit_test && ./build/vscode-linux-ninja/tests/unit/memory/dasall_memory_interface_compile_unit_test && ./build/vscode-linux-ninja/tests/integration/memory/dasall_memory_observability_bridge_integration_test && ./build/vscode-linux-ninja/tests/integration/memory/dasall_memory_production_logging_integration_test`
+   - 结果：通过，输出 `focused-memory-logging-tests-pass`。
+3. `git diff --check`
+   - 结果：通过。
+
 ## 记录 #847
 
 - 日期：2026-05-28

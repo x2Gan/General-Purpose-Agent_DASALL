@@ -395,7 +395,7 @@ contracts::ContextPacket make_minimal_packet(const MemoryContextRequest& request
       .request_id = request.request_id.empty() ? "context-request" : request.request_id,
       .session_id = request.session_id,
       .stage = request.stage.empty() ? "context" : request.stage,
-      .trace_id = {},
+      .trace_id = request.trace_id,
       .profile_id = {},
   };
 }
@@ -412,6 +412,23 @@ contracts::ContextPacket make_minimal_packet(const MemoryContextRequest& request
         .key = "warning",
         .value = result.warnings.front(),
     });
+
+    std::string warning_codes;
+    for (const auto& warning : result.warnings) {
+      if (warning.empty()) {
+        continue;
+      }
+      if (!warning_codes.empty()) {
+        warning_codes += ",";
+      }
+      warning_codes += warning;
+    }
+    if (!warning_codes.empty()) {
+      fields.push_back(MemoryTelemetryField{
+          .key = "warning_codes",
+          .value = std::move(warning_codes),
+      });
+    }
   }
   if (!result.dropped_sections.empty()) {
     fields.push_back(MemoryTelemetryField{

@@ -94,19 +94,47 @@ constexpr contracts::ResultCode kMemoryManagerInitSuccess =
 [[nodiscard]] MemoryTelemetryContext make_manager_context(
     std::string request_id,
     std::string session_id,
-    std::string stage) {
+    std::string stage,
+    std::string trace_id = {}) {
   return MemoryTelemetryContext{
       .request_id = request_id.empty() ? stage : std::move(request_id),
       .session_id = std::move(session_id),
       .stage = std::move(stage),
-      .trace_id = {},
+      .trace_id = std::move(trace_id),
       .profile_id = {},
   };
 }
 
+[[nodiscard]] std::string join_warning_codes(
+    const std::vector<std::string>& warnings) {
+  std::string joined;
+  for (const auto& warning : warnings) {
+    if (warning.empty()) {
+      continue;
+    }
+    if (!joined.empty()) {
+      joined += ",";
+    }
+    joined += warning;
+  }
+  return joined;
+}
+
+[[nodiscard]] std::string storage_backend_name(StorageBackend backend) {
+  switch (backend) {
+    case StorageBackend::Sqlite:
+      return "sqlite";
+    case StorageBackend::Memory:
+      return "memory";
+  }
+
+  return "unsupported";
+}
+
 [[nodiscard]] std::vector<MemoryTelemetryField> make_warning_fields(
     const std::vector<std::string>& warnings,
-    const std::optional<contracts::ResultCode>& result_code = std::nullopt) {
+    const std::optional<contracts::ResultCode>& result_code = std::nullopt,
+    std::string failure_reason = {}) {
   std::vector<MemoryTelemetryField> fields;
   fields.push_back(MemoryTelemetryField{
       .key = "warning_count",
@@ -117,11 +145,64 @@ constexpr contracts::ResultCode kMemoryManagerInitSuccess =
         .key = "warning",
         .value = warnings.front(),
     });
+
+    const auto warning_codes = join_warning_codes(warnings);
+    if (!warning_codes.empty()) {
+      fields.push_back(MemoryTelemetryField{
+          .key = "warning_codes",
+          .value = warning_codes,
+      });
+    }
   }
   if (result_code.has_value()) {
     fields.push_back(MemoryTelemetryField{
         .key = "result_code",
         .value = std::to_string(static_cast<int>(*result_code)),
+    });
+  }
+  if (!failure_reason.empty()) {
+    fields.push_back(MemoryTelemetryField{
+        .key = "failure_reason",
+        .value = std::move(failure_reason),
+    });
+  }
+  return fields;
+}
+
+[[nodiscard]] std::vector<MemoryTelemetryField> make_lifecycle_fields(
+    const MemoryConfig* config,
+    std::string lifecycle_state,
+    const std::optional<contracts::ResultCode>& result_code = std::nullopt,
+    std::string failure_reason = {}) {
+  std::vector<MemoryTelemetryField> fields;
+  fields.push_back(MemoryTelemetryField{
+      .key = "lifecycle_state",
+      .value = std::move(lifecycle_state),
+  });
+  if (config != nullptr) {
+    fields.push_back(MemoryTelemetryField{
+        .key = "storage_backend",
+        .value = storage_backend_name(config->storage.backend),
+    });
+    fields.push_back(MemoryTelemetryField{
+        .key = "vector_enabled",
+        .value = config->vector.enabled ? "true" : "false",
+    });
+    fields.push_back(MemoryTelemetryField{
+        .key = "auto_schedule",
+        .value = config->maintenance.auto_schedule ? "true" : "false",
+    });
+  }
+  if (result_code.has_value()) {
+    fields.push_back(MemoryTelemetryField{
+        .key = "result_code",
+        .value = std::to_string(static_cast<int>(*result_code)),
+    });
+  }
+  if (!failure_reason.empty()) {
+    fields.push_back(MemoryTelemetryField{
+        .key = "failure_reason",
+        .value = std::move(failure_reason),
     });
   }
   return fields;
@@ -134,25 +215,59 @@ MemoryManager::MemoryManager(MemoryManagerDependencies dependencies)
 
 contracts::ResultCode MemoryManager::init(const MemoryConfig& config) {
   if (state_ == LifecycleState::Running) {
+    if (dependencies_.observability) {
+      dependencies_.observability->emit(
+          "init.skipped",
+          make_manager_context("memory.init", {}, "init"),
+          make_lifecycle_fields(&config, "running"));
+    }
     return kMemoryManagerInitSuccess;
   }
 
   if (config.storage.backend != StorageBackend::Sqlite &&
       config.storage.backend != StorageBackend::Memory) {
-    return config_invalid_code();
+    const auto result_code = config_invalid_code();
+    if (dependencies_.observability) {
+      dependencies_.observability->emit(
+          "init.failed",
+          make_manager_context("memory.init", {}, "init"),
+          make_lifecycle_fields(
+              &config, "failed", result_code, "unsupported_storage_backend"));
+    }
+    return result_code;
   }
 
   if (config.storage.backend == StorageBackend::Sqlite && !dependencies_.store) {
-    return storage_unavailable_code();
+    const auto result_code = storage_unavailable_code();
+    if (dependencies_.observability) {
+      dependencies_.observability->emit(
+          "init.failed",
+          make_manager_context("memory.init", {}, "init"),
+          make_lifecycle_fields(&config, "failed", result_code, "sqlite_store_unwired"));
+    }
+    return result_code;
   }
 
   if (dependencies_.store_open_result.has_value()) {
+    if (dependencies_.observability) {
+      dependencies_.observability->emit(
+          "init.failed",
+          make_manager_context("memory.init", {}, "init"),
+          make_lifecycle_fields(
+              &config, "failed", dependencies_.store_open_result, "store_preopen_failed"));
+    }
     return *dependencies_.store_open_result;
   }
 
   if (dependencies_.store && !dependencies_.store_preopened) {
     const auto open_result = dependencies_.store->open(config);
     if (open_result.has_value()) {
+      if (dependencies_.observability) {
+        dependencies_.observability->emit(
+            "init.failed",
+            make_manager_context("memory.init", {}, "init"),
+            make_lifecycle_fields(&config, "failed", open_result, "store_open_failed"));
+      }
       return *open_result;
     }
   }
@@ -163,10 +278,29 @@ contracts::ResultCode MemoryManager::init(const MemoryConfig& config) {
 
   config_ = config;
   state_ = LifecycleState::Running;
+  if (dependencies_.observability) {
+    dependencies_.observability->emit(
+        "init.completed",
+        make_manager_context("memory.init", {}, "init"),
+        make_lifecycle_fields(&config, "running"));
+  }
   return kMemoryManagerInitSuccess;
 }
 
 void MemoryManager::shutdown() noexcept {
+  const auto config_snapshot = config_;
+  if (state_ != LifecycleState::Running) {
+    if (dependencies_.observability) {
+      dependencies_.observability->emit(
+          "shutdown.skipped",
+          make_manager_context("memory.shutdown", {}, "shutdown"),
+          make_lifecycle_fields(config_snapshot ? &*config_snapshot : nullptr, "stopped"));
+    }
+    config_.reset();
+    state_ = LifecycleState::Stopped;
+    return;
+  }
+
   if (dependencies_.maintenance_worker) {
     dependencies_.maintenance_worker->stop();
   }
@@ -177,6 +311,12 @@ void MemoryManager::shutdown() noexcept {
 
   config_.reset();
   state_ = LifecycleState::Stopped;
+  if (dependencies_.observability) {
+    dependencies_.observability->emit(
+        "shutdown.completed",
+        make_manager_context("memory.shutdown", {}, "shutdown"),
+        make_lifecycle_fields(config_snapshot ? &*config_snapshot : nullptr, "stopped"));
+  }
 }
 
 ContextAssemblyResult MemoryManager::prepare_context(
@@ -186,7 +326,8 @@ ContextAssemblyResult MemoryManager::prepare_context(
     if (dependencies_.observability) {
       dependencies_.observability->emit(
           "context.failed",
-          make_manager_context(request.request_id, request.session_id, "context"),
+          make_manager_context(
+              request.request_id, request.session_id, "context", request.trace_id),
           make_warning_fields(result.warnings, result.result_code));
     }
     return result;
@@ -197,7 +338,8 @@ ContextAssemblyResult MemoryManager::prepare_context(
     if (dependencies_.observability) {
       dependencies_.observability->emit(
           "context.failed",
-          make_manager_context(request.request_id, request.session_id, "context"),
+          make_manager_context(
+              request.request_id, request.session_id, "context", request.trace_id),
           make_warning_fields(result.warnings, result.result_code));
     }
     return result;
@@ -212,9 +354,12 @@ WritebackResult MemoryManager::write_back(const MemoryWritebackRequest& request)
     if (dependencies_.observability) {
       dependencies_.observability->emit(
           "writeback.failed",
-          make_manager_context(request.turn.turn_id.value_or("writeback"),
-                               request.session_id,
-                               "writeback"),
+          make_manager_context(
+              request.request_id.empty() ? request.turn.turn_id.value_or("writeback")
+                                         : request.request_id,
+              request.session_id,
+              "writeback",
+              request.trace_id),
           make_warning_fields(result.warnings, result.result_code));
     }
     return result;
@@ -228,9 +373,12 @@ WritebackResult MemoryManager::write_back(const MemoryWritebackRequest& request)
     if (dependencies_.observability) {
       dependencies_.observability->emit(
           "writeback.failed",
-          make_manager_context(request.turn.turn_id.value_or("writeback"),
-                               request.session_id,
-                               "writeback"),
+          make_manager_context(
+              request.request_id.empty() ? request.turn.turn_id.value_or("writeback")
+                                         : request.request_id,
+              request.session_id,
+              "writeback",
+              request.trace_id),
           make_warning_fields(result.warnings, result.result_code));
     }
     return result;
@@ -241,9 +389,12 @@ WritebackResult MemoryManager::write_back(const MemoryWritebackRequest& request)
     if (dependencies_.observability) {
       dependencies_.observability->emit(
           "writeback.failed",
-          make_manager_context(request.turn.turn_id.value_or("writeback"),
-                               request.session_id,
-                               "writeback"),
+          make_manager_context(
+              request.request_id.empty() ? request.turn.turn_id.value_or("writeback")
+                                         : request.request_id,
+              request.session_id,
+              "writeback",
+              request.trace_id),
           make_warning_fields(result.warnings, result.result_code));
     }
     return result;
@@ -288,7 +439,8 @@ MaintenanceReport MemoryManager::run_maintenance(
     if (dependencies_.observability) {
       dependencies_.observability->emit(
           "maintenance.failed",
-          make_manager_context("maintenance", {}, "maintenance"),
+          make_manager_context(
+              request.request_id, {}, "maintenance", request.trace_id),
           make_warning_fields(report.warnings));
     }
     return report;
@@ -300,7 +452,8 @@ MaintenanceReport MemoryManager::run_maintenance(
     if (dependencies_.observability) {
       dependencies_.observability->emit(
           "maintenance.degraded",
-          make_manager_context("maintenance", {}, "maintenance"),
+          make_manager_context(
+              request.request_id, {}, "maintenance", request.trace_id),
           make_warning_fields(report.warnings));
     }
     return report;
@@ -311,7 +464,8 @@ MaintenanceReport MemoryManager::run_maintenance(
     if (dependencies_.observability) {
       dependencies_.observability->emit(
           "maintenance.failed",
-          make_manager_context("maintenance", {}, "maintenance"),
+          make_manager_context(
+              request.request_id, {}, "maintenance", request.trace_id),
           make_warning_fields(report.warnings));
     }
     return report;

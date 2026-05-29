@@ -23,7 +23,7 @@
    - `start_ts_ms`
    - `end_ts_ms`
    - `max_records`
-4. `selector_kind` 首版仅允许 `TraceId` 或 `SessionId`，且必须二选一；首版禁止 regex、全文搜索、任意 attr filter、sort expression、cursor DSL 等自由查询语法。
+4. `selector_kind` 首版基础面仅允许 `TraceId` 或 `SessionId`；2026-05-29 memory production logging 补强后，受控精确 selector 扩展为 `TraceId` / `SessionId` / `RequestId` 三选一。仍禁止 regex、全文搜索、任意 attr filter、sort expression、cursor DSL 等自由查询语法。
 5. `LogQueryAccessContext` 必须携带 `actor_ref`、`consumer_module`、`policy_decision_ref` 与 `InfraContext`。logging 不自行做身份判定或二次授权，只验证 allow 证明是否完整且可审计。
 6. `infra.logging.export.enable_diag_pull` 继续作为配置 gate；该键只接受默认/Profile/部署，runtime override 不允许开启此能力。
 7. `LogQueryResult` 只返回本地 artifact 摘要：`artifact_ref`、`match_count`、`truncated`、`checksum`、`created_at`。首版只允许 `diag://infra/logging/query/<query_id>` 或等价本地文件引用，不直接返回原始记录容器。
@@ -38,7 +38,7 @@
 | Design 结论 | Build 落地 |
 |---|---|
 | 冻结 `LogQueryRequest` / `LogQueryAccessContext` / `LogQueryResult` | 后续任务只需在 `infra/src/logging/LogQueryService.cpp/.h` 落最小骨架，不再补第二套 query/export 对象 |
-| 查询面只允许 trace/session 精确 selector | 单测直接覆盖空 selector、双 selector、乱序时间窗与非法 `max_records` 负例 |
+| 查询面只允许 trace/session/request 精确 selector | 单测直接覆盖空 selector、乱序时间窗、非法 `max_records` 负例，以及 trace/request 正例 |
 | logging 只接受上游 allow 决策证明 | 单测与集成测试只验证 allow/deny/config gate，不把二次确认逻辑塞进 logging |
 | 首版只产出本地 artifact_ref | 集成测试只覆盖本地 artifact 生成与 diagnostics 消费前置，不实现 remote upload |
 

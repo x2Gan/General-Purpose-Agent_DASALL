@@ -10,6 +10,7 @@ namespace dasall::memory {
 struct MemoryContextRequest {
   std::string request_id;
   std::string session_id;
+  std::string trace_id;
   std::string stage;
   std::string goal_summary;
   std::string constraints_summary;

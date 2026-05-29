@@ -44,12 +44,13 @@ void run_vector_rebuild(VectorMemoryIndexAdapter* vector_adapter,
   report.vector_rebuild_executed = true;
 }
 
-[[nodiscard]] MemoryTelemetryContext make_observability_context() {
+[[nodiscard]] MemoryTelemetryContext make_observability_context(
+    const MaintenanceRequest& request) {
   return MemoryTelemetryContext{
-      .request_id = "maintenance",
+      .request_id = request.request_id.empty() ? "maintenance" : request.request_id,
       .session_id = {},
       .stage = "maintenance",
-      .trace_id = {},
+      .trace_id = request.trace_id,
       .profile_id = {},
   };
 }
@@ -81,6 +82,21 @@ void run_vector_rebuild(VectorMemoryIndexAdapter* vector_adapter,
   if (!report.warnings.empty()) {
     fields.push_back(MemoryTelemetryField{.key = "warning",
                                           .value = report.warnings.front()});
+
+    std::string warning_codes;
+    for (const auto& warning : report.warnings) {
+      if (warning.empty()) {
+        continue;
+      }
+      if (!warning_codes.empty()) {
+        warning_codes += ",";
+      }
+      warning_codes += warning;
+    }
+    if (!warning_codes.empty()) {
+      fields.push_back(MemoryTelemetryField{.key = "warning_codes",
+                                            .value = std::move(warning_codes)});
+    }
   }
   fields.push_back(MemoryTelemetryField{.key = "duration_ms",
                                         .value = std::to_string(report.duration_ms)});
@@ -163,7 +179,7 @@ MaintenanceReport MemoryMaintenanceWorker::execute(
   if (observability_) {
     observability_->emit(report.warnings.empty() ? "maintenance.completed"
                                                  : "maintenance.degraded",
-                         make_observability_context(),
+                         make_observability_context(request),
                          make_maintenance_fields(request, report));
   }
   return report;

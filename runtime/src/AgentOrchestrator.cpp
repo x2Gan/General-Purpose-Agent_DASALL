@@ -911,6 +911,7 @@ void append_retrieval_evidence_ref(
   memory::MemoryContextRequest context_request;
   context_request.request_id = request.request_id.value_or(std::string{"req-live-unary"});
   context_request.session_id = request.session_id.value_or(std::string{"session-live-unary"});
+  context_request.trace_id = request.trace_id.value_or(std::string{});
   context_request.stage = "reasoning";
   context_request.goal_summary = request.user_input.value_or(goal_id);
   context_request.constraints_summary = composition.default_audit_summary;
@@ -1147,7 +1148,9 @@ void append_retrieval_evidence_ref(
   const auto confidence_score = belief_confidence_score(hint.confidence_hint);
 
   memory::MemoryWritebackRequest writeback_request;
+  writeback_request.request_id = request_id;
   writeback_request.session_id = session_id;
+  writeback_request.trace_id = request.trace_id.value_or(std::string{});
   writeback_request.turn.turn_id = request_id + "-cognition-belief";
   writeback_request.turn.session_id = session_id;
   writeback_request.turn.user_input = request.user_input.value_or(goal_id);
@@ -1203,7 +1206,9 @@ void append_retrieval_evidence_ref(
   const auto created_at = request.created_at.value_or(current_time_ms());
 
   memory::MemoryWritebackRequest writeback_request;
+  writeback_request.request_id = request_id;
   writeback_request.session_id = session_id;
+  writeback_request.trace_id = request.trace_id.value_or(std::string{});
   writeback_request.turn.turn_id = request_id + "-llm-response";
   writeback_request.turn.session_id = session_id;
   writeback_request.turn.user_input = request.user_input.value_or(goal_id);

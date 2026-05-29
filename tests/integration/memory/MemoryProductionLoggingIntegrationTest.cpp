@@ -201,6 +201,10 @@ void test_memory_production_logging_persists_queryable_redacted_events() {
   const auto runtime_log_path = temp_dir.path() / "logging" / "runtime.log";
   const auto artifact_root = temp_dir.path() / "query-artifacts";
   const std::string session_id = "session-memory-production-logging";
+  const std::string trace_id = "trace-memory-production-logging";
+  const std::string writeback_request_id = "req-memory-production-writeback";
+  const std::string context_request_id = "req-memory-production-context";
+  const std::string maintenance_request_id = "req-memory-production-maintenance";
   cleanup_database_artifacts(database_path);
 
   ObservabilityLiveCompositionOptions options;
@@ -235,21 +239,25 @@ void test_memory_production_logging_persists_queryable_redacted_events() {
   assert_true(static_cast<int>(init_code) == 0,
               "memory production logging integration should initialize the sqlite-backed manager");
 
-  const auto writeback = manager->write_back(make_request(
+  auto writeback_request = make_request(
       session_id,
       "turn-memory-production-logging-001",
       "user_input=memory-secret-input",
       "agent_response=memory-secret-output token=memory-secret-token",
       "fact_text=memory-secret-fact",
       88,
-      true));
+      true);
+  writeback_request.request_id = writeback_request_id;
+  writeback_request.trace_id = trace_id;
+  const auto writeback = manager->write_back(writeback_request);
   assert_true(!writeback.result_code.has_value(),
               "memory production logging integration should complete the writeback path");
 
   const auto context_result = manager->prepare_context(
       dasall::memory::MemoryContextRequest{
-          .request_id = "req-memory-production-context",
+          .request_id = context_request_id,
           .session_id = session_id,
+          .trace_id = trace_id,
           .stage = "reasoning",
           .goal_summary = "goal_summary=memory-secret-goal",
           .constraints_summary = "constraints should remain owner local",
@@ -258,7 +266,7 @@ void test_memory_production_logging_persists_queryable_redacted_events() {
           .token_budget_hint = 240,
           .latency_budget_ms = 150,
           .external_evidence = {"external_evidence=memory-secret-evidence"},
-            .retrieval_evidence_refs = {dasall::contracts::RetrievalEvidenceRef{
+          .retrieval_evidence_refs = {dasall::contracts::RetrievalEvidenceRef{
               .evidence_ref = "retrieval-secret-ref",
               .source_ref = "knowledge://memory-production-logging",
               .source_kind = "knowledge",
@@ -266,7 +274,7 @@ void test_memory_production_logging_persists_queryable_redacted_events() {
               .trust_level = "high",
               .freshness = "fresh",
               .anchor_locator = std::string("turn:memory-production-logging"),
-            }},
+          }},
       });
   assert_true(!context_result.result_code.has_value(),
               "memory production logging integration should complete the context assembly path");
@@ -278,9 +286,13 @@ void test_memory_production_logging_persists_queryable_redacted_events() {
           .run_retention = false,
           .run_quarantine_cleanup = true,
           .run_vector_rebuild = false,
+          .request_id = maintenance_request_id,
+          .trace_id = trace_id,
       });
   assert_true(maintenance_report.quarantine_cleaned == 1,
               "memory production logging integration should complete the maintenance path");
+
+  manager->shutdown();
 
   assert_true(logger->flush(LogFlushDeadline{.timeout_ms = 500}).ok,
               "memory production logging integration should flush the logger before querying runtime.log");
@@ -297,37 +309,80 @@ void test_memory_production_logging_persists_queryable_redacted_events() {
                               .index_file_name = "query-index.jsonl",
                               .retention_policy = {.retention_days = 7, .max_artifact_count = 8},
                           },
-                []() { return static_cast<std::int64_t>(4102444800000); });
+                          []() { return static_cast<std::int64_t>(4102444800000); });
 
-  const auto query_result = service.query(LogQueryRequest{
-                                              .query_id = std::string("memory-prod-logging"),
-                                              .selector_kind = LogQuerySelectorKind::SessionId,
-                                              .selector_value = session_id,
-                                              .start_ts_ms = 1,
-                                                .end_ts_ms = 4102444800000,
-                                              .max_records = 16,
-                                          },
-                                          make_access_context());
+  const auto session_query_result = service.query(LogQueryRequest{
+                                                      .query_id = std::string("memory-prod-logging-session"),
+                                                      .selector_kind = LogQuerySelectorKind::SessionId,
+                                                      .selector_value = session_id,
+                                                      .start_ts_ms = 1,
+                                                      .end_ts_ms = 4102444800000,
+                                                      .max_records = 16,
+                                                  },
+                                                  make_access_context());
+  const auto trace_query_result = service.query(LogQueryRequest{
+                                                    .query_id = std::string("memory-prod-logging-trace"),
+                                                    .selector_kind = LogQuerySelectorKind::TraceId,
+                                                    .selector_value = trace_id,
+                                                    .start_ts_ms = 1,
+                                                    .end_ts_ms = 4102444800000,
+                                                    .max_records = 16,
+                                                },
+                                                make_access_context());
+  const auto request_query_result = service.query(LogQueryRequest{
+                                                      .query_id = std::string("memory-prod-logging-request"),
+                                                      .selector_kind = LogQuerySelectorKind::RequestId,
+                                                      .selector_value = writeback_request_id,
+                                                      .start_ts_ms = 1,
+                                                      .end_ts_ms = 4102444800000,
+                                                      .max_records = 16,
+                                                  },
+                                                  make_access_context());
 
   const auto runtime_log_text = read_text(runtime_log_path);
-                          const auto artifact_path = artifact_root / "memory-prod-logging-4102444800000.json";
-  const auto artifact_text = read_text(artifact_path);
+  const auto session_artifact_text = read_text(
+      artifact_root / "memory-prod-logging-session-4102444800000.json");
+  const auto trace_artifact_text = read_text(
+      artifact_root / "memory-prod-logging-trace-4102444800000.json");
+  const auto request_artifact_text = read_text(
+      artifact_root / "memory-prod-logging-request-4102444800000.json");
+  const auto artifact_text = session_artifact_text + trace_artifact_text +
+                             request_artifact_text;
   const auto index_text = read_text(artifact_root / "query-index.jsonl");
 
-  assert_true(query_result.ok && query_result.has_success_payload(),
-              "memory production logging integration should materialize a query artifact from persisted runtime.log");
-  assert_true(query_result.match_count >= 2U,
+  assert_true(session_query_result.ok && session_query_result.has_success_payload() &&
+                  trace_query_result.ok && trace_query_result.has_success_payload() &&
+                  request_query_result.ok && request_query_result.has_success_payload(),
+              "memory production logging integration should materialize session, trace, and request query artifacts from persisted runtime.log");
+  assert_true(session_query_result.match_count >= 2U,
               "memory production logging integration should query at least the writeback and context memory events by session_id");
+  assert_true(trace_query_result.match_count >= 3U,
+              "memory production logging integration should query writeback, context, and maintenance events by trace_id");
+  assert_true(request_query_result.match_count >= 1U,
+              "memory production logging integration should query the writeback event by request_id");
   assert_true(runtime_log_text.find("memory writeback.completed") != std::string::npos &&
                   runtime_log_text.find("memory context.assembled") != std::string::npos &&
-                  runtime_log_text.find("memory maintenance.completed") != std::string::npos,
-              "memory production logging integration should persist writeback, context, and maintenance events into runtime.log");
+                  runtime_log_text.find("memory maintenance.completed") != std::string::npos &&
+                  runtime_log_text.find("memory init.completed") != std::string::npos &&
+                  runtime_log_text.find("memory shutdown.completed") != std::string::npos,
+              "memory production logging integration should persist lifecycle, writeback, context, and maintenance events into runtime.log");
+  assert_true(runtime_log_text.find(trace_id) != std::string::npos &&
+                  runtime_log_text.find(writeback_request_id) != std::string::npos &&
+                  runtime_log_text.find(context_request_id) != std::string::npos &&
+                  runtime_log_text.find(maintenance_request_id) != std::string::npos,
+              "memory production logging integration should persist safe trace and request correlation fields");
   assert_true(artifact_text.find("memory writeback.completed") != std::string::npos &&
-                  artifact_text.find("memory context.assembled") != std::string::npos,
-              "memory production logging integration should keep memory writeback and context events queryable from the artifact payload");
-  assert_true(index_text.find("memory-prod-logging") != std::string::npos &&
-                  index_text.find("session_id") != std::string::npos,
-              "memory production logging integration should append owner-safe session selector metadata into the query index");
+                  artifact_text.find("memory context.assembled") != std::string::npos &&
+                  artifact_text.find("memory maintenance.completed") != std::string::npos &&
+                  artifact_text.find(writeback_request_id) != std::string::npos,
+              "memory production logging integration should keep correlated memory events queryable from artifact payloads");
+  assert_true(index_text.find("memory-prod-logging-session") != std::string::npos &&
+                  index_text.find("memory-prod-logging-trace") != std::string::npos &&
+                  index_text.find("memory-prod-logging-request") != std::string::npos &&
+                  index_text.find("session_id") != std::string::npos &&
+                  index_text.find("trace_id") != std::string::npos &&
+                  index_text.find("request_id") != std::string::npos,
+              "memory production logging integration should append owner-safe selector metadata into the query index");
   assert_true(runtime_log_text.find("memory-secret-input") == std::string::npos &&
                   runtime_log_text.find("memory-secret-output") == std::string::npos &&
                   runtime_log_text.find("memory-secret-token") == std::string::npos &&
@@ -345,7 +400,6 @@ void test_memory_production_logging_persists_queryable_redacted_events() {
                   artifact_text.find("retrieval-secret-ref") == std::string::npos,
               "memory production logging integration should keep query artifacts redacted and free of raw owner payloads");
 
-  manager->shutdown();
   cleanup_database_artifacts(database_path);
 }
 

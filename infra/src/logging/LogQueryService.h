@@ -24,6 +24,7 @@ enum class LogQuerySelectorKind {
   Unspecified = 0,
   TraceId,
   SessionId,
+  RequestId,
 };
 
 [[nodiscard]] inline constexpr std::string_view log_query_selector_name(
@@ -33,6 +34,8 @@ enum class LogQuerySelectorKind {
       return "trace_id";
     case LogQuerySelectorKind::SessionId:
       return "session_id";
+    case LogQuerySelectorKind::RequestId:
+      return "request_id";
     case LogQuerySelectorKind::Unspecified:
       break;
   }
@@ -50,7 +53,8 @@ struct LogQueryRequest {
 
   [[nodiscard]] bool has_precise_selector() const {
     return selector_kind == LogQuerySelectorKind::TraceId ||
-           selector_kind == LogQuerySelectorKind::SessionId;
+           selector_kind == LogQuerySelectorKind::SessionId ||
+           selector_kind == LogQuerySelectorKind::RequestId;
   }
 
   [[nodiscard]] bool has_ordered_window() const {

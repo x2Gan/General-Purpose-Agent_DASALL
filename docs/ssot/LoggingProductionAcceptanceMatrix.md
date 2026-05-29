@@ -1,7 +1,7 @@
 # LoggingProductionAcceptanceMatrix
 
 关联任务：INF-LOG-FIX-001  
-最近更新时间：2026-05-27  
+最近更新时间：2026-05-29
 适用阶段：infra/logging production hardening / acceptance freeze
 
 ## 1. 目标
@@ -65,7 +65,7 @@
 | artifact | level | owner | 最小字段/语义 | 非外推说明 |
 |---|---|---|---|---|
 | `build-tree logging pipeline output` | L2/L3 | infra/logging focused or live composition tests | structured + redacted line、route/fallback/flush result | 不代表 installed package 路径、权限或 daemon lifecycle flush |
-| `diag://infra/logging/query/<query_id>` | L2/L3 | LogQueryService / diagnostics local artifact | trace/session selector、checksum、match_count、truncated | 不代表 audit 主存储、远程导出或 admin override 已闭合 |
+| `diag://infra/logging/query/<query_id>` | L2/L3 | LogQueryService / diagnostics local artifact | trace/session/request selector、checksum、match_count、truncated | 不代表 audit 主存储、远程导出或 admin override 已闭合 |
 | `logging-installed-proof.json` | L4 | installed package smoke authoritative owner | installed log path、rotation presence、redaction proof、daemon stop flush result | 不代表 release handoff 或 qemu/autopkgtest |
 | `logging-runtime-proof.json` | L4 | installed package smoke summary owner | pipeline ready/degraded、query/export summary、audit split summary、subsystem summary | 不代表 machine-isolated soak 或 release archive |
 | `infra-release-soak-summary.json.logging` | L5 | packaging / release local soak owner | local soak iterations、drop/failure slices、installed artifact refs | 不代表 qemu / kvm 或 production steady-state |
@@ -168,7 +168,7 @@
 
 ### 6.9 INF-LOG-FIX-009 persisted reader / local artifact index / retention closeout
 
-1. `FileLogReader` 现已成为 `LogQueryService` 的 persisted reader owner seam：它只读取本地 `runtime.log` 与同目录 rotation family，解析 `dasall.logging.event.v1` JSON-line，并继续把 selector 面限制为精确 `trace_id` / `session_id` + 有序时间窗，不扩全文检索、任意 attr filter 或 remote upload。
+1. `FileLogReader` 现已成为 `LogQueryService` 的 persisted reader owner seam：它只读取本地 `runtime.log` 与同目录 rotation family，解析 `dasall.logging.event.v1` JSON-line，并继续把 selector 面限制为精确 `trace_id` / `session_id` / `request_id` + 有序时间窗，不扩全文检索、任意 attr filter 或 remote upload。
 2. `LogQueryService` 现已在 allow proof 与 `enable_diag_pull` gate 通过后 materialize 本地 diagnostics artifact：artifact payload 固定落为本地 JSON 文件，artifact_ref 继续沿用 `diag://infra/logging/query/<query_id>`；同时追加 owner-safe metadata JSONL index，只保存 `artifact_ref/query_id/selector_kind/selector_value/checksum/match_count/truncated/created_at/artifact_file_name`。
 3. redaction-at-query 已进入 build-track 实现：query artifact materialization 与 index publish 之前会对 matched record 再走一次 `RedactionFilter`，因此 persisted reader 即使消费的是已脱敏 runtime log，也不会因为 allowlist attrs 或再次导出而重新暴露 secret/token/password/auth value。
 4. `LogRetentionPolicy` 现按 `created_at` retention window 与 max artifact count 清理 query artifact / index 自身；cleanup 只删除本地 artifact root 中过期或溢出的 query artifact 文件，明确不触碰 primary runtime log、rotation family、audit owner persistence 或 diagnostics retained snapshot store。
