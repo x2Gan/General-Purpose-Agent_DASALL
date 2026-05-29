@@ -1,5 +1,6 @@
 #include <array>
 #include <cstdlib>
+#include <filesystem>
 #include <iostream>
 #include <memory>
 #include <optional>
@@ -8,6 +9,10 @@
 #include <string_view>
 
 #include "app/TuiApp.h"
+#if DASALL_TUI_FORMAL_ENTRYPOINT
+#include "ObservabilityLiveComposition.h"
+#include "config/InstallLayout.h"
+#endif
 #include "model/TuiAction.h"
 #if DASALL_TUI_FORMAL_ENTRYPOINT
 #include "data/DaemonTuiDataSource.h"
@@ -29,6 +34,11 @@ constexpr std::string_view kScriptedSmokeProfileEnv =
 constexpr std::string_view kDaemonRoundtripSmokeMode = "daemon_roundtrip";
 constexpr std::string_view kJsonHexDigits = "0123456789ABCDEF";
 
+struct TuiLoggerSetup {
+  std::shared_ptr<dasall::infra::logging::ILogger> logger;
+  std::string unavailable_reason;
+};
+
 [[nodiscard]] dasall::tui::app::TuiAppOptions make_default_options();
 #endif
 
@@ -43,6 +53,65 @@ constexpr std::string_view kJsonHexDigits = "0123456789ABCDEF";
 }
 
 #if DASALL_TUI_FORMAL_ENTRYPOINT
+[[nodiscard]] std::optional<std::filesystem::path> absolute_state_root_from_environment() {
+  const char* value = std::getenv("DASALL_STATE_ROOT");
+  if (value == nullptr || *value == '\0') {
+    return std::nullopt;
+  }
+
+  const std::filesystem::path path(value);
+  if (!path.is_absolute()) {
+    return std::nullopt;
+  }
+  return path;
+}
+
+[[nodiscard]] bool launched_from_source_checkout() {
+  std::error_code error;
+  const auto cwd = std::filesystem::current_path(error);
+  if (error) {
+    return false;
+  }
+
+  return std::filesystem::exists(cwd / "CMakeLists.txt", error) && !error &&
+         std::filesystem::exists(cwd / "apps" / "tui", error) && !error;
+}
+
+[[nodiscard]] TuiLoggerSetup make_tui_logger() {
+  dasall::infra::ObservabilityLiveCompositionOptions options;
+  options.profile_id = "tui";
+  options.logging_recovery_fallback_stderr_enabled = false;
+  options.logging_config_entries.push_back(dasall::infra::config::TypedConfig{
+      .key_path = "infra.logging.async.enabled",
+      .value_type = dasall::infra::config::ConfigValueType::Boolean,
+      .serialized_value = "false",
+      .schema_version = std::string(dasall::infra::config::kConfigSchemaVersionV1),
+      .source_kind = dasall::infra::config::ConfigSourceKind::Profile,
+      .source_id = "profiles/tui/runtime_policy.yaml",
+      .secret_backed = false,
+  });
+  if (const auto state_root = absolute_state_root_from_environment();
+      state_root.has_value()) {
+    options.logging_state_root_override = *state_root;
+  } else if (!launched_from_source_checkout()) {
+    const auto layout = dasall::infra::config::resolve_install_layout();
+    const auto packaged_layout = dasall::infra::config::packaged_install_layout();
+    if (layout.readonly_assets_root == packaged_layout.readonly_assets_root) {
+      options.logging_state_root_override = layout.state_root;
+    }
+  }
+  const auto observability = dasall::infra::compose_live_observability(options);
+  if (!observability.ok()) {
+    return TuiLoggerSetup{.logger = nullptr,
+                          .unavailable_reason = "compose_live_observability_failed"};
+  }
+  if (observability.logger == nullptr) {
+    return TuiLoggerSetup{.logger = nullptr,
+                          .unavailable_reason = "compose_live_observability_no_logger"};
+  }
+  return TuiLoggerSetup{.logger = observability.logger, .unavailable_reason = {}};
+}
+
 [[nodiscard]] std::string json_escape(std::string_view value) {
   std::string escaped;
   escaped.reserve(value.size());
@@ -156,6 +225,10 @@ make_scripted_smoke_probe_environment() {
       << json_escape(latest_banner_title) << "\","
        << "\"latest_banner_message\":\""
       << json_escape(latest_banner_message) << "\","
+      << "\"logging_degraded\":" << (app.logging_degraded() ? "true" : "false") << ','
+      << "\"logging_failure_count\":" << app.logging_failure_count() << ','
+      << "\"logging_last_failure_stage\":\""
+          << json_escape(std::string(app.logging_last_failure_stage())) << "\","
        << "\"rendered_screen_contains_receipt\":"
        << (rendered_screen_contains_receipt ? "true" : "false") << ','
        << "\"rendered_screen_contains_route\":"
@@ -239,6 +312,10 @@ void print_usage(std::ostream& output) {
   options.scenario_id = "daemon";
   options.data_source_override = std::make_unique<dasall::tui::data::DaemonTuiDataSource>(
       dasall::tui::data::resolve_daemon_tui_controller_options_from_environment());
+  const TuiLoggerSetup logger_setup = make_tui_logger();
+  options.logger = logger_setup.logger;
+  options.require_logger = true;
+  options.logger_unavailable_reason = logger_setup.unavailable_reason;
 #else
   options.scenario_id = "planning_tools";
   options.data_source_override = std::make_unique<dasall::tui::data::FakeTuiDataSource>(

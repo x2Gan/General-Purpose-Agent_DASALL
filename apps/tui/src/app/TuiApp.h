@@ -7,8 +7,10 @@
 #include <string_view>
 #include <vector>
 #include <functional>
+#include <utility>
 
 #include "data/ITuiDataSource.h"
+#include "logging/ILogger.h"
 #include "model/TuiScreenModel.h"
 #include "terminal/FtxuiRendererAdapter.h"
 #include "terminal/TuiTerminalCapabilityProbe.h"
@@ -30,6 +32,9 @@ struct TuiAppOptions {
   std::vector<model::TuiAction> scripted_actions;
   std::optional<std::string> initial_draft;
   std::optional<data::TuiRoutePreferenceMode> selector_preview_mode;
+  std::shared_ptr<infra::logging::ILogger> logger;
+  bool require_logger = false;
+  std::string logger_unavailable_reason;
   bool print_final_screen = true;
   std::ostream* output_stream = nullptr;
 };
@@ -52,6 +57,9 @@ class TuiApp {
   [[nodiscard]] terminal::TuiStartupMode startup_mode() const noexcept;
   [[nodiscard]] bool session_open() const noexcept;
   [[nodiscard]] bool shutdown_clean() const noexcept;
+  [[nodiscard]] bool logging_degraded() const noexcept;
+  [[nodiscard]] std::size_t logging_failure_count() const noexcept;
+  [[nodiscard]] std::string_view logging_last_failure_stage() const noexcept;
   [[nodiscard]] std::string_view last_error() const noexcept;
 
  private:
@@ -91,6 +99,14 @@ class TuiApp {
   [[nodiscard]] std::string next_request_id(std::string_view prefix);
   [[nodiscard]] std::string next_trace_id(std::string_view prefix);
   void append_issue_banner(const data::TuiDataSourceIssue& issue, std::string title);
+    void note_logging_failure(std::string_view stage,
+                const infra::logging::LogWriteResult& result);
+  void log_tui_event(
+      infra::logging::LogLevel level,
+      std::string_view event_name,
+      std::string message,
+      std::vector<std::pair<std::string, std::string>> attrs = {});
+    void flush_tui_logger();
 
   terminal::TuiTerminalCapabilityProbe probe_;
   terminal::FtxuiRendererAdapter renderer_;
@@ -107,15 +123,22 @@ class TuiApp {
   std::string session_id_;
   std::string scenario_id_;
   std::optional<std::string> profile_id_;
+  std::shared_ptr<infra::logging::ILogger> logger_;
+  std::string logger_unavailable_reason_;
+  std::string logging_last_failure_stage_;
   std::size_t terminal_width_ = 0;
   std::size_t terminal_height_ = 0;
   std::size_t request_sequence_ = 0;
+  std::size_t logging_failure_count_ = 0;
   std::size_t animation_cursor_tick_ = 0;
   std::size_t animation_spinner_index_ = 0;
   std::ostream* output_stream_ = nullptr;
   std::function<void()> interactive_redraw_hook_;
   std::string shutdown_close_reason_ = "prototype_round_complete";
   bool animation_cursor_visible_ = true;
+  bool require_logger_ = false;
+  bool logging_degraded_ = false;
+  bool logging_degraded_banner_emitted_ = false;
   bool session_open_ = false;
   bool shutdown_clean_ = false;
   bool exit_requested_ = false;

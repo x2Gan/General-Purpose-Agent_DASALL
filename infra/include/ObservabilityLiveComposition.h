@@ -53,6 +53,7 @@ struct ObservabilityLiveCompositionOptions {
   std::uint32_t trace_export_timeout_ms = 100U;
   std::string logging_level = "info";
   bool logging_diag_pull_enabled = true;
+  bool logging_recovery_fallback_stderr_enabled = true;
   std::vector<config::TypedConfig> logging_config_entries;
   std::filesystem::path logging_state_root_override;
 };

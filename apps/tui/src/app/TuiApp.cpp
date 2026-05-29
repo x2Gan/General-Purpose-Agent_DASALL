@@ -2,8 +2,10 @@
 
 #include <algorithm>
 #include <cerrno>
+#include <chrono>
 #include <csignal>
 #include <cctype>
+#include <cstdint>
 #include <cstring>
 #include <iostream>
 #include <sstream>
@@ -30,6 +32,69 @@ using dasall::tui::model::TuiBanner;
 using dasall::tui::model::TuiBannerLevel;
 using dasall::tui::model::TuiModalKind;
 using dasall::tui::model::TuiModalState;
+
+[[nodiscard]] std::int64_t current_time_unix_ms() {
+  return std::chrono::duration_cast<std::chrono::milliseconds>(
+             std::chrono::system_clock::now().time_since_epoch())
+      .count();
+}
+
+[[nodiscard]] std::string bool_to_string(const bool value) {
+  return value ? "true" : "false";
+}
+
+[[nodiscard]] std::string route_preference_mode_to_string(
+    const data::TuiRoutePreferenceMode mode) {
+  switch (mode) {
+    case data::TuiRoutePreferenceMode::Auto:
+      return "auto";
+    case data::TuiRoutePreferenceMode::PreferDepth:
+      return "prefer_depth";
+    case data::TuiRoutePreferenceMode::PinModel:
+      return "pin_model";
+  }
+
+  return "unknown";
+}
+
+void append_attr(std::vector<std::pair<std::string, std::string>>& attrs,
+                 std::string key,
+                 std::string value) {
+  if (key.empty() || value.empty()) {
+    return;
+  }
+  attrs.emplace_back(std::move(key), std::move(value));
+}
+
+void append_optional_attr(
+    std::vector<std::pair<std::string, std::string>>& attrs,
+    std::string key,
+    const std::optional<std::string>& value) {
+  if (!value.has_value()) {
+    return;
+  }
+  append_attr(attrs, std::move(key), *value);
+}
+
+void append_issue_attrs(std::vector<std::pair<std::string, std::string>>& attrs,
+                        const data::TuiDataSourceIssue& issue) {
+  append_attr(attrs, "issue.reason_domain", issue.reason_domain);
+  append_attr(attrs, "issue.reason_code", issue.reason_code);
+  append_attr(attrs, "issue.retryable", bool_to_string(issue.retryable));
+  append_optional_attr(attrs, "issue.error_ref", issue.error_ref);
+  for (const auto& [key, value] : issue.metadata) {
+    append_attr(attrs, "issue.metadata." + key, value);
+  }
+}
+
+void insert_log_attr(dasall::infra::logging::LogEvent::AttributeMap& attrs,
+                     std::string key,
+                     std::string value) {
+  if (key.empty() || value.empty()) {
+    return;
+  }
+  attrs.insert_or_assign(std::move(key), std::move(value));
+}
 
 #if !defined(_WIN32)
 
@@ -550,7 +615,26 @@ TuiApp::TuiApp(terminal::TuiTerminalCapabilityProbe probe)
 int TuiApp::run(TuiAppOptions options) {
   initialize_components(options);
 
+  if (require_logger_ && logger_ == nullptr) {
+    last_error_ =
+        "TUI startup blocked: client logging unavailable for production mode.";
+    if (!logger_unavailable_reason_.empty()) {
+      last_error_ += " reason_code=" + logger_unavailable_reason_;
+    }
+    if (output_stream_ != nullptr) {
+      *output_stream_ << last_error_ << '\n';
+    }
+    shutdown_clean_ = false;
+    return 1;
+  }
+
   if (data_source_ == nullptr) {
+    log_tui_event(dasall::infra::logging::LogLevel::Error,
+                  "tui.startup",
+                  "TUI startup failed before data source initialization",
+                  {{"outcome", "failure"},
+                   {"reason_code", "data_source_missing"}});
+    flush_tui_logger();
     if (output_stream_ != nullptr && !last_error_.empty()) {
       *output_stream_ << last_error_ << '\n';
     }
@@ -567,12 +651,23 @@ int TuiApp::run(TuiAppOptions options) {
 
   if (startup_mode_ == terminal::TuiStartupMode::FailClosed) {
     last_error_ = probe_.format_startup_error(terminal_capabilities_);
+    log_tui_event(dasall::infra::logging::LogLevel::Error,
+                  "tui.startup",
+                  "TUI startup failed terminal capability checks",
+                  {{"outcome", "fail_closed"},
+                   {"reason_code", "terminal_capability_failed"}});
+    flush_tui_logger();
     if (output_stream_ != nullptr && !last_error_.empty()) {
       *output_stream_ << last_error_ << '\n';
     }
     shutdown_clean_ = false;
     return 1;
   }
+
+  log_tui_event(dasall::infra::logging::LogLevel::Info,
+                "tui.startup",
+                "TUI startup mode selected",
+                {{"outcome", "accepted"}});
 
   if (!open_session()) {
     emit_startup_error();
@@ -898,12 +993,35 @@ bool TuiApp::tick() {
   data::TuiPollEventsResult result = data_source_->poll_events(request);
   if (!result.ok()) {
     if (result.issue.has_value()) {
+      std::vector<std::pair<std::string, std::string>> attrs{
+          {"operation", "poll_events"},
+          {"outcome", "failure"},
+          {"request_id", request.request_id},
+          {"trace_id", request.trace_id},
+          {"event_cursor", request.event_cursor.value_or(std::string{})},
+      };
+      append_issue_attrs(attrs, *result.issue);
+      log_tui_event(dasall::infra::logging::LogLevel::Error,
+                    "tui.events.poll",
+                    "TUI event poll failed",
+                    std::move(attrs));
       last_error_ = result.issue->message;
       append_issue_banner(*result.issue, "Event poll failed");
       render_current_screen(false);
     }
     return false;
   }
+
+  log_tui_event(dasall::infra::logging::LogLevel::Debug,
+                "tui.events.poll",
+                "TUI event poll completed",
+                {{"operation", "poll_events"},
+                 {"outcome", "success"},
+                 {"request_id", request.request_id},
+                 {"trace_id", request.trace_id},
+                 {"event_cursor", request.event_cursor.value_or(std::string{})},
+                 {"next_event_cursor", result.next_cursor.value_or(std::string{})},
+                 {"event_count", std::to_string(result.events.size())}});
 
   last_event_cursor_ = result.next_cursor;
   if (result.events.empty()) {
@@ -936,16 +1054,39 @@ int TuiApp::shutdown() {
   data::TuiCloseSessionResult result = data_source_->close_session(request);
   if (!result.ok()) {
     if (result.issue.has_value()) {
+      std::vector<std::pair<std::string, std::string>> attrs{
+          {"operation", "close_session"},
+          {"outcome", "failure"},
+          {"request_id", request.request_id},
+          {"trace_id", request.trace_id},
+          {"close_reason", request.close_reason},
+      };
+      append_issue_attrs(attrs, *result.issue);
+      log_tui_event(dasall::infra::logging::LogLevel::Error,
+                    "tui.session.close",
+                    "TUI session close failed",
+                    std::move(attrs));
       last_error_ = result.issue->message;
       append_issue_banner(*result.issue, "Session close failed");
       render_current_screen(false);
     }
     shutdown_clean_ = false;
+    flush_tui_logger();
     return 1;
   }
 
+  log_tui_event(dasall::infra::logging::LogLevel::Info,
+                "tui.session.close",
+                "TUI session close completed",
+                {{"operation", "close_session"},
+                 {"outcome", "success"},
+                 {"request_id", request.request_id},
+                 {"trace_id", request.trace_id},
+                 {"close_reason", request.close_reason}});
+
   session_open_ = false;
   shutdown_clean_ = true;
+  flush_tui_logger();
   return 0;
 }
 
@@ -1032,6 +1173,27 @@ void TuiApp::dispatch_composer_submit() {
   if (!result.ok()) {
     restore_composer_draft(previous_draft, previous_cursor_offset);
     if (result.issue.has_value()) {
+      std::vector<std::pair<std::string, std::string>> attrs{
+          {"operation", "submit_turn"},
+          {"outcome", "failure"},
+          {"request_id", request.request_id},
+          {"trace_id", request.trace_id},
+          {"next_preference_mode", route_preference_mode_to_string(request.next_preference.mode)},
+      };
+      append_optional_attr(attrs,
+                           "preferred_depth_tier",
+                           request.next_preference.preferred_depth_tier);
+      append_optional_attr(attrs,
+                           "pinned_provider_id",
+                           request.next_preference.pinned_provider_id);
+      append_optional_attr(attrs,
+                           "pinned_model_id",
+                           request.next_preference.pinned_model_id);
+      append_issue_attrs(attrs, *result.issue);
+      log_tui_event(dasall::infra::logging::LogLevel::Error,
+                    "tui.turn.submit",
+                    "TUI turn submit failed",
+                    std::move(attrs));
       last_error_ = result.issue->message;
       append_issue_banner(*result.issue,
                           result.issue->reason_code == "validation_failed"
@@ -1042,6 +1204,13 @@ void TuiApp::dispatch_composer_submit() {
   }
   if (!result.receipt.has_value()) {
     restore_composer_draft(previous_draft, previous_cursor_offset);
+    log_tui_event(dasall::infra::logging::LogLevel::Error,
+                  "tui.turn.submit",
+                  "TUI turn submit returned no receipt",
+                  {{"operation", "submit_turn"},
+                   {"outcome", "missing_receipt"},
+                   {"request_id", request.request_id},
+                   {"trace_id", request.trace_id}});
     apply_reduced_action(screen_model_,
                          make_banner_action(model::TuiBannerLevel::Error,
                                             "Turn submit failed",
@@ -1053,6 +1222,18 @@ void TuiApp::dispatch_composer_submit() {
   }
 
   last_error_.clear();
+  log_tui_event(dasall::infra::logging::LogLevel::Info,
+                "tui.turn.submit",
+                "TUI turn submit accepted",
+                {{"operation", "submit_turn"},
+                 {"outcome", "success"},
+                 {"request_id", request.request_id},
+                 {"trace_id", request.trace_id},
+                 {"next_preference_mode", route_preference_mode_to_string(request.next_preference.mode)},
+                 {"receipt_request_id", result.receipt->request_id},
+                 {"receipt_trace_id", result.receipt->trace_id},
+                 {"receipt_ref", result.receipt->receipt_ref},
+                 {"disposition", result.receipt->disposition}});
   apply_reduced_action(screen_model_,
                        make_transcript_message_action(
                            "user",
@@ -1104,6 +1285,13 @@ void TuiApp::handle_interactive_submit() {
 
 void TuiApp::handle_foreground_session_clear() {
   std::optional<data::TuiDataSourceIssue> close_issue;
+  const std::string previous_session_id = session_id_;
+  log_tui_event(dasall::infra::logging::LogLevel::Info,
+                "tui.session.clear",
+                "TUI foreground session clear requested",
+                {{"operation", "foreground_session_clear"},
+                 {"outcome", "started"},
+                 {"previous_session_id", previous_session_id}});
   if (session_open_ && !session_id_.empty() && data_source_ != nullptr) {
     const data::TuiCloseSessionRequest close_request{
         .session_id = session_id_,
@@ -1115,6 +1303,29 @@ void TuiApp::handle_foreground_session_clear() {
         data_source_->close_session(close_request);
     if (!close_result.ok() && close_result.issue.has_value()) {
       close_issue = close_result.issue;
+      std::vector<std::pair<std::string, std::string>> attrs{
+          {"operation", "close_session"},
+          {"outcome", "failure"},
+          {"request_id", close_request.request_id},
+          {"trace_id", close_request.trace_id},
+          {"close_reason", close_request.close_reason},
+          {"previous_session_id", previous_session_id},
+      };
+      append_issue_attrs(attrs, *close_issue);
+      log_tui_event(dasall::infra::logging::LogLevel::Error,
+                    "tui.session.close",
+                    "TUI foreground session clear close failed",
+                    std::move(attrs));
+    } else {
+      log_tui_event(dasall::infra::logging::LogLevel::Info,
+                    "tui.session.close",
+                    "TUI foreground session clear closed previous session",
+                    {{"operation", "close_session"},
+                     {"outcome", "success"},
+                     {"request_id", close_request.request_id},
+                     {"trace_id", close_request.trace_id},
+                     {"close_reason", close_request.close_reason},
+                     {"previous_session_id", previous_session_id}});
     }
   }
 
@@ -1131,6 +1342,23 @@ void TuiApp::handle_foreground_session_clear() {
 
   const bool session_reopened = open_session();
   const bool route_reloaded = session_reopened && load_route_catalog();
+
+  log_tui_event(close_issue.has_value()
+                    ? dasall::infra::logging::LogLevel::Warn
+                    : (session_reopened && route_reloaded
+                           ? dasall::infra::logging::LogLevel::Info
+                           : dasall::infra::logging::LogLevel::Error),
+                "tui.session.clear",
+                "TUI foreground session clear completed",
+                {{"operation", "foreground_session_clear"},
+                 {"outcome", close_issue.has_value()
+                                 ? "degraded"
+                                 : (session_reopened && route_reloaded ? "success"
+                                                                       : "failure")},
+                 {"previous_session_id", previous_session_id},
+                 {"new_session_id", session_id_},
+                 {"session_reopened", bool_to_string(session_reopened)},
+                 {"route_reloaded", bool_to_string(route_reloaded)}});
 
   if (close_issue.has_value()) {
     apply_reduced_action(screen_model_,
@@ -1182,6 +1410,18 @@ bool TuiApp::shutdown_clean() const noexcept {
   return shutdown_clean_;
 }
 
+bool TuiApp::logging_degraded() const noexcept {
+  return logging_degraded_;
+}
+
+std::size_t TuiApp::logging_failure_count() const noexcept {
+  return logging_failure_count_;
+}
+
+std::string_view TuiApp::logging_last_failure_stage() const noexcept {
+  return logging_last_failure_stage_;
+}
+
 std::string_view TuiApp::last_error() const noexcept {
   return last_error_;
 }
@@ -1193,6 +1433,9 @@ void TuiApp::initialize_components(TuiAppOptions& options) {
   output_stream_ = options.output_stream;
   scenario_id_ = options.scenario_id.empty() ? "planning_tools" : options.scenario_id;
   profile_id_ = options.profile_id;
+  logger_ = std::move(options.logger);
+  require_logger_ = options.require_logger;
+  logger_unavailable_reason_ = std::move(options.logger_unavailable_reason);
   composer_ = view::TuiComposer(model::TuiComposerState{
       .text = options.initial_draft.value_or(std::string{}),
       .mode = has_initial_draft ? "editing" : "ready",
@@ -1219,6 +1462,10 @@ void TuiApp::initialize_components(TuiAppOptions& options) {
   }
   session_id_.clear();
   request_sequence_ = 0;
+  logging_failure_count_ = 0;
+  logging_last_failure_stage_.clear();
+  logging_degraded_ = false;
+  logging_degraded_banner_emitted_ = false;
   session_open_ = false;
   shutdown_clean_ = false;
   shutdown_close_reason_ = "prototype_round_complete";
@@ -1235,6 +1482,19 @@ bool TuiApp::open_session() {
   data::TuiOpenSessionResult result = data_source_->open_session(request);
   if (!result.ok()) {
     if (result.issue.has_value()) {
+      std::vector<std::pair<std::string, std::string>> attrs{
+          {"operation", "open_session"},
+          {"outcome", "failure"},
+          {"request_id", request.request_id},
+          {"trace_id", request.trace_id},
+          {"startup_mode_hint", request.startup_mode_hint.value_or(std::string{})},
+      };
+      append_optional_attr(attrs, "profile_id", request.profile_id);
+      append_issue_attrs(attrs, *result.issue);
+      log_tui_event(dasall::infra::logging::LogLevel::Error,
+                    "tui.session.open",
+                    "TUI session open failed",
+                    std::move(attrs));
       last_error_ = format_startup_issue_message(*result.issue);
       append_issue_banner(*result.issue, "Session open failed");
     }
@@ -1243,6 +1503,16 @@ bool TuiApp::open_session() {
 
   session_id_ = result.session->session_id;
   session_open_ = true;
+
+  log_tui_event(dasall::infra::logging::LogLevel::Info,
+                "tui.session.open",
+                "TUI session open completed",
+                {{"operation", "open_session"},
+                 {"outcome", "success"},
+                 {"request_id", request.request_id},
+                 {"trace_id", request.trace_id},
+                 {"startup_mode_hint", request.startup_mode_hint.value_or(std::string{})},
+                 {"daemon_readiness", result.session->daemon_readiness}});
 
   TuiAction session_action;
   session_action.type = TuiActionType::SessionHydrated;
@@ -1270,6 +1540,18 @@ bool TuiApp::load_route_catalog() {
   data::TuiRouteCatalogResult result = data_source_->route_catalog(request);
   if (!result.ok()) {
     if (result.issue.has_value()) {
+      std::vector<std::pair<std::string, std::string>> attrs{
+          {"operation", "route_catalog"},
+          {"outcome", "failure"},
+          {"request_id", request.request_id},
+          {"trace_id", request.trace_id},
+      };
+      append_optional_attr(attrs, "profile_id", request.profile_id);
+      append_issue_attrs(attrs, *result.issue);
+      log_tui_event(dasall::infra::logging::LogLevel::Error,
+                    "tui.route_catalog",
+                    "TUI route catalog load failed",
+                    std::move(attrs));
       last_error_ = format_startup_issue_message(*result.issue);
       append_issue_banner(*result.issue, "Route catalog failed");
     }
@@ -1277,6 +1559,18 @@ bool TuiApp::load_route_catalog() {
   }
 
   selector_.set_route_catalog(*result.route_catalog);
+  log_tui_event(dasall::infra::logging::LogLevel::Info,
+                "tui.route_catalog",
+                "TUI route catalog loaded",
+                {{"operation", "route_catalog"},
+                 {"outcome", "success"},
+                 {"request_id", request.request_id},
+                 {"trace_id", request.trace_id},
+                 {"current_provider_id", result.route_catalog->current_route.current_provider_id},
+                 {"current_model_id", result.route_catalog->current_route.current_model_id},
+                 {"current_depth_tier", result.route_catalog->current_route.current_depth_tier},
+                 {"route_health", result.route_catalog->current_route.health},
+                 {"candidate_count", std::to_string(result.route_catalog->candidate_routes.size())}});
   apply_reduced_action(screen_model_,
                        make_route_action(result.route_catalog->current_route,
                                          "route_catalog_loaded"));
@@ -1444,6 +1738,14 @@ void TuiApp::render_current_screen(const bool flush_to_output) {
       effective_terminal_width(),
       effective_terminal_height());
   rendered_frames_.push_back(last_rendered_screen_);
+  log_tui_event(dasall::infra::logging::LogLevel::Debug,
+                "tui.render.frame",
+                "TUI render frame produced",
+                {{"outcome", "success"},
+                 {"frame_index", std::to_string(rendered_frames_.size())},
+                 {"render_width", std::to_string(effective_terminal_width())},
+                 {"render_height", std::to_string(effective_terminal_height())},
+                 {"flush_to_output", bool_to_string(flush_to_output)}});
 
   if (flush_to_output && output_stream_ != nullptr) {
     *output_stream_ << last_rendered_screen_ << '\n';
@@ -1606,6 +1908,15 @@ std::string TuiApp::next_trace_id(std::string_view prefix) {
 }
 
 void TuiApp::append_issue_banner(const data::TuiDataSourceIssue& issue, std::string title) {
+  std::vector<std::pair<std::string, std::string>> attrs{
+      {"outcome", "failure"},
+      {"banner_title", title},
+  };
+  append_issue_attrs(attrs, issue);
+  log_tui_event(dasall::infra::logging::LogLevel::Error,
+                "tui.issue",
+                "TUI data source issue surfaced",
+                std::move(attrs));
   apply_reduced_action(screen_model_,
                        make_banner_action(model::TuiBannerLevel::Error,
                                           std::move(title),
@@ -1613,6 +1924,91 @@ void TuiApp::append_issue_banner(const data::TuiDataSourceIssue& issue, std::str
                                           issue.reason_code,
                                           "data_source_issue:" + issue.reason_code,
                                           true));
+}
+
+void TuiApp::note_logging_failure(
+    std::string_view stage,
+    const dasall::infra::logging::LogWriteResult& result) {
+  logging_degraded_ = true;
+  ++logging_failure_count_;
+  if (result.error.has_value() && !result.error->details.stage.empty()) {
+    logging_last_failure_stage_ = result.error->details.stage;
+  } else {
+    logging_last_failure_stage_ = std::string(stage);
+  }
+
+  if (logging_degraded_banner_emitted_) {
+    return;
+  }
+
+  logging_degraded_banner_emitted_ = true;
+  std::string message =
+      "TUI client logging could not persist diagnostics through the configured logger.";
+  if (!logging_last_failure_stage_.empty()) {
+    message += " stage=" + logging_last_failure_stage_;
+  }
+  apply_reduced_action(screen_model_,
+                       make_banner_action(model::TuiBannerLevel::Warning,
+                                          "Client logging degraded",
+                                          std::move(message),
+                                          "client_logging_degraded",
+                                          "client_logging_degraded",
+                                          true));
+}
+
+void TuiApp::log_tui_event(
+    const dasall::infra::logging::LogLevel level,
+    const std::string_view event_name,
+    std::string message,
+    std::vector<std::pair<std::string, std::string>> attrs) {
+  if (logger_ == nullptr) {
+    return;
+  }
+
+  dasall::infra::logging::LogEvent event;
+  event.level = level;
+  event.module = "tui";
+  event.message = std::move(message);
+  event.ts = current_time_unix_ms();
+  insert_log_attr(event.attrs, "event_name", std::string(event_name));
+  insert_log_attr(event.attrs, "component", "tui.client");
+  insert_log_attr(event.attrs, "scenario_id", scenario_id_);
+  insert_log_attr(event.attrs, "startup_mode", startup_mode_to_string(startup_mode_));
+  insert_log_attr(event.attrs, "terminal_width", std::to_string(effective_terminal_width()));
+  insert_log_attr(event.attrs, "terminal_height", std::to_string(effective_terminal_height()));
+  insert_log_attr(event.attrs, "terminal_stdin_tty", bool_to_string(terminal_capabilities_.stdin_is_tty));
+  insert_log_attr(event.attrs, "terminal_stdout_tty", bool_to_string(terminal_capabilities_.stdout_is_tty));
+  insert_log_attr(event.attrs, "terminal_utf8", bool_to_string(terminal_capabilities_.utf8_enabled));
+  insert_log_attr(event.attrs, "session_open", bool_to_string(session_open_));
+  if (profile_id_.has_value()) {
+    insert_log_attr(event.attrs, "profile_id", *profile_id_);
+  }
+  if (!session_id_.empty()) {
+    insert_log_attr(event.attrs, "session_id", session_id_);
+  }
+  if (last_event_cursor_.has_value()) {
+    insert_log_attr(event.attrs, "last_event_cursor", *last_event_cursor_);
+  }
+
+  for (auto& [key, value] : attrs) {
+    insert_log_attr(event.attrs, std::move(key), std::move(value));
+  }
+
+  const auto result = logger_->log(event);
+  if (!result.ok) {
+    note_logging_failure("logging.log", result);
+  }
+}
+
+void TuiApp::flush_tui_logger() {
+  if (logger_ == nullptr) {
+    return;
+  }
+  const auto result = logger_->flush(
+      dasall::infra::logging::LogFlushDeadline{.timeout_ms = 500});
+  if (!result.ok) {
+    note_logging_failure("logging.flush", result);
+  }
 }
 
 }  // namespace dasall::tui::app

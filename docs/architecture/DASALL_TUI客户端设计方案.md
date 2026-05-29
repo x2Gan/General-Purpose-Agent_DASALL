@@ -208,6 +208,19 @@ flowchart LR
 3. 工具轨迹默认以摘要折叠在消息区或右栏展示，不把原始长日志直接塞进主 transcript。
 4. 若后续工具轨迹密度过高，再追加 transcript viewer，不在首版引入复杂历史浏览器。
 
+### 5.4.1 客户端日志与诊断事件
+
+TUI 客户端日志遵循“事件流 + 结构化属性 + UI 输出隔离”的生产口径：12-factor 风格把日志视为时间有序事件流，OpenTelemetry 日志模型强调 event name、severity、timestamp、trace/session/request correlation 与 attribute collection，XDG / DASALL 安装态约束要求持久状态进入 state root 而不是污染交互终端。因此正式 `dasall` TUI 必须满足：
+
+1. 日志不得写入 alternate screen、主 transcript 或普通 UI 状态栏；TUI 屏幕只显示摘要 banner / status，详细诊断进入 infra logging 主链。
+2. `apps/tui` 通过可选 `infra::logging::ILogger` 注入记录 `tui.startup`、`tui.session.open`、`tui.session.clear`、`tui.route_catalog`、`tui.turn.submit`、`tui.events.poll`、`tui.session.close`、`tui.render.frame`、`tui.issue` 事件；正式生产入口必须把 logger 标记为 required，缺失时 fail-closed，不允许静默无日志运行。
+3. 每条事件必须携带 `event_name`、`component=tui.client`、`scenario_id`、`startup_mode`、terminal width/height、TTY/UTF-8 capability、`session_id`、`request_id`、`trace_id`、operation/outcome；涉及 daemon issue 时补齐 `issue.reason_domain`、`issue.reason_code`、`issue.retryable`、`issue.error_ref` 与低敏 metadata。
+4. `tui.render.frame` 只记录 frame index、尺寸与 flush 标志，默认按 Debug 级别进入主链；不得记录完整屏幕内容。
+5. `tui.turn.submit` 不记录 raw composer user input、assistant response body、prompt、secret、token 或 provider-private reasoning；只记录 next preference 模式、receipt ref、disposition 与 correlation ids。
+6. 正式 TUI 使用 quiet recovery fallback：logger `log()` / `flush()` 或 file sink 失败时不把 detailed log 写到 stdout/stderr，而是让 TUI 在本地 screen model 记录 `client_logging_degraded` warning banner，并保留 failure count 与低敏 failure stage，供 smoke / diagnostics 判断日志主链是否降级。
+7. 正式入口通过 `compose_live_observability()` 复用 infra logging 的 `dasall.logging.event.v1`、redaction、rotation 和 file sink；installed/local-authoritative path 继续走 `DASALL_STATE_ROOT` / install layout state root 下的 `logging/runtime.log`。
+8. 集成测试通过注入 recording logger 验证事件名、correlation、flush、低敏字段、redaction-compatible metadata key、required logger fail-closed、logger degraded banner、`/clear` session chain 与 `DASALL_STATE_ROOT/logging/runtime.log` 实际落盘，不把测试失败排障依赖到 UI 截图或 stderr。
+
 ### 5.5 输入 composer
 
 输入区采用底部 composer：

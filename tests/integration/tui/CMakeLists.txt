@@ -41,6 +41,10 @@ add_executable(dasall_tui_submit_turn_integration_test
   ${CMAKE_CURRENT_SOURCE_DIR}/TuiAppSubmitTurnIntegrationTest.cpp
 )
 
+add_executable(dasall_tui_app_logging_integration_test
+  ${CMAKE_CURRENT_SOURCE_DIR}/TuiAppLoggingIntegrationTest.cpp
+)
+
 add_executable(dasall_tui_daemon_backed_e2e_integration_test
   ${CMAKE_CURRENT_SOURCE_DIR}/TuiDaemonBackedE2ETest.cpp
   ${CMAKE_SOURCE_DIR}/apps/cli/src/CliIpcClient.cpp
@@ -126,6 +130,13 @@ target_link_libraries(dasall_tui_submit_turn_integration_test
   PRIVATE
     dasall_test_support
     dasall_tui_prototype_core
+)
+
+target_link_libraries(dasall_tui_app_logging_integration_test
+  PRIVATE
+    dasall_test_support
+    dasall_tui_prototype_core
+    dasall_infra
 )
 
 target_include_directories(dasall_tui_daemon_backed_e2e_integration_test
@@ -238,6 +249,7 @@ dasall_apply_common_options(dasall_tui_status_panel_integration_test)
 dasall_apply_common_options(dasall_tui_session_lifecycle_integration_test)
 dasall_apply_common_options(dasall_tui_next_preference_integration_test)
 dasall_apply_common_options(dasall_tui_submit_turn_integration_test)
+dasall_apply_common_options(dasall_tui_app_logging_integration_test)
 dasall_apply_common_options(dasall_tui_daemon_backed_e2e_integration_test)
 dasall_apply_common_options(dasall_tui_entrypoint_smoke_integration_test)
 dasall_apply_common_options(dasall_tui_entrypoint_purity_integration_test)
@@ -268,6 +280,9 @@ set_tests_properties(TuiNextPreferenceIntegrationTest PROPERTIES LABELS "integra
 add_test(NAME TuiAppSubmitTurnIntegrationTest COMMAND dasall_tui_submit_turn_integration_test)
 set_tests_properties(TuiAppSubmitTurnIntegrationTest PROPERTIES LABELS "integration;tui")
 
+add_test(NAME TuiAppLoggingIntegrationTest COMMAND dasall_tui_app_logging_integration_test)
+set_tests_properties(TuiAppLoggingIntegrationTest PROPERTIES LABELS "integration;tui")
+
 add_test(NAME TuiDaemonBackedE2ETest COMMAND dasall_tui_daemon_backed_e2e_integration_test)
 set_tests_properties(TuiDaemonBackedE2ETest PROPERTIES LABELS "integration;tui")
 
@@ -297,6 +312,7 @@ list(APPEND DASALL_APPS_TUI_INTEGRATION_TEST_EXECUTABLE_TARGETS
   dasall_tui_session_lifecycle_integration_test
   dasall_tui_next_preference_integration_test
   dasall_tui_submit_turn_integration_test
+  dasall_tui_app_logging_integration_test
   dasall_tui_daemon_backed_e2e_integration_test
   dasall_tui_entrypoint_smoke_integration_test
   dasall_tui_entrypoint_purity_integration_test

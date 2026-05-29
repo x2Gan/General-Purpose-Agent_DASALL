@@ -1,3 +1,82 @@
+## 记录 #855
+
+- 日期：2026-05-29
+- 阶段：tui / production logging gap closure
+- 任务：收敛 TUI 客户端日志二次评审剩余缺口，达到生产交付标准
+- 状态：已完成（required logger、quiet recovery、`/clear` chain、state-root runtime.log 与 unwritable sink degradation 均有 focused evidence）
+
+### 执行前提
+
+1. 二次评审确认 TUI structured logging 主路径已经可用，但仍存在三个生产交付缺口：正式入口可能静默无 logger、`/clear` 前台 session reset 缺少日志链路、installed/local-authoritative state-root 落盘缺少证据。
+2. 进一步核查发现真实 `LoggingFacade` sink failure 会进入 recovery fallback，默认 fallback 可能写 stderr；TUI 生产交付必须避免 detailed structured log 污染交互输出。
+3. 本轮仍限定在 TUI 客户端与 infra live composition 可选项，不改变 daemon/access/runtime owner 语义，不外推 qemu / soak 证据。
+
+### 改动
+
+1. 更新 `apps/tui/src/app/TuiApp.*`：新增 `require_logger` / `logger_unavailable_reason` fail-closed gate；记录 `logging_degraded`、failure count 与低敏 failure stage；logger `log()` / `flush()` 返回失败时在 screen model 挂 `client_logging_degraded` warning banner；`/clear` 现在记录 `tui.session.clear` start/completion 以及 `/clear` close_session success/failure。
+2. 更新 `infra/include/ObservabilityLiveComposition.h` 与 `infra/src/ObservabilityLiveComposition.cpp`：新增 `logging_recovery_fallback_stderr_enabled` 选项，默认保持既有行为；TUI 正式入口关闭 stderr fallback，改用 quiet failing recovery sink，让 sink failure 通过 `ILogger` 失败返回给 TUI degraded 状态接住。
+3. 更新 `apps/tui/src/main.cpp`：正式 TUI 入口要求 logger 存在；scripted smoke JSON 增加 `logging_degraded`、`logging_failure_count`、`logging_last_failure_stage`，用于验证 client logging health。
+4. 更新 `tests/integration/tui/TuiAppLoggingIntegrationTest.cpp` 与 `DasallTuiScriptedSmokeTest.cpp`：覆盖 required logger fail-closed、logger write/flush degraded banner、`/clear` session chain、`DASALL_STATE_ROOT/logging/runtime.log` 实际落盘，以及 runtime.log 不可写时 stderr 仍为空且 smoke 暴露 degraded 状态。
+5. 更新 `docs/architecture/DASALL_TUI客户端设计方案.md`：把 required logger、quiet recovery fallback、`tui.session.clear` 与 degraded diagnostics 纳入生产口径。
+
+### 验证
+
+1. `Build_CMakeTools(buildTargets=["dasall-tui","dasall_tui_app_logging_integration_test","dasall_tui_scripted_smoke_integration_test"])`
+   - 结果：通过。
+2. `RunCtest_CMakeTools(tests=["TuiAppLoggingIntegrationTest","DasallTuiScriptedSmokeTest"])`
+   - 结果：通过；`100% tests passed, 0 tests failed out of 2`。
+3. `RunCtest_CMakeTools(tests=["LoggingLiveCompositionConfigTest","LoggingHealthProbeLiveCompositionTest","LoggingSinkFailureInjectionTest"])`
+   - 结果：通过；`100% tests passed, 0 tests failed out of 3`。
+4. `RunCtest_CMakeTools(tests=["TuiAppLoggingIntegrationTest","DasallTuiScriptedSmokeTest","TuiTestTopologyDiscoverability","TuiAppSubmitTurnIntegrationTest","TuiAppStartupFailureTest","TuiStatusPanelIntegrationTest","TuiDaemonBackedE2ETest"])`
+   - 结果：通过；`100% tests passed, 0 tests failed out of 7`。
+
+### 结果
+
+1. TUI 正式入口不再允许 production mode 静默无日志运行；logger 缺失会 fail-closed 并暴露稳定低敏 reason code。
+2. TUI 日志主链失败不再污染 stdout/stderr；应用侧可通过 degraded banner、failure count 与 failure stage 识别 client logging health。
+3. `/clear` 前台 session reset、installed state-root 落盘与 unwritable sink 降级均已有 focused 回归证据，TUI 客户端日志能力达到当前生产交付标准。
+
+## 记录 #854
+
+- 日期：2026-05-29
+- 阶段：tui / production client logging hardening
+- 任务：补齐 TUI 客户端生产级 structured logging、低敏诊断事件与 focused 回归覆盖
+- 状态：已完成（build-tree TUI owner logging seam + focused CTest 已闭合；不外推 installed / qemu / soak 证据）
+
+### 执行前提
+
+1. 评估确认现有 TUI focused 测试绿，但客户端详细调试日志不足：缺少 lifecycle / session / route / submit / issue 的统一低敏 structured event，也没有复用 infra logging 的 redaction / file sink / schema 主链。
+2. 行业实践口径采用 12-factor event stream、OpenTelemetry log attribute / correlation 语义，以及 XDG / DASALL state-root 输出隔离；TUI 不得把详细日志写入 alternate screen、transcript、stdout/stderr 成功路径或 raw prompt / response。
+3. 本轮只补 TUI 客户端 owner 侧能力，不改变 daemon/access/runtime ownership，也不引入 qemu、installed authoritative proof 或长稳态 soak 证据。
+
+### 改动
+
+1. 更新 `apps/tui/src/app/TuiApp.*`：新增可选 `infra::logging::ILogger` 注入，并在 startup、session open/close、route catalog、turn submit、event poll、render frame、issue banner 等路径记录 `tui.*` structured events，统一携带 scenario/session/request/trace/terminal/capability/outcome 低敏字段。
+2. 更新 `apps/tui/src/main.cpp` 与 `apps/tui/CMakeLists.txt`：正式 TUI 入口通过 `compose_live_observability()` 接入 infra logging；source checkout 下使用 build-tree log path，显式 `DASALL_STATE_ROOT` 或真实 packaged layout 下才走 installed state root；TUI 客户端事件走 direct file sink，避免短生命周期成功路径触发 recovery stderr。
+3. 新增 `tests/integration/tui/TuiAppLoggingIntegrationTest.cpp` 并更新 `tests/integration/tui/CMakeLists.txt`、`TuiIntegrationTopologySmokeTest.cpp`：通过 recording logger 验证 event name、correlation、flush、低敏字段、issue metadata 与 infra redaction-compatible keys，并把测试纳入 topology discoverability。
+4. 更新 `docs/architecture/DASALL_TUI客户端设计方案.md`：补充“客户端日志与诊断事件”章节，冻结事件清单、必备字段、敏感内容禁记、UI 输出隔离与 live observability/file sink 口径。
+
+### 验证
+
+1. `Build_CMakeTools(buildTargets=["dasall_tui_submit_turn_integration_test","dasall-tui"])`
+   - 结果：通过。
+2. `Build_CMakeTools(buildTargets=["dasall_tui_app_logging_integration_test","dasall_tui_integration_topology_smoke_integration_test"])`
+   - 结果：通过。
+3. `RunCtest_CMakeTools(tests=["TuiAppLoggingIntegrationTest","TuiTestTopologyDiscoverability"])`
+   - 结果：通过；`100% tests passed, 0 tests failed out of 2`。
+4. `Build_CMakeTools(buildTargets=["dasall-tui","dasall_tui_scripted_smoke_integration_test"])`
+   - 结果：通过。
+5. `RunCtest_CMakeTools(tests=["DasallTuiScriptedSmokeTest","TuiAppLoggingIntegrationTest","TuiAppSubmitTurnIntegrationTest","TuiTestTopologyDiscoverability"])`
+   - 结果：通过；`100% tests passed, 0 tests failed out of 4`。
+6. VS Code diagnostics。
+   - 结果：`TuiApp.h`、`TuiApp.cpp`、`main.cpp`、`TuiAppLoggingIntegrationTest.cpp`、TUI integration CMake 与 topology smoke 均无错误。
+
+### 结果
+
+1. TUI 客户端现在具备 production-grade 低敏 structured logging：关键生命周期、交互、daemon issue 与 render frame 均有稳定 event name、correlation ids、outcome 与可排障 metadata。
+2. 详细日志通过 infra logging 主链落盘，复用 `dasall.logging.event.v1`、redaction 与 file sink；交互 UI 和 scripted success path 不再被日志输出污染。
+3. focused 回归覆盖已固定 raw input 不入日志、issue authorization metadata 可由 infra redaction 规则脱敏、shutdown flush 与 CMake discoverability。
+
 ## 记录 #853
 
 - 日期：2026-05-29

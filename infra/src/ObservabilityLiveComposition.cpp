@@ -16,6 +16,7 @@
 #include "logging/LoggingFacade.h"
 #include "logging/LoggingHealthProbe.h"
 #include "logging/LoggingMetricsBridge.h"
+#include "logging/LoggingRecovery.h"
 #include "logging/SinkDispatcher.h"
 #include "metrics/MetricsFacade.h"
 #include "tracing/TraceConfig.h"
@@ -149,6 +150,17 @@ class DirectSinkDispatcher final : public logging::ILogDispatchBackend {
 
   std::shared_ptr<logging::ILogSink> basic_sink_;
   std::shared_ptr<logging::ILogSink> audit_sink_;
+};
+
+class QuietFailingRecoverySink final : public logging::ILogRecoverySink {
+ public:
+  logging::LogWriteResult write(const logging::LogEvent&) override {
+    return logging::LogWriteResult::failure(
+        contracts::ResultCode::RuntimeRetryExhausted,
+        "logging recovery fallback is disabled for this live composition",
+        "logging.recovery.fallback",
+        "QuietFailingRecoverySink");
+  }
 };
 
 [[nodiscard]] std::string error_message_for(const InfraOperationResult& result,
@@ -320,9 +332,13 @@ ObservabilityLiveCompositionResult compose_live_observability(
     };
   }
 
-  const auto active_logging_config = logging_config_adapter.active_config();
-  auto logger = std::make_shared<logging::LoggingFacade>(
-      make_logging_dispatch_backend(active_logging_config, options));
+    const auto active_logging_config = logging_config_adapter.active_config();
+    auto dispatch_backend = make_logging_dispatch_backend(active_logging_config, options);
+    auto logger = options.logging_recovery_fallback_stderr_enabled
+      ? std::make_shared<logging::LoggingFacade>(std::move(dispatch_backend))
+      : std::make_shared<logging::LoggingFacade>(
+        std::move(dispatch_backend),
+        std::make_shared<QuietFailingRecoverySink>());
   const auto logger_init = logger->init(logging::LogContext{});
   if (!logger_init.ok) {
     return ObservabilityLiveCompositionResult{

@@ -89,6 +89,11 @@ target_link_libraries(dasall_tui_prototype_core
     dasall_tui_core
 )
 
+target_link_libraries(dasall_tui_core
+  PUBLIC
+    dasall_infra
+)
+
 target_link_libraries(dasall_tui_prototype
   PRIVATE
     dasall_tui_prototype_core
@@ -97,6 +102,7 @@ target_link_libraries(dasall_tui_prototype
 target_link_libraries(dasall-tui
   PRIVATE
     dasall_tui_core
+    dasall_infra
     dasall_platform
 )
 
