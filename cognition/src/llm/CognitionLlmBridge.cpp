@@ -11,6 +11,7 @@
 #include <utility>
 #include <vector>
 
+#include "error/ResultCode.h"
 #include "route/ModelSelectionHint.h"
 
 namespace dasall::cognition::llm_bridge {
@@ -228,6 +229,23 @@ bool replace_plain_assignment(std::string& text,
   return "unknown";
 }
 
+void append_route_diagnostic(StageLlmCallResult& result) {
+  if (!result.resolved_route.empty()) {
+    result.diagnostics.push_back(std::string("route:") + result.resolved_route);
+  }
+}
+
+void append_error_type_diagnostic(StageLlmCallResult& result,
+                                  const std::optional<contracts::ErrorInfo>& error_info) {
+  if (!error_info.has_value() || !error_info->failure_type.has_value()) {
+    return;
+  }
+
+  result.diagnostics.push_back(
+      std::string("error_type:") +
+      std::string(contracts::result_code_category_name(*error_info->failure_type)));
+}
+
 [[nodiscard]] contracts::ErrorInfo make_error_info(const contracts::ResultCode result_code,
                                                    const std::string& stage_name,
                                                    std::string message) {
@@ -372,6 +390,7 @@ StageLlmCallResult CognitionLlmBridge::normalize_llm_response(
   result.fallback_used = manager_result.fallback_used;
   result.diagnostics.push_back(std::string("stage:") + resolve_stage_name(request));
   result.diagnostics.push_back(std::string("task:") + resolve_task_type(request));
+  append_route_diagnostic(result);
 
   if (result.budget_hint.near_budget_limit) {
     result.warnings.push_back("budget:near_limit");
@@ -388,6 +407,7 @@ StageLlmCallResult CognitionLlmBridge::normalize_llm_response(
     result.result_code = failure.result_code;
     result.error_info = failure.error_info;
     result.diagnostics.push_back(failure.diagnostic);
+    append_error_type_diagnostic(result, result.error_info);
     return result;
   }
 
@@ -396,6 +416,7 @@ StageLlmCallResult CognitionLlmBridge::normalize_llm_response(
     result.result_code = failure.result_code;
     result.error_info = failure.error_info;
     result.diagnostics.push_back(failure.diagnostic);
+    append_error_type_diagnostic(result, result.error_info);
     return result;
   }
 
@@ -410,6 +431,7 @@ StageLlmCallResult CognitionLlmBridge::normalize_llm_response(
     result.result_code = failure.result_code;
     result.error_info = failure.error_info;
     result.diagnostics.push_back(failure.diagnostic);
+    append_error_type_diagnostic(result, result.error_info);
     return result;
   }
 
@@ -418,7 +440,6 @@ StageLlmCallResult CognitionLlmBridge::normalize_llm_response(
     response.content_payload = sanitize_payload(*response.content_payload, result.warnings);
   }
   result.response = std::move(response);
-  result.diagnostics.push_back(std::string("route:") + manager_result.resolved_route);
   return result;
 }
 
@@ -432,6 +453,7 @@ StageLlmCallResult CognitionLlmBridge::invoke_stage(const StageLlmCallRequest& r
                                         resolve_stage_name(request),
                                         "llm manager dependency is not available");
     result.diagnostics.push_back("llm_failure:manager_missing");
+    append_error_type_diagnostic(result, result.error_info);
     return result;
   }
 

@@ -3276,6 +3276,8 @@ RuntimeDependencyCompositionResult compose_minimal_live_dependency_set(
           .now_ms = []() {
             return current_time_ms();
           },
+          .logger = dependency_set->logger,
+          .runtime_instance_id = std::string(composition_owner),
       });
   if (const auto register_error = register_health_probe(
           dependency_set->health_monitor,

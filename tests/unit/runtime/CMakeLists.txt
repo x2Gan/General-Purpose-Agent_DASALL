@@ -24,6 +24,18 @@ add_executable(dasall_runtime_agent_orchestrator_controller_assembly_unit_test
   AgentOrchestratorControllerAssemblyTest.cpp
 )
 
+add_executable(dasall_runtime_agent_orchestrator_logging_unit_test
+  AgentOrchestratorLoggingTest.cpp
+)
+
+add_executable(dasall_runtime_manager_logging_unit_test
+  RuntimeManagerLoggingTest.cpp
+)
+
+add_executable(dasall_runtime_owner_logging_unit_test
+  RuntimeOwnerLoggingTest.cpp
+)
+
 add_executable(dasall_runtime_error_code_unit_test
   RuntimeErrorCodeTest.cpp
 )
@@ -151,6 +163,46 @@ target_link_libraries(dasall_runtime_agent_orchestrator_controller_assembly_unit
 target_include_directories(dasall_runtime_agent_orchestrator_controller_assembly_unit_test
   PRIVATE
     ${PROJECT_SOURCE_DIR}/runtime/src
+)
+
+target_link_libraries(dasall_runtime_agent_orchestrator_logging_unit_test
+  PRIVATE
+    dasall_test_support
+    dasall_runtime
+    dasall_infra
+)
+
+target_include_directories(dasall_runtime_agent_orchestrator_logging_unit_test
+  PRIVATE
+    ${PROJECT_SOURCE_DIR}/runtime/src
+    ${PROJECT_SOURCE_DIR}/infra/src
+)
+
+target_link_libraries(dasall_runtime_manager_logging_unit_test
+  PRIVATE
+    dasall_test_support
+    dasall_runtime
+    dasall_infra
+)
+
+target_include_directories(dasall_runtime_manager_logging_unit_test
+  PRIVATE
+    ${PROJECT_SOURCE_DIR}/runtime/src
+    ${PROJECT_SOURCE_DIR}/infra/src
+)
+
+target_link_libraries(dasall_runtime_owner_logging_unit_test
+  PRIVATE
+    dasall_test_support
+    dasall_runtime
+    dasall_infra
+)
+
+target_include_directories(dasall_runtime_owner_logging_unit_test
+  PRIVATE
+    ${PROJECT_SOURCE_DIR}/runtime/src
+    ${PROJECT_SOURCE_DIR}/infra/src
+    ${PROJECT_SOURCE_DIR}/tests/fixtures/runtime
 )
 
 target_link_libraries(dasall_runtime_error_code_unit_test
@@ -357,6 +409,9 @@ dasall_apply_common_options(dasall_runtime_dependency_set_readiness_unit_test)
 dasall_apply_common_options(dasall_runtime_agent_init_result_readiness_unit_test)
 dasall_apply_common_options(dasall_runtime_agent_orchestrator_skeleton_unit_test)
 dasall_apply_common_options(dasall_runtime_agent_orchestrator_controller_assembly_unit_test)
+dasall_apply_common_options(dasall_runtime_agent_orchestrator_logging_unit_test)
+dasall_apply_common_options(dasall_runtime_manager_logging_unit_test)
+dasall_apply_common_options(dasall_runtime_owner_logging_unit_test)
 dasall_apply_common_options(dasall_runtime_error_code_unit_test)
 dasall_apply_common_options(dasall_runtime_cancellation_token_unit_test)
 dasall_apply_common_options(dasall_agent_fsm_unit_test)
@@ -393,6 +448,15 @@ set_tests_properties(AgentOrchestratorSkeletonTest PROPERTIES LABELS "unit")
 
 add_test(NAME AgentOrchestratorControllerAssemblyTest COMMAND dasall_runtime_agent_orchestrator_controller_assembly_unit_test)
 set_tests_properties(AgentOrchestratorControllerAssemblyTest PROPERTIES LABELS "unit")
+
+add_test(NAME AgentOrchestratorLoggingTest COMMAND dasall_runtime_agent_orchestrator_logging_unit_test)
+set_tests_properties(AgentOrchestratorLoggingTest PROPERTIES LABELS "unit;runtime")
+
+add_test(NAME RuntimeManagerLoggingTest COMMAND dasall_runtime_manager_logging_unit_test)
+set_tests_properties(RuntimeManagerLoggingTest PROPERTIES LABELS "unit;runtime")
+
+add_test(NAME RuntimeOwnerLoggingTest COMMAND dasall_runtime_owner_logging_unit_test)
+set_tests_properties(RuntimeOwnerLoggingTest PROPERTIES LABELS "unit;runtime")
 
 add_test(NAME RuntimeErrorCodeTest COMMAND dasall_runtime_error_code_unit_test)
 set_tests_properties(RuntimeErrorCodeTest PROPERTIES LABELS "unit")

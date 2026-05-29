@@ -42,6 +42,7 @@ using observability::DecisionTelemetryRecord;
 using observability::StageTelemetryContext;
 using observability::StructuredProjectionTelemetry;
 using observability::TelemetryEmitResult;
+using observability::TelemetryField;
 using policy::StageExecutionPlan;
 using validation::InputBoundaryValidationResult;
 
@@ -318,6 +319,173 @@ void append_structured_projection_value(std::vector<std::string>& diagnostics,
 
 void ignore_emit_result(TelemetryEmitResult) {}
 
+[[nodiscard]] bool has_diagnostic(const std::vector<std::string>& diagnostics,
+                                  const std::string_view diagnostic) {
+  return std::find(diagnostics.begin(), diagnostics.end(), diagnostic) != diagnostics.end();
+}
+
+void append_detail_field(std::vector<TelemetryField>& fields,
+                         std::string key,
+                         std::string value) {
+  if (value.empty()) {
+    return;
+  }
+
+  fields.push_back(TelemetryField{
+      .key = std::move(key),
+      .value = std::move(value),
+  });
+}
+
+void emit_pipeline_checkpoint(const observability::CognitionTelemetry& telemetry,
+                              const StageTelemetryContext& context,
+                              std::string pipeline,
+                              std::string step,
+                              std::string outcome,
+                              std::vector<TelemetryField> extra_fields = {}) {
+  std::vector<TelemetryField> fields;
+  fields.reserve(extra_fields.size() + 3U);
+  append_detail_field(fields, "pipeline", std::move(pipeline));
+  append_detail_field(fields, "step", std::move(step));
+  append_detail_field(fields, "outcome", std::move(outcome));
+  for (auto& field : extra_fields) {
+    append_detail_field(fields, std::move(field.key), std::move(field.value));
+  }
+
+  ignore_emit_result(
+      telemetry.emit_detail_event("pipeline.checkpoint", context, std::move(fields)));
+}
+
+void append_error_info_fields(std::vector<TelemetryField>& fields,
+                              const contracts::ErrorInfo& error_info) {
+  if (error_info.failure_type.has_value()) {
+    append_detail_field(fields,
+                        "error_type",
+                        std::string(
+                            contracts::result_code_category_name(*error_info.failure_type)));
+  }
+  if (error_info.details.code.has_value()) {
+    append_detail_field(fields, "error_code", std::to_string(*error_info.details.code));
+  }
+  append_detail_field(fields, "error_stage", error_info.details.stage);
+  append_detail_field(fields, "error_message", error_info.details.message);
+}
+
+[[nodiscard]] std::optional<std::string> find_prefixed_diagnostic_value(
+    const std::vector<std::string>& diagnostics,
+    const std::string_view prefix) {
+  for (const auto& diagnostic : diagnostics) {
+    if (diagnostic.rfind(prefix, 0) == 0 && diagnostic.size() > prefix.size()) {
+      return diagnostic.substr(prefix.size());
+    }
+  }
+
+  return std::nullopt;
+}
+
+void emit_decision_bridge_checkpoint(
+  const observability::CognitionTelemetry& telemetry,
+    const CognitionStepRequest& request,
+    const std::string& step,
+    const std::string& outcome,
+    const bool fallback_allowed,
+    const std::string& failure_code,
+    std::optional<contracts::ResultCode> result_code = std::nullopt,
+    const contracts::ErrorInfo* error_info = nullptr,
+    std::optional<std::uint32_t> elapsed_ms = std::nullopt,
+    std::optional<std::uint32_t> deadline_ms = std::nullopt,
+    std::size_t diagnostic_count = 0U,
+    std::optional<std::string> resolved_route = std::nullopt,
+    std::optional<std::string> failure_category = std::nullopt) {
+  std::vector<TelemetryField> fields;
+  fields.reserve(10U);
+  append_detail_field(fields, "source", "llm_bridge");
+  append_detail_field(fields, "fallback_allowed", fallback_allowed ? "true" : "false");
+  if (resolved_route.has_value()) {
+    append_detail_field(fields, "resolved_route", *resolved_route);
+  }
+  if (failure_category.has_value()) {
+    append_detail_field(fields, "failure_category", *failure_category);
+  }
+  if (!failure_code.empty()) {
+    append_detail_field(fields, "structured_projection_failure_code", failure_code);
+  }
+  if (elapsed_ms.has_value()) {
+    append_detail_field(fields, "elapsed_ms", std::to_string(*elapsed_ms));
+  }
+  if (deadline_ms.has_value()) {
+    append_detail_field(fields, "deadline_ms", std::to_string(*deadline_ms));
+  }
+  append_detail_field(fields,
+                      "diagnostic_count",
+                      std::to_string(static_cast<unsigned long long>(diagnostic_count)));
+  if (error_info != nullptr) {
+    append_error_info_fields(fields, *error_info);
+  }
+
+  emit_pipeline_checkpoint(
+      telemetry,
+      make_stage_context(request,
+                         "execution",
+                         outcome == "degraded",
+                         result_code),
+      "decision",
+      step,
+      outcome,
+      std::move(fields));
+}
+
+void emit_reflection_bridge_checkpoint(
+  const observability::CognitionTelemetry& telemetry,
+    const ReflectionRequest& request,
+    const std::string& outcome,
+    const bool fallback_allowed,
+    const std::string& failure_code,
+    std::optional<contracts::ResultCode> result_code = std::nullopt,
+    const contracts::ErrorInfo* error_info = nullptr,
+    std::optional<std::uint32_t> elapsed_ms = std::nullopt,
+    std::optional<std::uint32_t> deadline_ms = std::nullopt,
+    std::size_t diagnostic_count = 0U,
+    std::optional<std::string> resolved_route = std::nullopt,
+    std::optional<std::string> failure_category = std::nullopt) {
+  std::vector<TelemetryField> fields;
+  fields.reserve(10U);
+  append_detail_field(fields, "source", "llm_bridge");
+  append_detail_field(fields, "fallback_allowed", fallback_allowed ? "true" : "false");
+  if (resolved_route.has_value()) {
+    append_detail_field(fields, "resolved_route", *resolved_route);
+  }
+  if (failure_category.has_value()) {
+    append_detail_field(fields, "failure_category", *failure_category);
+  }
+  if (!failure_code.empty()) {
+    append_detail_field(fields, "structured_projection_failure_code", failure_code);
+  }
+  if (elapsed_ms.has_value()) {
+    append_detail_field(fields, "elapsed_ms", std::to_string(*elapsed_ms));
+  }
+  if (deadline_ms.has_value()) {
+    append_detail_field(fields, "deadline_ms", std::to_string(*deadline_ms));
+  }
+  append_detail_field(fields,
+                      "diagnostic_count",
+                      std::to_string(static_cast<unsigned long long>(diagnostic_count)));
+  if (error_info != nullptr) {
+    append_error_info_fields(fields, *error_info);
+  }
+
+  emit_pipeline_checkpoint(
+      telemetry,
+      make_stage_context(request,
+                         "reflection",
+                         outcome == "degraded",
+                         result_code),
+      "reflection",
+      "reflection",
+      outcome,
+      std::move(fields));
+}
+
 [[nodiscard]] contracts::ErrorInfo make_error_info(
     contracts::ResultCode result_code,
     std::string stage,
@@ -450,6 +618,8 @@ void apply_decision_failure(
 }
 
 [[nodiscard]] bool fallback_or_fail_structured_stage(
+  const observability::CognitionTelemetry& telemetry,
+  const CognitionStepRequest& request,
     CognitionDecisionResult& result,
     bool fallback_allowed,
     contracts::ResultCode result_code,
@@ -466,10 +636,33 @@ void apply_decision_failure(
     append_unique(result.diagnostics, "decision_pipeline.degraded");
     append_unique(result.diagnostics, std::string{"structured_projection.local_fallback:"} + stage);
     append_structured_projection_value(result.diagnostics, "source", stage, "local_fallback");
+    emit_decision_bridge_checkpoint(telemetry,
+                                    request,
+                                    stage,
+                                    "degraded",
+                                    true,
+                                    std::string(failure_code),
+                                    std::nullopt,
+                                    &error_info,
+                                    std::nullopt,
+                                    std::nullopt,
+                                    result.diagnostics.size());
     return true;
   }
 
   apply_decision_failure(result, result_code, error_info, std::move(diagnostic));
+  emit_decision_bridge_checkpoint(telemetry,
+                                  request,
+                                  stage,
+                                  "failed",
+                                  false,
+                                  std::string(failure_code),
+                                  result.result_code,
+                                  result.error_info.has_value() ? &(*result.error_info)
+                                                                : &error_info,
+                                  std::nullopt,
+                                  std::nullopt,
+                                  result.diagnostics.size());
   return false;
 }
 
@@ -747,12 +940,57 @@ class CognitionFacade final : public ICognitionEngine {
     const auto rule_fallback_enabled =
       resolve_decision_fallback_allowed(decision_plan, config_, request);
 
+    emit_pipeline_checkpoint(
+      telemetry_,
+      make_stage_context(request, "execution", false),
+      "decision",
+      "policy_plan",
+      "resolved",
+      {
+        TelemetryField{
+          .key = "source",
+          .value = decision_plan.has_value() ? "runtime_policy" : "config",
+        },
+        TelemetryField{
+          .key = "deadline_ms",
+          .value = std::to_string(stage_deadline_ms),
+        },
+        TelemetryField{
+          .key = "llm_bridge_enabled",
+          .value = llm_bridge_ != nullptr ? "true" : "false",
+        },
+        TelemetryField{
+          .key = "fallback_allowed",
+          .value = rule_fallback_enabled ? "true" : "false",
+        },
+      });
+
     const auto perception_result = run_stage_with_deadline(
       stage_deadline_ms,
       [perception_engine = perception_engine_, request]() mutable {
         return perception_engine.perceive(request);
       });
     if (perception_result.timed_out) {
+      emit_pipeline_checkpoint(
+        telemetry_,
+        make_stage_context(request,
+                 "execution",
+                 false,
+                 contracts::ResultCode::RuntimeRetryExhausted),
+        "decision",
+        "perception",
+        "timeout",
+        {
+          TelemetryField{.key = "source", .value = "perception_engine"},
+          TelemetryField{
+            .key = "elapsed_ms",
+            .value = std::to_string(perception_result.elapsed_ms),
+          },
+          TelemetryField{
+            .key = "deadline_ms",
+            .value = std::to_string(stage_deadline_ms),
+          },
+        });
       apply_decision_failure(
         result,
         contracts::ResultCode::RuntimeRetryExhausted,
@@ -782,9 +1020,46 @@ class CognitionFacade final : public ICognitionEngine {
         result.belief_update_hint = std::move(belief_update_hint);
         append_unique(result.diagnostics, "decision_pipeline.degraded");
         append_unique(result.diagnostics, "decision_pipeline.perception_unavailable");
+        emit_pipeline_checkpoint(
+          telemetry_,
+          make_stage_context(request, "execution", true),
+          "decision",
+          "perception",
+          "degraded",
+          {
+            TelemetryField{.key = "source", .value = "perception_engine"},
+            TelemetryField{
+              .key = "elapsed_ms",
+              .value = std::to_string(perception_result.elapsed_ms),
+            },
+            TelemetryField{
+              .key = "missing_evidence_count",
+              .value = std::to_string(result.context_sufficiency.missing_evidence_hints.size()),
+            },
+            TelemetryField{
+              .key = "diagnostic_count",
+              .value = std::to_string(result.diagnostics.size()),
+            },
+          });
         return result;
       }
 
+        emit_pipeline_checkpoint(
+          telemetry_,
+          make_stage_context(request,
+                   "execution",
+                   false,
+                   contracts::ResultCode::RuntimeRetryExhausted),
+          "decision",
+          "perception",
+          "failed",
+          {
+            TelemetryField{.key = "source", .value = "perception_engine"},
+            TelemetryField{
+              .key = "elapsed_ms",
+              .value = std::to_string(perception_result.elapsed_ms),
+            },
+          });
       apply_decision_failure(
           result,
           contracts::ResultCode::RuntimeRetryExhausted,
@@ -806,6 +1081,28 @@ class CognitionFacade final : public ICognitionEngine {
         perception.requires_clarification ||
         should_recommend_context_reload(perception.confidence);
       append_unique(result.diagnostics, perception.diagnostics);
+
+      emit_pipeline_checkpoint(
+        telemetry_,
+        make_stage_context(request, "execution", false),
+        "decision",
+        "perception",
+        "completed",
+        {
+          TelemetryField{.key = "source", .value = "perception_engine"},
+          TelemetryField{
+            .key = "elapsed_ms",
+            .value = std::to_string(perception_result.elapsed_ms),
+          },
+          TelemetryField{
+            .key = "missing_evidence_count",
+            .value = std::to_string(result.context_sufficiency.missing_evidence_hints.size()),
+          },
+          TelemetryField{
+            .key = "diagnostic_count",
+            .value = std::to_string(result.diagnostics.size()),
+          },
+        });
 
     std::optional<plan::PlanGraph> active_plan_graph;
     append_structured_projection_flag(result.diagnostics, "enabled", "planning");
@@ -831,7 +1128,9 @@ class CognitionFacade final : public ICognitionEngine {
           validation::schema_for_planning_plan());
       append_unique(result.diagnostics, schema_validation.diagnostics);
       if (!schema_validation.ok) {
-        if (!fallback_or_fail_structured_stage(result,
+        if (!fallback_or_fail_structured_stage(telemetry_,
+                                               request,
+                                               result,
                                                rule_fallback_enabled,
                                                contracts::ResultCode::ValidationFieldMissing,
                                                *schema_validation.error_info,
@@ -845,6 +1144,8 @@ class CognitionFacade final : public ICognitionEngine {
         const auto payload_view = parse_bridge_payload_view(*planning_bridge_result);
         if (!payload_view.has_value()) {
           if (!fallback_or_fail_structured_stage(
+            telemetry_,
+            request,
                   result,
                   rule_fallback_enabled,
                   contracts::ResultCode::ValidationFieldMissing,
@@ -862,7 +1163,9 @@ class CognitionFacade final : public ICognitionEngine {
           const auto projected_plan = plan_graph_projector.project_plan_graph(*payload_view);
           append_unique(result.diagnostics, projected_plan.diagnostics);
           if (!projected_plan.ok || !projected_plan.plan_graph.has_value()) {
-            if (!fallback_or_fail_structured_stage(
+              if (!fallback_or_fail_structured_stage(
+                telemetry_,
+                request,
                     result,
                     rule_fallback_enabled,
                     contracts::ResultCode::ValidationFieldMissing,
@@ -881,7 +1184,9 @@ class CognitionFacade final : public ICognitionEngine {
                 *projected_plan.plan_graph, max_plan_nodes, max_plan_depth);
             append_unique(result.diagnostics, plan_validation.diagnostics);
             if (!plan_validation.ok) {
-              if (!fallback_or_fail_structured_stage(result,
+              if (!fallback_or_fail_structured_stage(telemetry_,
+                                                     request,
+                                                     result,
                                                      rule_fallback_enabled,
                                                      contracts::ResultCode::ValidationFieldMissing,
                                                      *plan_validation.error_info,
@@ -923,6 +1228,26 @@ class CognitionFacade final : public ICognitionEngine {
             return planner.build_plan(planning_request);
           });
       if (local_plan_graph.timed_out) {
+        emit_pipeline_checkpoint(
+          telemetry_,
+          make_stage_context(request,
+                     "execution",
+                     has_diagnostic(result.diagnostics, "decision_pipeline.degraded"),
+                     contracts::ResultCode::RuntimeRetryExhausted),
+          "decision",
+          "planning",
+          "timeout",
+          {
+            TelemetryField{.key = "source", .value = "local_planner"},
+            TelemetryField{
+              .key = "elapsed_ms",
+              .value = std::to_string(local_plan_graph.elapsed_ms),
+            },
+            TelemetryField{
+              .key = "deadline_ms",
+              .value = std::to_string(stage_deadline_ms),
+            },
+          });
         apply_decision_failure(
             result,
             contracts::ResultCode::RuntimeRetryExhausted,
@@ -949,9 +1274,42 @@ class CognitionFacade final : public ICognitionEngine {
           append_unique(result.context_sufficiency.missing_evidence_hints, "active_plan");
           append_unique(result.diagnostics, "decision_pipeline.degraded");
           append_unique(result.diagnostics, "decision_pipeline.plan_validation_failed");
+            emit_pipeline_checkpoint(
+              telemetry_,
+              make_stage_context(request, "execution", true),
+              "decision",
+              "planning",
+              "degraded",
+              {
+                TelemetryField{.key = "source", .value = "local_planner"},
+                TelemetryField{
+                  .key = "node_count",
+                  .value = std::to_string(local_plan_graph.value->nodes.size()),
+                },
+                TelemetryField{
+                  .key = "diagnostic_count",
+                  .value = std::to_string(result.diagnostics.size()),
+                },
+              });
           return result;
         }
 
+          emit_pipeline_checkpoint(
+            telemetry_,
+            make_stage_context(request,
+                       "execution",
+                       has_diagnostic(result.diagnostics, "decision_pipeline.degraded"),
+                       contracts::ResultCode::ValidationFieldMissing),
+            "decision",
+            "planning",
+            "failed",
+            {
+              TelemetryField{.key = "source", .value = "local_planner"},
+              TelemetryField{
+                .key = "node_count",
+                .value = std::to_string(local_plan_graph.value->nodes.size()),
+              },
+            });
         apply_decision_failure(result,
                                contracts::ResultCode::ValidationFieldMissing,
                                *plan_validation.error_info,
@@ -961,6 +1319,33 @@ class CognitionFacade final : public ICognitionEngine {
 
       active_plan_graph = *local_plan_graph.value;
     }
+
+  emit_pipeline_checkpoint(
+    telemetry_,
+    make_stage_context(request,
+               "execution",
+               has_diagnostic(result.diagnostics, "decision_pipeline.degraded")),
+    "decision",
+    "planning",
+    has_diagnostic(result.diagnostics, "decision_pipeline.degraded") ? "degraded"
+                                      : "completed",
+    {
+      TelemetryField{
+        .key = "source",
+        .value = find_structured_projection_value(result.diagnostics,
+                              "source",
+                              "planning")
+               .value_or(std::string{"local_planner"}),
+      },
+      TelemetryField{
+        .key = "node_count",
+        .value = std::to_string(active_plan_graph->nodes.size()),
+      },
+      TelemetryField{
+        .key = "diagnostic_count",
+        .value = std::to_string(result.diagnostics.size()),
+      },
+    });
 
     ReasoningRequest reasoning_request;
     reasoning_request.caller_domain = request.caller_domain;
@@ -1000,7 +1385,9 @@ class CognitionFacade final : public ICognitionEngine {
           validation::schema_for_execution_action_decision());
       append_unique(result.diagnostics, schema_validation.diagnostics);
       if (!schema_validation.ok) {
-        if (!fallback_or_fail_structured_stage(result,
+        if (!fallback_or_fail_structured_stage(telemetry_,
+                                               request,
+                                               result,
                                                rule_fallback_enabled,
                                                contracts::ResultCode::ValidationFieldMissing,
                                                *schema_validation.error_info,
@@ -1014,6 +1401,8 @@ class CognitionFacade final : public ICognitionEngine {
         const auto payload_view = parse_bridge_payload_view(*execution_bridge_result);
         if (!payload_view.has_value()) {
           if (!fallback_or_fail_structured_stage(
+            telemetry_,
+            request,
                   result,
                   rule_fallback_enabled,
                   contracts::ResultCode::ValidationFieldMissing,
@@ -1033,6 +1422,8 @@ class CognitionFacade final : public ICognitionEngine {
           append_unique(result.diagnostics, projected_action.diagnostics);
           if (!projected_action.ok || !projected_action.action_decision.has_value()) {
             if (!fallback_or_fail_structured_stage(
+                telemetry_,
+                request,
                     result,
                     rule_fallback_enabled,
                     contracts::ResultCode::ValidationFieldMissing,
@@ -1052,7 +1443,9 @@ class CognitionFacade final : public ICognitionEngine {
               &reasoning_request.active_plan);
             append_unique(result.diagnostics, decision_validation.diagnostics);
             if (!decision_validation.ok) {
-              if (!fallback_or_fail_structured_stage(result,
+              if (!fallback_or_fail_structured_stage(telemetry_,
+                                                     request,
+                                                     result,
                                                      rule_fallback_enabled,
                                                      contracts::ResultCode::ValidationFieldMissing,
                                                      *decision_validation.error_info,
@@ -1084,6 +1477,26 @@ class CognitionFacade final : public ICognitionEngine {
             return reasoner.decide(reasoning_request);
           });
       if (local_action_decision.timed_out) {
+        emit_pipeline_checkpoint(
+          telemetry_,
+          make_stage_context(request,
+                     "execution",
+                     has_diagnostic(result.diagnostics, "decision_pipeline.degraded"),
+                     contracts::ResultCode::RuntimeRetryExhausted),
+          "decision",
+          "execution",
+          "timeout",
+          {
+            TelemetryField{.key = "source", .value = "local_reasoner"},
+            TelemetryField{
+              .key = "elapsed_ms",
+              .value = std::to_string(local_action_decision.elapsed_ms),
+            },
+            TelemetryField{
+              .key = "deadline_ms",
+              .value = std::to_string(stage_deadline_ms),
+            },
+          });
         apply_decision_failure(
             result,
             contracts::ResultCode::RuntimeRetryExhausted,
@@ -1107,6 +1520,22 @@ class CognitionFacade final : public ICognitionEngine {
           append_unique(result.diagnostics, "decision_pipeline.degraded");
           append_unique(result.diagnostics, "decision_pipeline.action_validation_failed");
         } else {
+          emit_pipeline_checkpoint(
+            telemetry_,
+            make_stage_context(request,
+                     "execution",
+                     has_diagnostic(result.diagnostics, "decision_pipeline.degraded"),
+                     contracts::ResultCode::ValidationFieldMissing),
+            "decision",
+            "execution",
+            "failed",
+            {
+              TelemetryField{.key = "source", .value = "local_reasoner"},
+              TelemetryField{
+                .key = "candidate_count",
+                .value = std::to_string(local_action_decision.value->candidate_scores.size()),
+              },
+            });
           apply_decision_failure(result,
                                  contracts::ResultCode::ValidationFieldMissing,
                                  *decision_validation.error_info,
@@ -1117,6 +1546,33 @@ class CognitionFacade final : public ICognitionEngine {
         resolved_action_decision = *local_action_decision.value;
       }
     }
+
+      emit_pipeline_checkpoint(
+        telemetry_,
+        make_stage_context(request,
+                   "execution",
+                   has_diagnostic(result.diagnostics, "decision_pipeline.degraded")),
+        "decision",
+        "execution",
+        has_diagnostic(result.diagnostics, "decision_pipeline.degraded") ? "degraded"
+                                          : "completed",
+        {
+          TelemetryField{
+            .key = "source",
+            .value = find_structured_projection_value(result.diagnostics,
+                                  "source",
+                                  "execution")
+                   .value_or(std::string{"local_reasoner"}),
+          },
+          TelemetryField{
+            .key = "candidate_count",
+            .value = std::to_string(resolved_action_decision->candidate_scores.size()),
+          },
+          TelemetryField{
+            .key = "diagnostic_count",
+            .value = std::to_string(result.diagnostics.size()),
+          },
+        });
 
     result.action_decision = *resolved_action_decision;
     result.belief_update_hint = belief_update_synthesizer_.synthesize_from_decide(
@@ -1163,6 +1619,31 @@ class CognitionFacade final : public ICognitionEngine {
       return result;
     }
 
+      emit_pipeline_checkpoint(
+        telemetry_,
+        make_stage_context(request, "reflection", false),
+        "reflection",
+        "policy_plan",
+        "resolved",
+        {
+          TelemetryField{
+            .key = "source",
+            .value = reflection_plan.has_value() ? "runtime_policy" : "config",
+          },
+          TelemetryField{
+            .key = "deadline_ms",
+            .value = std::to_string(stage_deadline_ms),
+          },
+          TelemetryField{
+            .key = "llm_bridge_enabled",
+            .value = llm_bridge_ != nullptr ? "true" : "false",
+          },
+          TelemetryField{
+            .key = "fallback_allowed",
+            .value = request.execution_hints.degraded_path_allowed ? "true" : "false",
+          },
+        });
+
     consume_reflection_bridge_stage(request, result, reflection_hint);
     if (result.error_info.has_value()) {
       return result;
@@ -1186,6 +1667,27 @@ class CognitionFacade final : public ICognitionEngine {
           return reflection_engine.analyze(analysis_request);
         });
     if (reflection_decision.timed_out) {
+      emit_pipeline_checkpoint(
+        telemetry_,
+        make_stage_context(request,
+                 "reflection",
+                 has_diagnostic(result.diagnostics,
+                        "reflection_pipeline.llm_bridge_degraded:reflection"),
+                 contracts::ResultCode::RuntimeRetryExhausted),
+        "reflection",
+        "analysis",
+        "timeout",
+        {
+          TelemetryField{.key = "source", .value = "reflection_engine"},
+          TelemetryField{
+            .key = "elapsed_ms",
+            .value = std::to_string(reflection_decision.elapsed_ms),
+          },
+          TelemetryField{
+            .key = "deadline_ms",
+            .value = std::to_string(stage_deadline_ms),
+          },
+        });
       apply_reflection_failure(
           result,
           contracts::ResultCode::RuntimeRetryExhausted,
@@ -1201,6 +1703,28 @@ class CognitionFacade final : public ICognitionEngine {
     result.reflection_decision = *reflection_decision.value;
     result.belief_update_hint = belief_update_synthesizer_.synthesize_from_reflection(
         *reflection_decision.value, request.belief_state, request.latest_observation);
+  emit_pipeline_checkpoint(
+    telemetry_,
+    make_stage_context(request,
+               "reflection",
+               has_diagnostic(result.diagnostics,
+                      "reflection_pipeline.llm_bridge_degraded:reflection")),
+    "reflection",
+    "analysis",
+    has_diagnostic(result.diagnostics, "reflection_pipeline.llm_bridge_degraded:reflection")
+      ? "degraded"
+      : "completed",
+    {
+      TelemetryField{.key = "source", .value = "reflection_engine"},
+      TelemetryField{
+        .key = "elapsed_ms",
+        .value = std::to_string(reflection_decision.elapsed_ms),
+      },
+      TelemetryField{
+        .key = "diagnostic_count",
+        .value = std::to_string(result.diagnostics.size()),
+      },
+    });
     append_unique(result.diagnostics, "reflection_pipeline.completed");
     return result;
   }
@@ -1216,6 +1740,11 @@ class CognitionFacade final : public ICognitionEngine {
       CognitionDecisionResult& result,
       const StageModelHint* stage_model_hint) const {
     if (!llm_bridge_) {
+      const auto bridge_unavailable_error = make_error_info(
+          contracts::ResultCode::RuntimeRetryExhausted,
+          stage,
+          "structured stage requires llm_bridge but no bridge is available",
+          "cognition::llm_bridge::CognitionLlmBridge");
       append_unique(result.diagnostics, std::string{"llm_bridge.unavailable:"} + stage);
       append_structured_projection_value(result.diagnostics, "failure_code", stage, "provider");
       if (fallback_allowed) {
@@ -1223,14 +1752,34 @@ class CognitionFacade final : public ICognitionEngine {
         append_unique(result.diagnostics, "decision_pipeline.degraded");
         append_unique(result.diagnostics, std::string{"structured_projection.local_fallback:"} + stage);
         append_structured_projection_value(result.diagnostics, "source", stage, "local_fallback");
+        emit_decision_bridge_checkpoint(telemetry_,
+                                        request,
+                                        stage,
+                                        "degraded",
+                                        true,
+                                        "provider",
+                                        std::nullopt,
+                                        &bridge_unavailable_error,
+                                        std::nullopt,
+                                        std::nullopt,
+                                        result.diagnostics.size());
       } else {
         apply_decision_failure(result,
                                contracts::ResultCode::RuntimeRetryExhausted,
-                               make_error_info(contracts::ResultCode::RuntimeRetryExhausted,
-                                               stage,
-                                               "structured stage requires llm_bridge but no bridge is available",
-                                               "cognition::llm_bridge::CognitionLlmBridge"),
+                               bridge_unavailable_error,
                                std::string{"decision_pipeline.llm_bridge_failed:"} + stage);
+        emit_decision_bridge_checkpoint(telemetry_,
+                                        request,
+                                        stage,
+                                        "failed",
+                                        false,
+                                        "provider",
+                                        result.result_code,
+                                        result.error_info.has_value() ? &(*result.error_info)
+                                                                      : &bridge_unavailable_error,
+                                        std::nullopt,
+                                        std::nullopt,
+                                        result.diagnostics.size());
       }
       return std::nullopt;
     }
@@ -1268,23 +1817,48 @@ class CognitionFacade final : public ICognitionEngine {
           return llm_bridge->invoke_stage(bridge_request);
         });
     if (bridge_result.timed_out) {
+      const auto timeout_error = make_stage_timeout_error_info(
+          stage,
+          request.request_id,
+          request.trace_id,
+          bridge_result.elapsed_ms,
+          "cognition::llm_bridge::CognitionLlmBridge");
       append_structured_projection_value(result.diagnostics, "failure_code", stage, "timeout");
       if (fallback_allowed) {
         append_unique(result.diagnostics, std::string{"decision_pipeline.llm_bridge_degraded:"} + stage);
         append_unique(result.diagnostics, "decision_pipeline.degraded");
         append_unique(result.diagnostics, std::string{"structured_projection.local_fallback:"} + stage);
         append_structured_projection_value(result.diagnostics, "source", stage, "local_fallback");
+        emit_decision_bridge_checkpoint(telemetry_,
+                                        request,
+                                        stage,
+                                        "degraded",
+                                        true,
+                                        "timeout",
+                                        std::nullopt,
+                                        &timeout_error,
+                                        bridge_result.elapsed_ms,
+                                        bridge_request.model_hint.deadline_ms,
+                                        result.diagnostics.size());
         return std::nullopt;
       }
 
       apply_decision_failure(result,
                              contracts::ResultCode::RuntimeRetryExhausted,
-                             make_stage_timeout_error_info(stage,
-                                                           request.request_id,
-                                                           request.trace_id,
-                                                           bridge_result.elapsed_ms,
-                                                           "cognition::llm_bridge::CognitionLlmBridge"),
+                             timeout_error,
                              std::string{"decision_pipeline.stage_timeout:"} + stage);
+      emit_decision_bridge_checkpoint(telemetry_,
+                                      request,
+                                      stage,
+                                      "failed",
+                                      false,
+                                      "timeout",
+                                      result.result_code,
+                                      result.error_info.has_value() ? &(*result.error_info)
+                                                                    : &timeout_error,
+                                      bridge_result.elapsed_ms,
+                                      bridge_request.model_hint.deadline_ms,
+                                      result.diagnostics.size());
       return std::nullopt;
     }
 
@@ -1295,11 +1869,29 @@ class CognitionFacade final : public ICognitionEngine {
 
     append_structured_projection_value(result.diagnostics, "failure_code", stage, "provider");
 
+    const auto resolved_route =
+      find_prefixed_diagnostic_value(bridge_result.value->diagnostics, "route:");
+    const auto failure_category =
+      find_prefixed_diagnostic_value(bridge_result.value->diagnostics, "llm_failure:");
+
     if (fallback_allowed) {
       append_unique(result.diagnostics, "decision_pipeline.degraded");
       append_unique(result.diagnostics, std::string{"structured_projection.local_fallback:"} + stage);
       append_structured_projection_value(result.diagnostics, "source", stage, "local_fallback");
       append_unique(result.diagnostics, std::string{"decision_pipeline.llm_bridge_degraded:"} + stage);
+      emit_decision_bridge_checkpoint(telemetry_,
+                                      request,
+                                      stage,
+                                      "degraded",
+                                      true,
+                                      "provider",
+                                      std::nullopt,
+                                      &(*bridge_result.value->error_info),
+                                      bridge_result.elapsed_ms,
+                                      bridge_request.model_hint.deadline_ms,
+                                      result.diagnostics.size(),
+                                      resolved_route,
+                                      failure_category);
       return std::nullopt;
     }
 
@@ -1308,6 +1900,20 @@ class CognitionFacade final : public ICognitionEngine {
                                contracts::ResultCode::RuntimeRetryExhausted),
                            *bridge_result.value->error_info,
                            std::string{"decision_pipeline.llm_bridge_failed:"} + stage);
+    emit_decision_bridge_checkpoint(telemetry_,
+                                    request,
+                                    stage,
+                                    "failed",
+                                    false,
+                                    "provider",
+                                    result.result_code,
+                                    result.error_info.has_value() ? &(*result.error_info)
+                                                                  : &(*bridge_result.value->error_info),
+                                    bridge_result.elapsed_ms,
+                                    bridge_request.model_hint.deadline_ms,
+                                    result.diagnostics.size(),
+                                    resolved_route,
+                                    failure_category);
     return std::nullopt;
   }
 
@@ -1316,6 +1922,16 @@ class CognitionFacade final : public ICognitionEngine {
                                        const StageModelHint* stage_model_hint) const {
     if (!llm_bridge_) {
       append_unique(result.diagnostics, "llm_bridge.unavailable:reflection");
+      emit_reflection_bridge_checkpoint(telemetry_,
+                                        request,
+                                        "degraded",
+                                        request.execution_hints.degraded_path_allowed,
+                                        "provider",
+                                        std::nullopt,
+                                        nullptr,
+                                        std::nullopt,
+                                        std::nullopt,
+                                        result.diagnostics.size());
       return;
     }
 
@@ -1348,15 +1964,28 @@ class CognitionFacade final : public ICognitionEngine {
           return llm_bridge->invoke_stage(bridge_request);
         });
     if (bridge_result.timed_out) {
+      const auto timeout_error = make_stage_timeout_error_info(
+          "reflection",
+          request.request_id,
+          request.trace_id,
+          bridge_result.elapsed_ms,
+          "cognition::llm_bridge::CognitionLlmBridge");
       apply_reflection_failure(
           result,
           contracts::ResultCode::RuntimeRetryExhausted,
-          make_stage_timeout_error_info("reflection",
-                                        request.request_id,
-                                        request.trace_id,
-                                        bridge_result.elapsed_ms,
-                                        "cognition::llm_bridge::CognitionLlmBridge"),
+          timeout_error,
           "reflection_pipeline.stage_timeout:reflection");
+      emit_reflection_bridge_checkpoint(telemetry_,
+                                        request,
+                                        "failed",
+                                        request.execution_hints.degraded_path_allowed,
+                                        "timeout",
+                                        result.result_code,
+                                        result.error_info.has_value() ? &(*result.error_info)
+                                                                      : &timeout_error,
+                                        bridge_result.elapsed_ms,
+                                        bridge_request.model_hint.deadline_ms,
+                                        result.diagnostics.size());
       return;
     }
 
@@ -1365,8 +1994,25 @@ class CognitionFacade final : public ICognitionEngine {
       return;
     }
 
+    const auto resolved_route =
+        find_prefixed_diagnostic_value(bridge_result.value->diagnostics, "route:");
+    const auto failure_category =
+        find_prefixed_diagnostic_value(bridge_result.value->diagnostics, "llm_failure:");
+
     if (request.execution_hints.degraded_path_allowed) {
       append_unique(result.diagnostics, "reflection_pipeline.llm_bridge_degraded:reflection");
+      emit_reflection_bridge_checkpoint(telemetry_,
+                                        request,
+                                        "degraded",
+                                        true,
+                                        "provider",
+                                        std::nullopt,
+                                        &(*bridge_result.value->error_info),
+                                        bridge_result.elapsed_ms,
+                                        bridge_request.model_hint.deadline_ms,
+                                        result.diagnostics.size(),
+                                        resolved_route,
+                                        failure_category);
       return;
     }
 
@@ -1375,6 +2021,19 @@ class CognitionFacade final : public ICognitionEngine {
                                  contracts::ResultCode::RuntimeRetryExhausted),
                  *bridge_result.value->error_info,
                              "reflection_pipeline.llm_bridge_failed:reflection");
+    emit_reflection_bridge_checkpoint(telemetry_,
+                                      request,
+                                      "failed",
+                                      false,
+                                      "provider",
+                                      result.result_code,
+                                      result.error_info.has_value() ? &(*result.error_info)
+                                                                    : &(*bridge_result.value->error_info),
+                                      bridge_result.elapsed_ms,
+                                      bridge_request.model_hint.deadline_ms,
+                                      result.diagnostics.size(),
+                                      resolved_route,
+                                      failure_category);
   }
 
   CognitionConfig config_;

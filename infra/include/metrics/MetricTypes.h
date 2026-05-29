@@ -22,12 +22,15 @@ enum class MetricTemporality {
   Delta,
 };
 
-inline constexpr std::array<std::string_view, 5> kMetricLabelAllowlist{
+inline constexpr std::array<std::string_view, 8> kMetricLabelAllowlist{
     "module",
     "stage",
     "profile",
     "outcome",
     "error_code",
+  "resolved_route",
+  "failure_category",
+  "error_type",
 };
 
 inline constexpr std::string_view kPlanningMetricStageLabel = "planning";
@@ -92,6 +95,9 @@ struct MetricLabels {
   std::string profile;
   std::string outcome;
   std::string error_code;
+  std::string resolved_route{};
+  std::string failure_category{};
+  std::string error_type{};
 
   [[nodiscard]] bool is_valid() const {
     return !module.empty() && !stage.empty() && !profile.empty() && !outcome.empty();

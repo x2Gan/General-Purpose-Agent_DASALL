@@ -14,6 +14,7 @@
 #include "StagePolicyResolver.h"
 #include "RuntimePolicySnapshot.h"
 #include "config/CognitionConfigProjector.h"
+#include "error/ResultCode.h"
 #include "llm/CognitionLlmBridge.h"
 #include "observability/CognitionTelemetry.h"
 #include "validation/InputBoundaryValidator.h"
@@ -48,6 +49,7 @@ using observability::CognitionTelemetry;
 using observability::DegradeTelemetryRecord;
 using observability::StageTelemetryContext;
 using observability::TelemetryEmitResult;
+using observability::TelemetryField;
 
 [[nodiscard]] const StageModelHint* find_stage_model_hint(
     const policy::StageExecutionPlan& plan,
@@ -68,6 +70,123 @@ using observability::TelemetryEmitResult;
 }
 
 void ignore_emit_result(const TelemetryEmitResult&) {}
+
+void append_detail_field(std::vector<TelemetryField>& fields,
+                         std::string key,
+                         std::string value) {
+  if (value.empty()) {
+    return;
+  }
+
+  fields.push_back(TelemetryField{
+      .key = std::move(key),
+      .value = std::move(value),
+  });
+}
+
+void append_detail_field(std::vector<TelemetryField>& fields,
+                         std::string key,
+                         const bool value) {
+  append_detail_field(fields,
+                      std::move(key),
+                      std::string(value ? "true" : "false"));
+}
+
+void emit_response_checkpoint(CognitionTelemetry& telemetry,
+                              const StageTelemetryContext& context,
+                              std::string step,
+                              std::string outcome,
+                              std::vector<TelemetryField> extra_fields = {}) {
+  std::vector<TelemetryField> fields;
+  fields.reserve(extra_fields.size() + 3U);
+  append_detail_field(fields, "pipeline", "response");
+  append_detail_field(fields, "step", std::move(step));
+  append_detail_field(fields, "outcome", std::move(outcome));
+  for (auto& field : extra_fields) {
+    append_detail_field(fields, std::move(field.key), std::move(field.value));
+  }
+
+  ignore_emit_result(
+      telemetry.emit_detail_event("pipeline.checkpoint", context, std::move(fields)));
+}
+
+[[nodiscard]] std::string response_mode_name(const ResponseMode mode) {
+  switch (mode) {
+    case ResponseMode::LlmBridge:
+      return "llm_bridge";
+    case ResponseMode::ObservationProjection:
+      return "observation_projection";
+    case ResponseMode::TemplateFallback:
+      return "template_fallback";
+    case ResponseMode::Unavailable:
+      return "unavailable";
+  }
+
+  return "unavailable";
+}
+
+[[nodiscard]] std::string resolved_response_mode(const ResponseBuildResult& result,
+                                                const ResponseMode selected_mode) {
+  for (const auto& diagnostic : result.diagnostics) {
+    static constexpr std::string_view kPrefix = "response_mode:";
+    if (diagnostic.rfind(kPrefix, 0) == 0) {
+      return diagnostic.substr(kPrefix.size());
+    }
+  }
+
+  return response_mode_name(selected_mode);
+}
+
+[[nodiscard]] bool contains_diagnostic(const std::vector<std::string>& diagnostics,
+                                       const std::string_view expected) {
+  return std::find(diagnostics.begin(), diagnostics.end(), expected) !=
+         diagnostics.end();
+}
+
+[[nodiscard]] std::optional<std::string> find_prefixed_diagnostic_value(
+    const std::vector<std::string>& diagnostics,
+    const std::string_view prefix) {
+  for (const auto& diagnostic : diagnostics) {
+    if (diagnostic.rfind(prefix, 0) == 0 && diagnostic.size() > prefix.size()) {
+      return diagnostic.substr(prefix.size());
+    }
+  }
+
+  return std::nullopt;
+}
+
+void append_error_type_field(std::vector<TelemetryField>& fields,
+                             const std::optional<contracts::ErrorInfo>& error_info,
+                             const std::optional<contracts::ResultCode>& result_code) {
+  if (error_info.has_value() && error_info->failure_type.has_value()) {
+    append_detail_field(
+        fields,
+        "error_type",
+        std::string(contracts::result_code_category_name(*error_info->failure_type)));
+    return;
+  }
+
+  if (result_code.has_value()) {
+    append_detail_field(fields,
+                        "error_type",
+                        std::string(contracts::result_code_category_name(
+                            contracts::classify_result_code(*result_code))));
+  }
+}
+
+[[nodiscard]] std::string resolved_response_source(const ResponseBuildResult& result,
+                                                   const ResponseMode selected_mode) {
+  if (contains_diagnostic(result.diagnostics, "llm_bridge.invoked:response")) {
+    return "llm_bridge";
+  }
+
+  const auto mode = resolved_response_mode(result, selected_mode);
+  if (mode == "unavailable") {
+    return "mode_selection";
+  }
+
+  return mode;
+}
 
 [[nodiscard]] std::string require_goal_id(const contracts::GoalContract& goal_contract) {
   return goal_contract.goal_id.value_or(std::string{});
@@ -112,14 +231,32 @@ void ignore_emit_result(const TelemetryEmitResult&) {}
       diagnostics.end()) {
     return "llm_bridge_empty_payload";
   }
+  if (std::find(diagnostics.begin(), diagnostics.end(), "response_llm_route_fallback") !=
+      diagnostics.end()) {
+    return "llm_route_fallback";
+  }
+  return "template_fallback";
+}
+
+[[nodiscard]] std::string derive_fallback_mode(
+    const std::vector<std::string>& diagnostics) {
+  if (std::find(diagnostics.begin(), diagnostics.end(), "response_llm_route_fallback") !=
+      diagnostics.end()) {
+    return "llm_route_fallback";
+  }
+
   return "template_fallback";
 }
 
 [[nodiscard]] DegradeTelemetryRecord make_degrade_record(
     const ResponseBuildResult& result) {
   DegradeTelemetryRecord record{
-      .fallback_mode = "template_fallback",
+      .fallback_mode = derive_fallback_mode(result.diagnostics),
       .reason = derive_degrade_reason(result.diagnostics),
+    .resolved_route = find_prefixed_diagnostic_value(result.diagnostics, "route:"),
+    .failure_category =
+      find_prefixed_diagnostic_value(result.diagnostics, "llm_failure:"),
+    .error_type = find_prefixed_diagnostic_value(result.diagnostics, "error_type:"),
       .payload_excerpt = std::nullopt,
       .omitted_details = result.diagnostics,
       .audit_refs = {},
@@ -525,6 +662,9 @@ void append_bridge_diagnostics(std::vector<std::string>& diagnostics,
   } else {
     append_unique(diagnostics, "llm_bridge.completed:response");
   }
+  if (bridge_result.fallback_used) {
+    append_unique(diagnostics, "response_llm_route_fallback");
+  }
   for (const auto& diagnostic : bridge_result.diagnostics) {
     append_unique(diagnostics, diagnostic);
   }
@@ -736,16 +876,44 @@ class ResponseBuilder final : public IResponseBuilder {
       return result;
     }
 
-    switch (select_response_mode(config_,
-                                 request,
-                                 llm_bridge_ != nullptr,
-                                 response_plan.has_value() ? &(*response_plan) : nullptr)) {
+      const auto* response_plan_ptr =
+        response_plan.has_value() ? &(*response_plan) : nullptr;
+      const auto fallback_allowed =
+        template_fallback_enabled(config_, request, response_plan_ptr);
+      const auto selected_mode =
+        select_response_mode(config_, request, llm_bridge_ != nullptr, response_plan_ptr);
+
+      emit_response_checkpoint(
+        telemetry_,
+        make_response_stage_context(request, false),
+        "mode_selection",
+        "selected",
+        {
+          TelemetryField{
+            .key = "source",
+            .value = policy_snapshot_ != nullptr ? "runtime_policy" : "config",
+          },
+          TelemetryField{
+            .key = "mode",
+            .value = response_mode_name(selected_mode),
+          },
+          TelemetryField{
+            .key = "llm_bridge_enabled",
+            .value = llm_bridge_ != nullptr ? "true" : "false",
+          },
+          TelemetryField{
+            .key = "fallback_allowed",
+            .value = fallback_allowed ? "true" : "false",
+          },
+        });
+
+      switch (selected_mode) {
       case ResponseMode::LlmBridge:
         result = build_with_llm_bridge(
             config_,
             request,
             *llm_bridge_,
-            response_plan.has_value() ? &(*response_plan) : nullptr);
+          response_plan_ptr);
         break;
       case ResponseMode::ObservationProjection:
         result = build_with_observation_projection(config_, request);
@@ -762,6 +930,55 @@ class ResponseBuilder final : public IResponseBuilder {
     }
 
     telemetry_context = make_response_stage_context(request, result.fallback_used, result.result_code);
+    const auto checkpoint_mode = resolved_response_mode(result, selected_mode);
+    std::vector<TelemetryField> build_checkpoint_fields;
+    build_checkpoint_fields.reserve(8U);
+    build_checkpoint_fields.push_back(TelemetryField{
+        .key = "mode",
+        .value = checkpoint_mode,
+    });
+    build_checkpoint_fields.push_back(TelemetryField{
+        .key = "source",
+        .value = resolved_response_source(result, selected_mode),
+    });
+    build_checkpoint_fields.push_back(TelemetryField{
+        .key = "diagnostic_count",
+        .value = std::to_string(result.diagnostics.size()),
+    });
+    if (const auto resolved_route =
+            find_prefixed_diagnostic_value(result.diagnostics, "route:");
+        resolved_route.has_value()) {
+      append_detail_field(
+          build_checkpoint_fields, "resolved_route", resolved_route.value());
+    }
+    if (const auto failure_category =
+            find_prefixed_diagnostic_value(result.diagnostics, "llm_failure:");
+        failure_category.has_value()) {
+      append_detail_field(
+          build_checkpoint_fields, "failure_category", failure_category.value());
+    }
+    if (const auto error_type =
+            find_prefixed_diagnostic_value(result.diagnostics, "error_type:");
+        error_type.has_value()) {
+      append_detail_field(build_checkpoint_fields, "error_type", error_type.value());
+    } else {
+      append_error_type_field(build_checkpoint_fields, result.error_info, result.result_code);
+    }
+    if (result.fallback_used) {
+      append_detail_field(build_checkpoint_fields,
+                          "fallback_mode",
+                          derive_fallback_mode(result.diagnostics));
+      append_detail_field(build_checkpoint_fields,
+                          "degrade_reason",
+                          derive_degrade_reason(result.diagnostics));
+    }
+    emit_response_checkpoint(
+      telemetry_,
+      telemetry_context,
+      "build",
+      result.error_info.has_value() ? "failed"
+                      : (result.fallback_used ? "degraded" : "completed"),
+      std::move(build_checkpoint_fields));
     if (result.error_info.has_value()) {
       ignore_emit_result(telemetry_.emit_stage_failed(telemetry_context, *result.error_info));
       return result;

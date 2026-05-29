@@ -77,8 +77,12 @@ void test_invoke_stage_projects_llm_failure_to_cognition_error_surface() {
                "error source should point back to the cognition llm bridge");
   assert_equal(std::string("execution"), result.error_info->source_ref.ref_id,
                "error source id should use the normalized stage key");
+  assert_true(contains_token(result.diagnostics, "route:llm.exec.primary"),
+              "bridge diagnostics should preserve the resolved route on failing llm calls");
   assert_true(contains_token(result.diagnostics, "llm_failure:adapter_transport"),
               "bridge diagnostics should preserve the llm failure category");
+  assert_true(contains_token(result.diagnostics, "error_type:provider"),
+              "bridge diagnostics should project the contract error type for failing llm calls");
 }
 
 void test_invoke_stage_prefers_streaming_and_projects_stream_failure() {
@@ -117,8 +121,12 @@ void test_invoke_stage_prefers_streaming_and_projects_stream_failure() {
               "failed streaming llm calls must expose an ErrorInfo payload");
   assert_equal(std::string("execution"), result.error_info->details.stage,
                "streaming failures should still be rewritten onto the canonical cognition stage");
+  assert_true(contains_token(result.diagnostics, "route:deepseek-prod/deepseek-chat"),
+              "streaming bridge diagnostics should preserve the resolved route on failing llm calls");
   assert_true(contains_token(result.diagnostics, "llm_failure:adapter_transport"),
               "streaming bridge diagnostics should preserve the llm failure category");
+  assert_true(contains_token(result.diagnostics, "error_type:provider"),
+              "streaming bridge diagnostics should project the contract error type for failing llm calls");
 }
 
 }  // namespace

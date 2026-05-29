@@ -60,6 +60,9 @@ struct DecisionTelemetryRecord {
 struct DegradeTelemetryRecord {
   std::string fallback_mode;
   std::string reason;
+  std::optional<std::string> resolved_route;
+  std::optional<std::string> failure_category;
+  std::optional<std::string> error_type;
   std::optional<std::string> payload_excerpt;
   std::vector<std::string> omitted_details;
   AuditReferenceSet audit_refs;
@@ -114,6 +117,11 @@ class CognitionTelemetry {
   [[nodiscard]] TelemetryEmitResult emit_response_degraded(
       const StageTelemetryContext& context,
       const DegradeTelemetryRecord& record) const;
+    [[nodiscard]] TelemetryEmitResult emit_detail_event(
+      std::string event_name,
+      const StageTelemetryContext& context,
+      std::vector<TelemetryField> fields = {},
+      AuditReferenceSet audit_refs = {}) const;
 
   [[nodiscard]] static DecisionTelemetryRecord make_decision_record(
       const decision::ActionDecision& action_decision);

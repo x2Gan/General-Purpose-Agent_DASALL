@@ -2,11 +2,16 @@
 
 #include <cstdint>
 #include <deque>
+#include <memory>
 #include <mutex>
 #include <optional>
 #include <string>
 
 #include "scheduling/IScheduler.h"
+
+namespace dasall::infra::logging {
+class ILogger;
+}
 
 namespace dasall::runtime {
 
@@ -15,6 +20,10 @@ class Scheduler final : public IScheduler {
   explicit Scheduler(
       std::uint32_t recovery_queue_limit = 2,
       std::uint32_t maintenance_queue_limit = 16);
+
+  void set_logger(
+      std::shared_ptr<infra::logging::ILogger> logger,
+      std::optional<std::string> runtime_instance_id = std::nullopt);
 
   [[nodiscard]] SchedulerEnqueueResult enqueue(
       const SchedulerTicketRequest& request) override;
@@ -50,6 +59,8 @@ class Scheduler final : public IScheduler {
   std::uint64_t next_sequence_ = 1;
   std::uint32_t recovery_queue_limit_ = 2;
   std::uint32_t maintenance_queue_limit_ = 16;
+    std::shared_ptr<infra::logging::ILogger> logger_;
+    std::optional<std::string> runtime_instance_id_;
 };
 
 }  // namespace dasall::runtime

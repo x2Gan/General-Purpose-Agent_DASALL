@@ -8,6 +8,7 @@
 #include <string_view>
 #include <vector>
 
+#include "../logging/RuntimeStructuredLogUtils.h"
 #include "CheckpointStateMapper.h"
 
 namespace dasall::runtime {
@@ -580,198 +581,29 @@ template <typename Integer>
   return make_checkpoint_consistent_report();
 }
 
-}  // namespace
-
-void CheckpointManager::set_durable_state_root(
-    const std::optional<std::string>& state_root) {
-  const std::lock_guard<std::mutex> lock(ckpt_mutex_);
-  if (state_root.has_value() && !state_root->empty()) {
-    durable_state_root_ = state_root;
-    return;
+[[nodiscard]] const char* checkpoint_state_name(const contracts::CheckpointState state) {
+  switch (state) {
+    case contracts::CheckpointState::Unspecified:
+      return "Unspecified";
+    case contracts::CheckpointState::Running:
+      return "Running";
+    case contracts::CheckpointState::Paused:
+      return "Paused";
+    case contracts::CheckpointState::WaitingConfirm:
+      return "WaitingConfirm";
+    case contracts::CheckpointState::WaitingTool:
+      return "WaitingTool";
+    case contracts::CheckpointState::Failed:
+      return "Failed";
+    case contracts::CheckpointState::Succeeded:
+      return "Succeeded";
   }
 
-  durable_state_root_ = std::nullopt;
+  return "Unknown";
 }
 
-CheckpointBuildResult CheckpointManager::build_checkpoint(
-    const CheckpointBuildRequest& request) const {
-  if (!request.transition_outcome.accepted) {
-    return CheckpointBuildResult{
-        .checkpoint = std::nullopt,
-        .report = reject_checkpoint(
-            CheckpointConsistencyIssue::TransitionRejected,
-            "checkpoint build requires an accepted transition outcome"),
-    };
-  }
-
-  const auto checkpoint_state = resolve_checkpoint_state(request.transition_outcome);
-  if (!checkpoint_state.has_value()) {
-    return CheckpointBuildResult{
-        .checkpoint = std::nullopt,
-        .report = reject_checkpoint(
-            CheckpointConsistencyIssue::InvalidCheckpointState,
-            "resolved runtime state cannot be folded into a compatible checkpoint state"),
-    };
-  }
-
-  const contracts::Checkpoint checkpoint{
-      .checkpoint_id = request.checkpoint_id,
-      .state = checkpoint_state,
-      .step_id = request.step_id,
-      .working_memory_snapshot = request.working_memory_snapshot,
-      .pending_action = request.pending_action.has_value()
-                            ? request.pending_action
-                            : std::optional<std::string>(std::string()),
-      .request_id = request.request_id,
-      .goal_id = request.goal_id,
-      .belief_state_ref = request.belief_state_ref,
-      .retry_count = request.retry_count,
-      .created_at = request.created_at_ms,
-      .tags = with_runtime_checkpoint_version_tags(request.tags),
-  };
-
-  const auto report = validate(checkpoint);
-  if (report.consistent && checkpoint.checkpoint_id.has_value()) {
-    const std::lock_guard<std::mutex> lock(ckpt_mutex_);
-    pending_runtime_budget_snapshots_[*checkpoint.checkpoint_id] =
-        request.runtime_budget_snapshot;
-  }
-
-  return CheckpointBuildResult{
-      .checkpoint = report.consistent ? std::optional<contracts::Checkpoint>(checkpoint)
-                                      : std::nullopt,
-      .report = report,
-      .runtime_budget_snapshot = request.runtime_budget_snapshot,
-  };
-}
-
-CheckpointPersistResult CheckpointManager::save(const contracts::Checkpoint& checkpoint) {
-  std::optional<contracts::BudgetSnapshot> runtime_budget_snapshot;
-  if (checkpoint.checkpoint_id.has_value()) {
-    const std::lock_guard<std::mutex> lock(ckpt_mutex_);
-    const auto iterator = pending_runtime_budget_snapshots_.find(*checkpoint.checkpoint_id);
-    if (iterator != pending_runtime_budget_snapshots_.end()) {
-      runtime_budget_snapshot = iterator->second;
-      pending_runtime_budget_snapshots_.erase(iterator);
-    }
-  }
-
-  return save(checkpoint, runtime_budget_snapshot);
-}
-
-CheckpointPersistResult CheckpointManager::save(
-    const contracts::Checkpoint& checkpoint,
-    const std::optional<contracts::BudgetSnapshot>& runtime_budget_snapshot) {
-  const auto report = validate(checkpoint);
-  if (!report.consistent) {
-    return CheckpointPersistResult{
-        .persisted = false,
-        .checkpoint_ref = std::nullopt,
-        .error_code = RuntimeErrorCode::RT_E_411_CHECKPOINT_SAVE_FAILED,
-        .detail = report.detail,
-    };
-  }
-
-  const std::lock_guard<std::mutex> lock(ckpt_mutex_);
-  stored_checkpoints_[checkpoint.checkpoint_id.value()] = StoredCheckpointRecord{
-      .checkpoint = checkpoint,
-      .runtime_budget_snapshot = runtime_budget_snapshot,
-  };
-  pending_runtime_budget_snapshots_.erase(checkpoint.checkpoint_id.value());
-
-  std::string persist_detail = "checkpoint persisted in memory store";
-  if (durable_state_root_.has_value() &&
-      !write_durable_checkpoint_record(
-          *durable_state_root_, checkpoint, runtime_budget_snapshot, persist_detail)) {
-    return CheckpointPersistResult{
-        .persisted = false,
-        .checkpoint_ref = std::nullopt,
-        .error_code = RuntimeErrorCode::RT_E_411_CHECKPOINT_SAVE_FAILED,
-        .detail = persist_detail,
-    };
-  }
-
-  return CheckpointPersistResult{
-      .persisted = true,
-      .checkpoint_ref = checkpoint.checkpoint_id,
-      .error_code = std::nullopt,
-      .detail = std::move(persist_detail),
-  };
-}
-
-CheckpointLoadResult CheckpointManager::load(const std::string& checkpoint_ref) const {
-  std::optional<contracts::Checkpoint> checkpoint;
-  std::optional<contracts::BudgetSnapshot> runtime_budget_snapshot;
-  bool loaded_from_durable_store = false;
-  std::string load_detail = "checkpoint loaded from memory store";
-  {
-    const std::lock_guard<std::mutex> lock(ckpt_mutex_);
-    const auto iterator = stored_checkpoints_.find(checkpoint_ref);
-    if (iterator == stored_checkpoints_.end()) {
-      if (!durable_state_root_.has_value()) {
-        return CheckpointLoadResult{
-            .checkpoint = std::nullopt,
-            .report = reject_checkpoint(
-                CheckpointConsistencyIssue::MissingCheckpointId,
-                "checkpoint not found in memory store"),
-            .error_code = RuntimeErrorCode::RT_E_410_CHECKPOINT_CORRUPT,
-            .detail = "checkpoint not found in memory store",
-        };
-      }
-
-      const auto durable_read = read_durable_checkpoint_record(
-          *durable_state_root_, checkpoint_ref);
-      if (durable_read.status == DurableCheckpointReadStatus::NotFound) {
-        return CheckpointLoadResult{
-            .checkpoint = std::nullopt,
-            .report = reject_checkpoint(
-                CheckpointConsistencyIssue::MissingCheckpointId,
-                durable_read.detail),
-            .error_code = RuntimeErrorCode::RT_E_410_CHECKPOINT_CORRUPT,
-            .detail = durable_read.detail,
-        };
-      }
-      if (durable_read.status == DurableCheckpointReadStatus::Corrupt ||
-          !durable_read.record.has_value()) {
-        return CheckpointLoadResult{
-            .checkpoint = std::nullopt,
-            .report = reject_checkpoint(
-                CheckpointConsistencyIssue::InvalidCheckpointState,
-                durable_read.detail),
-            .error_code = RuntimeErrorCode::RT_E_410_CHECKPOINT_CORRUPT,
-            .detail = durable_read.detail,
-        };
-      }
-
-      stored_checkpoints_[checkpoint_ref] = StoredCheckpointRecord{
-          .checkpoint = durable_read.record->checkpoint,
-          .runtime_budget_snapshot = durable_read.record->runtime_budget_snapshot,
-      };
-      checkpoint = durable_read.record->checkpoint;
-      runtime_budget_snapshot = durable_read.record->runtime_budget_snapshot;
-      loaded_from_durable_store = true;
-      load_detail = durable_read.detail;
-    } else {
-      checkpoint = iterator->second.checkpoint;
-      runtime_budget_snapshot = iterator->second.runtime_budget_snapshot;
-    }
-  }
-
-  const auto report = validate(*checkpoint);
-  return CheckpointLoadResult{
-      .checkpoint = report.consistent ? checkpoint : std::nullopt,
-      .report = report,
-      .error_code = report.consistent ? std::nullopt : report.error_code,
-      .detail = report.consistent
-                    ? (loaded_from_durable_store ? load_detail
-                                                 : std::string("checkpoint loaded from memory store"))
-                    : report.detail,
-      .runtime_budget_snapshot = report.consistent ? runtime_budget_snapshot : std::nullopt,
-  };
-}
-
-CheckpointConsistencyReport CheckpointManager::validate(
-    const contracts::Checkpoint& checkpoint) const {
+[[nodiscard]] CheckpointConsistencyReport evaluate_checkpoint_consistency(
+    const contracts::Checkpoint& checkpoint) {
   if (!checkpoint.checkpoint_id.has_value() || checkpoint.checkpoint_id->empty()) {
     return reject_checkpoint(
         CheckpointConsistencyIssue::MissingCheckpointId,
@@ -880,9 +712,9 @@ CheckpointConsistencyReport CheckpointManager::validate(
   return make_checkpoint_consistent_report("checkpoint is structurally resumable");
 }
 
-ResumePlanDecision CheckpointManager::make_resume_plan(
-    const contracts::Checkpoint& checkpoint) const {
-  const auto report = validate(checkpoint);
+[[nodiscard]] ResumePlanDecision synthesize_resume_plan(
+    const contracts::Checkpoint& checkpoint) {
+  const auto report = evaluate_checkpoint_consistency(checkpoint);
   if (!report.consistent) {
     return make_rejected_resume_plan(
         ResumePlanViolation::CheckpointInvalid,
@@ -925,37 +757,466 @@ ResumePlanDecision CheckpointManager::make_resume_plan(
       "checkpoint is resumable");
 }
 
+[[nodiscard]] infra::LogLevel checkpoint_log_level(
+    const bool success,
+    const std::optional<RuntimeErrorCode>& error_code) {
+  if (success) {
+    return infra::LogLevel::Info;
+  }
+
+  if (error_code == RuntimeErrorCode::RT_E_410_CHECKPOINT_CORRUPT ||
+      error_code == RuntimeErrorCode::RT_E_411_CHECKPOINT_SAVE_FAILED) {
+    return infra::LogLevel::Error;
+  }
+
+  return infra::LogLevel::Warn;
+}
+
+}  // namespace
+
+void CheckpointManager::set_logger(
+    std::shared_ptr<infra::logging::ILogger> logger,
+    std::optional<std::string> runtime_instance_id) {
+  logger_ = std::move(logger);
+  runtime_instance_id_ = std::move(runtime_instance_id);
+}
+
+void CheckpointManager::set_durable_state_root(
+    const std::optional<std::string>& state_root) {
+  const std::lock_guard<std::mutex> lock(ckpt_mutex_);
+  if (state_root.has_value() && !state_root->empty()) {
+    durable_state_root_ = state_root;
+    return;
+  }
+
+  durable_state_root_ = std::nullopt;
+}
+
+CheckpointBuildResult CheckpointManager::build_checkpoint(
+    const CheckpointBuildRequest& request) const {
+  CheckpointBuildResult result;
+  if (!request.transition_outcome.accepted) {
+    result = CheckpointBuildResult{
+        .checkpoint = std::nullopt,
+        .report = reject_checkpoint(
+            CheckpointConsistencyIssue::TransitionRejected,
+            "checkpoint build requires an accepted transition outcome"),
+    };
+  } else {
+    const auto checkpoint_state = resolve_checkpoint_state(request.transition_outcome);
+    if (!checkpoint_state.has_value()) {
+      result = CheckpointBuildResult{
+          .checkpoint = std::nullopt,
+          .report = reject_checkpoint(
+              CheckpointConsistencyIssue::InvalidCheckpointState,
+              "resolved runtime state cannot be folded into a compatible checkpoint state"),
+      };
+    } else {
+      const contracts::Checkpoint checkpoint{
+          .checkpoint_id = request.checkpoint_id,
+          .state = checkpoint_state,
+          .step_id = request.step_id,
+          .working_memory_snapshot = request.working_memory_snapshot,
+          .pending_action = request.pending_action.has_value()
+                                ? request.pending_action
+                                : std::optional<std::string>(std::string()),
+          .request_id = request.request_id,
+          .goal_id = request.goal_id,
+          .belief_state_ref = request.belief_state_ref,
+          .retry_count = request.retry_count,
+          .created_at = request.created_at_ms,
+          .tags = with_runtime_checkpoint_version_tags(request.tags),
+      };
+
+      const auto report = evaluate_checkpoint_consistency(checkpoint);
+      if (report.consistent && checkpoint.checkpoint_id.has_value()) {
+        const std::lock_guard<std::mutex> lock(ckpt_mutex_);
+        pending_runtime_budget_snapshots_[*checkpoint.checkpoint_id] =
+            request.runtime_budget_snapshot;
+      }
+
+      result = CheckpointBuildResult{
+          .checkpoint = report.consistent ? std::optional<contracts::Checkpoint>(checkpoint)
+                                          : std::nullopt,
+          .report = report,
+          .runtime_budget_snapshot = request.runtime_budget_snapshot,
+      };
+    }
+  }
+
+  infra::LogEvent::AttributeMap attrs;
+  detail::add_string_attr(attrs, "operation", "build_checkpoint");
+  detail::add_string_attr(attrs, "checkpoint_id", request.checkpoint_id);
+  detail::add_string_attr(attrs, "step_id", request.step_id);
+  detail::add_string_attr(
+      attrs,
+      "resolved_runtime_state",
+      runtime_state_name(request.transition_outcome.resolved_state));
+  detail::add_bool_attr(attrs, "transition_accepted", request.transition_outcome.accepted);
+  detail::add_bool_attr(attrs, "built", result.built());
+  detail::add_bool_attr(
+      attrs,
+      "runtime_budget_snapshot_present",
+      request.runtime_budget_snapshot.has_value());
+  detail::add_string_attr(
+      attrs,
+      "consistency_issue",
+      checkpoint_consistency_issue_name(result.report.issue));
+  if (result.checkpoint.has_value() && result.checkpoint->state.has_value()) {
+    detail::add_string_attr(
+        attrs,
+        "checkpoint_state",
+        checkpoint_state_name(*result.checkpoint->state));
+  }
+  if (result.report.error_code.has_value()) {
+    detail::add_integer_attr(
+        attrs,
+        "error_code",
+        static_cast<int>(*result.report.error_code));
+  }
+  detail::add_string_attr(attrs, "detail", result.report.detail);
+  detail::emit_runtime_log(
+      logger_,
+      checkpoint_log_level(result.built(), result.report.error_code),
+      "runtime.checkpoint.build",
+      "checkpoint_manager",
+      runtime_instance_id_,
+      std::move(attrs));
+  return result;
+}
+
+CheckpointPersistResult CheckpointManager::save(const contracts::Checkpoint& checkpoint) {
+  std::optional<contracts::BudgetSnapshot> runtime_budget_snapshot;
+  if (checkpoint.checkpoint_id.has_value()) {
+    const std::lock_guard<std::mutex> lock(ckpt_mutex_);
+    const auto iterator = pending_runtime_budget_snapshots_.find(*checkpoint.checkpoint_id);
+    if (iterator != pending_runtime_budget_snapshots_.end()) {
+      runtime_budget_snapshot = iterator->second;
+      pending_runtime_budget_snapshots_.erase(iterator);
+    }
+  }
+
+  return save(checkpoint, runtime_budget_snapshot);
+}
+
+CheckpointPersistResult CheckpointManager::save(
+    const contracts::Checkpoint& checkpoint,
+    const std::optional<contracts::BudgetSnapshot>& runtime_budget_snapshot) {
+  CheckpointPersistResult result;
+  const auto report = evaluate_checkpoint_consistency(checkpoint);
+  if (!report.consistent) {
+    result = CheckpointPersistResult{
+        .persisted = false,
+        .checkpoint_ref = std::nullopt,
+        .error_code = RuntimeErrorCode::RT_E_411_CHECKPOINT_SAVE_FAILED,
+        .detail = report.detail,
+    };
+  } else {
+    const std::lock_guard<std::mutex> lock(ckpt_mutex_);
+    stored_checkpoints_[checkpoint.checkpoint_id.value()] = StoredCheckpointRecord{
+        .checkpoint = checkpoint,
+        .runtime_budget_snapshot = runtime_budget_snapshot,
+    };
+    pending_runtime_budget_snapshots_.erase(checkpoint.checkpoint_id.value());
+
+    std::string persist_detail = "checkpoint persisted in memory store";
+    if (durable_state_root_.has_value() &&
+        !write_durable_checkpoint_record(
+            *durable_state_root_, checkpoint, runtime_budget_snapshot, persist_detail)) {
+      result = CheckpointPersistResult{
+          .persisted = false,
+          .checkpoint_ref = std::nullopt,
+          .error_code = RuntimeErrorCode::RT_E_411_CHECKPOINT_SAVE_FAILED,
+          .detail = persist_detail,
+      };
+    } else {
+      result = CheckpointPersistResult{
+          .persisted = true,
+          .checkpoint_ref = checkpoint.checkpoint_id,
+          .error_code = std::nullopt,
+          .detail = std::move(persist_detail),
+      };
+    }
+  }
+
+  infra::LogEvent::AttributeMap attrs;
+  detail::add_string_attr(attrs, "operation", "save_checkpoint");
+  detail::add_optional_string_attr(attrs, "checkpoint_ref", checkpoint.checkpoint_id);
+  if (checkpoint.state.has_value()) {
+    detail::add_string_attr(
+        attrs,
+        "checkpoint_state",
+        checkpoint_state_name(*checkpoint.state));
+  }
+  detail::add_bool_attr(attrs, "persisted", result.persisted);
+  detail::add_bool_attr(
+      attrs,
+      "runtime_budget_snapshot_present",
+      runtime_budget_snapshot.has_value());
+  if (result.error_code.has_value()) {
+    detail::add_integer_attr(attrs, "error_code", static_cast<int>(*result.error_code));
+  }
+  detail::add_string_attr(attrs, "detail", result.detail);
+  detail::emit_runtime_log(
+      logger_,
+      checkpoint_log_level(result.persisted, result.error_code),
+      "runtime.checkpoint.save",
+      "checkpoint_manager",
+      runtime_instance_id_,
+      std::move(attrs));
+  return result;
+}
+
+CheckpointLoadResult CheckpointManager::load(const std::string& checkpoint_ref) const {
+  std::optional<contracts::Checkpoint> checkpoint;
+  std::optional<contracts::BudgetSnapshot> runtime_budget_snapshot;
+  bool loaded_from_durable_store = false;
+  std::string load_detail = "checkpoint loaded from memory store";
+  CheckpointLoadResult result;
+  {
+    const std::lock_guard<std::mutex> lock(ckpt_mutex_);
+    const auto iterator = stored_checkpoints_.find(checkpoint_ref);
+    if (iterator == stored_checkpoints_.end()) {
+      if (!durable_state_root_.has_value()) {
+        result = CheckpointLoadResult{
+            .checkpoint = std::nullopt,
+            .report = reject_checkpoint(
+                CheckpointConsistencyIssue::MissingCheckpointId,
+                "checkpoint not found in memory store"),
+            .error_code = RuntimeErrorCode::RT_E_410_CHECKPOINT_CORRUPT,
+            .detail = "checkpoint not found in memory store",
+        };
+      } else {
+        const auto durable_read = read_durable_checkpoint_record(
+            *durable_state_root_, checkpoint_ref);
+        if (durable_read.status == DurableCheckpointReadStatus::NotFound) {
+          result = CheckpointLoadResult{
+              .checkpoint = std::nullopt,
+              .report = reject_checkpoint(
+                  CheckpointConsistencyIssue::MissingCheckpointId,
+                  durable_read.detail),
+              .error_code = RuntimeErrorCode::RT_E_410_CHECKPOINT_CORRUPT,
+              .detail = durable_read.detail,
+          };
+        } else if (durable_read.status == DurableCheckpointReadStatus::Corrupt ||
+                   !durable_read.record.has_value()) {
+          result = CheckpointLoadResult{
+              .checkpoint = std::nullopt,
+              .report = reject_checkpoint(
+                  CheckpointConsistencyIssue::InvalidCheckpointState,
+                  durable_read.detail),
+              .error_code = RuntimeErrorCode::RT_E_410_CHECKPOINT_CORRUPT,
+              .detail = durable_read.detail,
+          };
+        } else {
+          stored_checkpoints_[checkpoint_ref] = StoredCheckpointRecord{
+              .checkpoint = durable_read.record->checkpoint,
+              .runtime_budget_snapshot = durable_read.record->runtime_budget_snapshot,
+          };
+          checkpoint = durable_read.record->checkpoint;
+          runtime_budget_snapshot = durable_read.record->runtime_budget_snapshot;
+          loaded_from_durable_store = true;
+          load_detail = durable_read.detail;
+        }
+      }
+    } else {
+      checkpoint = iterator->second.checkpoint;
+      runtime_budget_snapshot = iterator->second.runtime_budget_snapshot;
+    }
+  }
+
+  if (!result.error_code.has_value() && checkpoint.has_value()) {
+    const auto report = evaluate_checkpoint_consistency(*checkpoint);
+    result = CheckpointLoadResult{
+        .checkpoint = report.consistent ? checkpoint : std::nullopt,
+        .report = report,
+        .error_code = report.consistent ? std::nullopt : report.error_code,
+        .detail = report.consistent
+                      ? (loaded_from_durable_store
+                             ? load_detail
+                             : std::string("checkpoint loaded from memory store"))
+                      : report.detail,
+        .runtime_budget_snapshot = report.consistent ? runtime_budget_snapshot : std::nullopt,
+    };
+  }
+
+  infra::LogEvent::AttributeMap attrs;
+  detail::add_string_attr(attrs, "operation", "load_checkpoint");
+  detail::add_string_attr(attrs, "checkpoint_ref", checkpoint_ref);
+  detail::add_bool_attr(attrs, "loaded", result.loaded());
+  detail::add_bool_attr(
+      attrs,
+      "runtime_budget_snapshot_present",
+      result.runtime_budget_snapshot.has_value());
+  detail::add_string_attr(
+      attrs,
+      "consistency_issue",
+      checkpoint_consistency_issue_name(result.report.issue));
+  if (result.checkpoint.has_value() && result.checkpoint->state.has_value()) {
+    detail::add_string_attr(
+        attrs,
+        "checkpoint_state",
+        checkpoint_state_name(*result.checkpoint->state));
+  }
+  if (result.error_code.has_value()) {
+    detail::add_integer_attr(attrs, "error_code", static_cast<int>(*result.error_code));
+  }
+  detail::add_string_attr(attrs, "detail", result.detail);
+  detail::emit_runtime_log(
+      logger_,
+      checkpoint_log_level(result.loaded(), result.error_code),
+      "runtime.checkpoint.load",
+      "checkpoint_manager",
+      runtime_instance_id_,
+      std::move(attrs));
+  return result;
+}
+
+CheckpointConsistencyReport CheckpointManager::validate(
+    const contracts::Checkpoint& checkpoint) const {
+  const auto report = evaluate_checkpoint_consistency(checkpoint);
+
+  infra::LogEvent::AttributeMap attrs;
+  detail::add_string_attr(attrs, "operation", "validate_checkpoint");
+  detail::add_optional_string_attr(attrs, "checkpoint_ref", checkpoint.checkpoint_id);
+  if (checkpoint.state.has_value()) {
+    detail::add_string_attr(
+        attrs,
+        "checkpoint_state",
+        checkpoint_state_name(*checkpoint.state));
+  }
+  detail::add_bool_attr(attrs, "consistent", report.consistent);
+  detail::add_string_attr(
+      attrs,
+      "consistency_issue",
+      checkpoint_consistency_issue_name(report.issue));
+  if (report.error_code.has_value()) {
+    detail::add_integer_attr(attrs, "error_code", static_cast<int>(*report.error_code));
+  }
+  detail::add_string_attr(attrs, "detail", report.detail);
+  detail::emit_runtime_log(
+      logger_,
+      checkpoint_log_level(report.consistent, report.error_code),
+      "runtime.checkpoint.validate",
+      "checkpoint_manager",
+      runtime_instance_id_,
+      std::move(attrs));
+  return report;
+}
+
+ResumePlanDecision CheckpointManager::make_resume_plan(
+    const contracts::Checkpoint& checkpoint) const {
+  const auto result = synthesize_resume_plan(checkpoint);
+
+  infra::LogEvent::AttributeMap attrs;
+  detail::add_string_attr(attrs, "operation", "make_resume_plan");
+  detail::add_optional_string_attr(attrs, "checkpoint_ref", checkpoint.checkpoint_id);
+  if (checkpoint.state.has_value()) {
+    detail::add_string_attr(
+        attrs,
+        "checkpoint_state",
+        checkpoint_state_name(*checkpoint.state));
+  }
+  detail::add_bool_attr(attrs, "resume_seed_present", false);
+  detail::add_bool_attr(attrs, "resumable", result.resumable);
+  detail::add_string_attr(
+      attrs,
+      "resume_plan_violation",
+      resume_plan_violation_name(result.violation));
+  if (result.plan.has_value()) {
+    detail::add_string_attr(
+        attrs,
+        "target_state",
+        runtime_state_name(result.plan->target_state));
+    detail::add_bool_attr(
+        attrs,
+        "requires_operator_intervention",
+        result.plan->requires_operator_intervention);
+  }
+  if (result.error_code.has_value()) {
+    detail::add_integer_attr(attrs, "error_code", static_cast<int>(*result.error_code));
+  }
+  detail::add_string_attr(attrs, "detail", result.detail);
+  detail::emit_runtime_log(
+      logger_,
+      checkpoint_log_level(result.resumable, result.error_code),
+      "runtime.checkpoint.make_resume_plan",
+      "checkpoint_manager",
+      runtime_instance_id_,
+      std::move(attrs));
+  return result;
+}
+
 ResumePlanDecision CheckpointManager::make_resume_plan(
     const contracts::Checkpoint& checkpoint,
     const ResumeSeed& resume_seed) const {
+  ResumePlanDecision result;
   if (!resume_seed.has_minimum_requirements()) {
-    return make_rejected_resume_plan(
+    result = make_rejected_resume_plan(
         ResumePlanViolation::CheckpointInvalid,
         "resume seed must include checkpoint_ref, resume_token and resume_reason");
+  } else {
+    const auto base_decision = synthesize_resume_plan(checkpoint);
+    if (base_decision.rejected() || !base_decision.plan.has_value()) {
+      result = base_decision;
+    } else if (base_decision.plan->checkpoint_ref != resume_seed.checkpoint_ref) {
+      result = make_rejected_resume_plan(
+          ResumePlanViolation::CheckpointInvalid,
+          "resume seed checkpoint_ref does not match checkpoint anchor");
+    } else if (checkpoint.request_id.has_value() &&
+               checkpoint.request_id != resume_seed.request_id) {
+      result = make_rejected_resume_plan(
+          ResumePlanViolation::CheckpointInvalid,
+          "resume seed request_id does not match checkpoint request_id");
+    } else {
+      auto plan = *base_decision.plan;
+      plan.resume_token = resume_seed.resume_token;
+      plan.resume_reason = resume_seed.resume_reason;
+      plan.policy_snapshot_ref = resume_seed.policy_snapshot_ref;
+      result = make_resume_plan_decision(
+          plan,
+          "checkpoint is resumable with session resume seed");
+    }
   }
 
-  const auto base_decision = make_resume_plan(checkpoint);
-  if (base_decision.rejected() || !base_decision.plan.has_value()) {
-    return base_decision;
+  infra::LogEvent::AttributeMap attrs;
+  detail::add_string_attr(attrs, "operation", "make_resume_plan");
+  detail::add_optional_string_attr(attrs, "checkpoint_ref", checkpoint.checkpoint_id);
+  if (checkpoint.state.has_value()) {
+    detail::add_string_attr(
+        attrs,
+        "checkpoint_state",
+        checkpoint_state_name(*checkpoint.state));
   }
-
-  if (base_decision.plan->checkpoint_ref != resume_seed.checkpoint_ref) {
-    return make_rejected_resume_plan(
-        ResumePlanViolation::CheckpointInvalid,
-        "resume seed checkpoint_ref does not match checkpoint anchor");
+  detail::add_bool_attr(attrs, "resume_seed_present", true);
+  detail::add_string_attr(attrs, "resume_seed_request_id", resume_seed.request_id);
+  detail::add_bool_attr(attrs, "resumable", result.resumable);
+  detail::add_string_attr(
+      attrs,
+      "resume_plan_violation",
+      resume_plan_violation_name(result.violation));
+  if (result.plan.has_value()) {
+    detail::add_string_attr(
+        attrs,
+        "target_state",
+        runtime_state_name(result.plan->target_state));
+    detail::add_bool_attr(
+        attrs,
+        "requires_operator_intervention",
+        result.plan->requires_operator_intervention);
   }
-
-  if (checkpoint.request_id.has_value() && checkpoint.request_id != resume_seed.request_id) {
-    return make_rejected_resume_plan(
-        ResumePlanViolation::CheckpointInvalid,
-        "resume seed request_id does not match checkpoint request_id");
+  if (result.error_code.has_value()) {
+    detail::add_integer_attr(attrs, "error_code", static_cast<int>(*result.error_code));
   }
-
-  auto plan = *base_decision.plan;
-  plan.resume_token = resume_seed.resume_token;
-  plan.resume_reason = resume_seed.resume_reason;
-  plan.policy_snapshot_ref = resume_seed.policy_snapshot_ref;
-  return make_resume_plan_decision(plan, "checkpoint is resumable with session resume seed");
+  detail::add_string_attr(attrs, "detail", result.detail);
+  detail::emit_runtime_log(
+      logger_,
+      checkpoint_log_level(result.resumable, result.error_code),
+      "runtime.checkpoint.make_resume_plan",
+      "checkpoint_manager",
+      runtime_instance_id_,
+      std::move(attrs));
+  return result;
 }
 
 void CheckpointManager::seed_for_test(

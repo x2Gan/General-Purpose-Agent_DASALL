@@ -12,6 +12,10 @@
 #include "checkpoint/RecoveryOutcome.h"
 #include "fsm/StateTransitionTypes.h"
 
+namespace dasall::infra::logging {
+class ILogger;
+}
+
 namespace dasall::runtime {
 
 enum class SafeModeTriggerKind : std::uint8_t {
@@ -113,6 +117,10 @@ class SafeModeController final {
   explicit SafeModeController(
       std::shared_ptr<const profiles::RuntimePolicySnapshot> policy_snapshot = nullptr);
 
+  void set_logger(
+    std::shared_ptr<infra::logging::ILogger> logger,
+    std::optional<std::string> runtime_instance_id = std::nullopt);
+
   [[nodiscard]] SafeModeDecision evaluate_entry(const SafeModeTrigger& trigger);
   [[nodiscard]] SafeModeDecision evaluate_exit(const SafeModeExitRequest& request);
   [[nodiscard]] SafeModeState current_mode() const;
@@ -132,6 +140,8 @@ class SafeModeController final {
   mutable std::mutex mode_mutex_;
   std::shared_ptr<const profiles::RuntimePolicySnapshot> policy_snapshot_;
   SafeModeState current_mode_ = SafeModeState::Normal;
+  std::shared_ptr<infra::logging::ILogger> logger_;
+  std::optional<std::string> runtime_instance_id_;
 };
 
 }  // namespace dasall::runtime

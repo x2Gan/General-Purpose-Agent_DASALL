@@ -1,12 +1,15 @@
+#include <algorithm>
 #include <exception>
 #include <iostream>
 #include <memory>
 #include <string>
+#include <vector>
 
 #include "CognitionRuntimeIntegrationFixture.h"
 #include "ICognitionEngine.h"
 #include "IResponseBuilder.h"
 #include "MockCognitionFixture.h"
+#include "MockLLMManager.h"
 #include "ObservabilityLiveComposition.h"
 #include "audit/AuditService.h"
 #include "decision/ActionDecision.h"
@@ -19,10 +22,84 @@ namespace {
 
 using dasall::tests::mocks::MockCognitionFixture;
 using dasall::tests::mocks::MockCognitionFixtureOptions;
+using dasall::tests::mocks::MockLLMManager;
 using dasall::tests::mocks::StructuredExecutionPayloadScenario;
 using dasall::tests::mocks::StructuredPlanningPayloadScenario;
 using dasall::tests::runtime_fixture::make_true_integration_policy_snapshot;
 using dasall::tests::support::assert_true;
+using dasall::llm::LLMFailureCategory;
+
+class RecordingMeter final : public dasall::infra::metrics::IMeter {
+ public:
+  std::optional<dasall::infra::metrics::InstrumentHandle> create_counter(
+      const dasall::infra::metrics::MetricIdentity& identity) override {
+    created_identities.push_back(identity);
+    return dasall::infra::metrics::InstrumentHandle{
+        .instrument_key = identity.name + ":counter",
+    };
+  }
+
+  std::optional<dasall::infra::metrics::InstrumentHandle> create_gauge(
+      const dasall::infra::metrics::MetricIdentity& identity) override {
+    created_identities.push_back(identity);
+    return dasall::infra::metrics::InstrumentHandle{
+        .instrument_key = identity.name + ":gauge",
+    };
+  }
+
+  std::optional<dasall::infra::metrics::InstrumentHandle> create_histogram(
+      const dasall::infra::metrics::MetricIdentity& identity) override {
+    created_identities.push_back(identity);
+    return dasall::infra::metrics::InstrumentHandle{
+        .instrument_key = identity.name + ":histogram",
+    };
+  }
+
+  dasall::infra::metrics::MetricsOperationStatus record(
+      const dasall::infra::metrics::MetricSample& sample) override {
+    recorded_samples.push_back(sample);
+    return dasall::infra::metrics::MetricsOperationStatus::success(
+        "metrics://cognition/production-telemetry-recorded");
+  }
+
+  std::vector<dasall::infra::metrics::MetricIdentity> created_identities;
+  std::vector<dasall::infra::metrics::MetricSample> recorded_samples;
+};
+
+class RecordingMetricsProvider final : public dasall::infra::metrics::IMetricsProvider {
+ public:
+  explicit RecordingMetricsProvider(std::shared_ptr<RecordingMeter> meter)
+      : meter_(std::move(meter)) {}
+
+  dasall::infra::metrics::MetricsOperationStatus init(
+      const dasall::infra::metrics::MetricsProviderConfig&) override {
+    return dasall::infra::metrics::MetricsOperationStatus::success(
+        "metrics://cognition/production-telemetry-provider-init");
+  }
+
+  std::shared_ptr<dasall::infra::metrics::IMeter> get_meter(
+      const dasall::infra::metrics::MeterScope& scope) override {
+    last_scope = scope;
+    return meter_;
+  }
+
+  dasall::infra::metrics::MetricsOperationStatus force_flush(
+      const dasall::infra::metrics::MetricsCallDeadline&) override {
+    return dasall::infra::metrics::MetricsOperationStatus::success(
+        "metrics://cognition/production-telemetry-provider-flush");
+  }
+
+  dasall::infra::metrics::MetricsOperationStatus shutdown(
+      const dasall::infra::metrics::MetricsCallDeadline&) override {
+    return dasall::infra::metrics::MetricsOperationStatus::success(
+        "metrics://cognition/production-telemetry-provider-shutdown");
+  }
+
+  dasall::infra::metrics::MeterScope last_scope{};
+
+ private:
+  std::shared_ptr<RecordingMeter> meter_;
+};
 
 [[nodiscard]] bool export_has_action(const dasall::infra::ExportResult& result,
                                      const std::string& expected_action) {
@@ -46,6 +123,24 @@ using dasall::tests::support::assert_true;
   }
 
   return false;
+}
+
+[[nodiscard]] const dasall::infra::metrics::MetricSample* find_metric_sample(
+    const std::vector<dasall::infra::metrics::MetricSample>& samples,
+    const std::string& name,
+    const std::string& stage,
+    const std::string& outcome,
+    const std::string& resolved_route = std::string()) {
+  const auto match = std::find_if(samples.begin(),
+                                  samples.end(),
+                                  [&](const dasall::infra::metrics::MetricSample& sample) {
+                                    return sample.identity_ref.name == name &&
+                                           sample.labels.stage == stage &&
+                                           sample.labels.outcome == outcome &&
+                                           (resolved_route.empty() ||
+                                            sample.labels.resolved_route == resolved_route);
+                                  });
+  return match == samples.end() ? nullptr : &(*match);
 }
 
 void test_cognition_production_telemetry_sink_emits_completed_failed_and_degraded_events() {
@@ -80,6 +175,10 @@ void test_cognition_production_telemetry_sink_emits_completed_failed_and_degrade
             tracer_provider != nullptr,
           "cognition production telemetry integration should keep concrete logging, audit, metrics, and trace providers inspectable");
 
+  auto recording_meter = std::make_shared<RecordingMeter>();
+  auto recording_metrics_provider =
+      std::make_shared<RecordingMetricsProvider>(recording_meter);
+
   auto engine = dasall::cognition::create_cognition_engine(
       *snapshot,
       dasall::cognition::CognitionRuntimeDependencies{
@@ -87,7 +186,7 @@ void test_cognition_production_telemetry_sink_emits_completed_failed_and_degrade
           .policy_snapshot = snapshot,
         .logger = observability.logger,
           .audit_logger = observability.audit_logger,
-          .metrics_provider = observability.metrics_provider,
+          .metrics_provider = recording_metrics_provider,
           .tracer_provider = observability.tracer_provider,
       });
   assert_true(engine != nullptr,
@@ -111,7 +210,7 @@ void test_cognition_production_telemetry_sink_emits_completed_failed_and_degrade
           .policy_snapshot = snapshot,
         .logger = observability.logger,
           .audit_logger = observability.audit_logger,
-          .metrics_provider = observability.metrics_provider,
+          .metrics_provider = recording_metrics_provider,
           .tracer_provider = observability.tracer_provider,
       });
   assert_true(response_builder != nullptr,
@@ -135,6 +234,39 @@ void test_cognition_production_telemetry_sink_emits_completed_failed_and_degrade
                   std::string::npos,
               "template fallback should redact sensitive content before degraded telemetry is emitted");
 
+    MockCognitionFixture response_failure_fixture(MockCognitionFixtureOptions{
+      .request_id = "req-cognition-telemetry-response-failure",
+      .trace_id = "trace-cognition-telemetry-response-failure",
+      .goal_id = "goal-cognition-telemetry-response-failure",
+    });
+    response_failure_fixture.llm_manager()->set_stage_result(
+      "response",
+      MockLLMManager::make_failure_result(
+        dasall::contracts::ResultCode::ProviderTimeout,
+        "response bridge intentionally unavailable for telemetry verification",
+        LLMFailureCategory::AdapterTransport,
+        "mock.route.response",
+        response_failure_fixture.options().request_id));
+    auto response_failure_builder = dasall::cognition::create_response_builder(
+      dasall::cognition::CognitionConfig{},
+      dasall::cognition::CognitionRuntimeDependencies{
+        .llm_manager = response_failure_fixture.llm_manager(),
+        .policy_snapshot = nullptr,
+        .logger = observability.logger,
+        .audit_logger = observability.audit_logger,
+        .metrics_provider = recording_metrics_provider,
+        .tracer_provider = observability.tracer_provider,
+      });
+    auto response_failure_request = response_failure_fixture.make_response_request();
+    response_failure_request.build_hints.prefer_template = false;
+    response_failure_request.build_hints.allow_template_fallback = true;
+
+    const auto response_failure_result = response_failure_builder->build(response_failure_request);
+    assert_true(response_failure_result.fallback_used &&
+            response_failure_result.agent_result.has_value() &&
+            !response_failure_result.error_info.has_value(),
+          "cognition production telemetry integration should keep response bridge failures on the degraded fallback path");
+
   const auto audit_export = audit_service->export_audit(dasall::infra::ExportQuery{
       .start_ts = 1,
       .end_ts = 4102444800000,
@@ -150,12 +282,28 @@ void test_cognition_production_telemetry_sink_emits_completed_failed_and_degrade
               "production telemetry audit export should include cognition.stage.failed");
   assert_true(export_has_action(audit_export, "cognition.response.degraded"),
               "production telemetry audit export should include cognition.response.degraded");
+    assert_true(export_contains_token(audit_export, "field:resolved_route=mock.route.response") &&
+            export_contains_token(audit_export,
+                      "field:failure_category=adapter_transport") &&
+            export_contains_token(audit_export, "field:error_type=provider"),
+          "production telemetry audit export should preserve response degraded route and failure classification fields");
   assert_true(!export_contains_token(audit_export, "top-secret") &&
                   !export_contains_token(audit_export, "secret-token"),
               "production telemetry audit export should not leak redacted degraded payload content");
 
-  assert_true(metrics_facade->record_attempt_count() > 0U,
-              "production telemetry integration should record cognition metrics samples");
+  assert_true(!recording_meter->recorded_samples.empty(),
+              "production telemetry integration should emit cognition metrics into the injected metrics provider");
+  const auto* degraded_metric = find_metric_sample(recording_meter->recorded_samples,
+                                                   "cognition_response_degraded_total",
+                                                   "response",
+                                                   "degraded",
+                                                   "mock.route.response");
+  assert_true(degraded_metric != nullptr,
+              "production telemetry integration should emit a response degraded metric sample carrying the llm route");
+  assert_true(degraded_metric->labels.failure_category == "adapter_transport",
+              "production telemetry integration should preserve failure_category on the degraded response metric");
+  assert_true(degraded_metric->labels.error_type == "provider",
+              "production telemetry integration should preserve error_type on the degraded response metric");
   assert_true(tracer_provider->tracer_count() > 0U,
               "production telemetry integration should open at least one cognition tracer scope");
   assert_true(logger->dispatched_record_count() >= 3U,

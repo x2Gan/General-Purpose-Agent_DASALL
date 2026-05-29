@@ -2,6 +2,9 @@
 
 #include <algorithm>
 #include <chrono>
+#include <string>
+
+#include "../logging/RuntimeStructuredLogUtils.h"
 
 namespace dasall::runtime {
 namespace {
@@ -23,6 +26,48 @@ void append_unique_component(infra::HealthSnapshot::ComponentList* components,
   return std::find(snapshot.failed_components.begin(),
                    snapshot.failed_components.end(),
                    component) != snapshot.failed_components.end();
+}
+
+[[nodiscard]] const char* probe_status_name(const infra::ProbeStatus status) {
+  switch (status) {
+    case infra::ProbeStatus::Unknown:
+      return "Unknown";
+    case infra::ProbeStatus::Healthy:
+      return "Healthy";
+    case infra::ProbeStatus::Degraded:
+      return "Degraded";
+    case infra::ProbeStatus::Unhealthy:
+      return "Unhealthy";
+  }
+
+  return "Unknown";
+}
+
+[[nodiscard]] infra::LogLevel probe_log_level(const infra::ProbeStatus status) {
+  switch (status) {
+    case infra::ProbeStatus::Healthy:
+      return infra::LogLevel::Info;
+    case infra::ProbeStatus::Degraded:
+      return infra::LogLevel::Warn;
+    case infra::ProbeStatus::Unhealthy:
+      return infra::LogLevel::Error;
+    case infra::ProbeStatus::Unknown:
+      return infra::LogLevel::Warn;
+  }
+
+  return infra::LogLevel::Warn;
+}
+
+[[nodiscard]] std::string join_failed_components(
+    const infra::HealthSnapshot::ComponentList& components) {
+  std::string joined;
+  for (std::size_t index = 0U; index < components.size(); ++index) {
+    if (index != 0U) {
+      joined.push_back(',');
+    }
+    joined += components[index];
+  }
+  return joined;
 }
 
 }  // namespace
@@ -192,7 +237,7 @@ infra::ProbeResult RuntimeHealthProbe::probe() {
     sample = latest_sample_.value_or(fallback_sample("runtime.signal_provider"));
   }
 
-  return infra::ProbeResult{
+  auto result = infra::ProbeResult{
       .probe_name = descriptor_.probe_name,
       .status = probe_status_for(snapshot),
       .latency_ms = sample.latency_ms,
@@ -200,6 +245,44 @@ infra::ProbeResult RuntimeHealthProbe::probe() {
       .detail_ref = detail_ref_for(sample, snapshot),
       .timestamp = snapshot.timestamp,
   };
+
+  bool should_log = false;
+  {
+    const std::lock_guard<std::mutex> lock(snapshot_mutex_);
+    should_log = !last_logged_probe_status_.has_value() ||
+                 *last_logged_probe_status_ != result.status ||
+                 result.status != infra::ProbeStatus::Healthy;
+    if (should_log) {
+      last_logged_probe_status_ = result.status;
+    }
+  }
+
+  if (should_log) {
+    infra::LogEvent::AttributeMap attrs;
+    detail::add_string_attr(attrs, "probe_name", result.probe_name);
+    detail::add_string_attr(attrs, "status", probe_status_name(result.status));
+    detail::add_bool_attr(attrs, "liveness", snapshot.liveness);
+    detail::add_bool_attr(attrs, "readiness", snapshot.readiness);
+    detail::add_bool_attr(attrs, "degraded", snapshot.degraded);
+    detail::add_integer_attr(attrs,
+                             "failed_component_count",
+                             snapshot.failed_components.size());
+    detail::add_string_attr(attrs,
+                            "failed_components",
+                            join_failed_components(snapshot.failed_components));
+    detail::add_integer_attr(attrs, "latency_ms", result.latency_ms);
+    detail::add_integer_attr(attrs, "version", snapshot.version);
+    detail::add_string_attr(attrs, "detail_ref", result.detail_ref);
+    detail::emit_runtime_log(
+        options_.logger,
+        probe_log_level(result.status),
+        "runtime.health.probe",
+        "runtime_health_probe",
+        options_.runtime_instance_id,
+        std::move(attrs));
+  }
+
+  return result;
 }
 
 infra::HealthSnapshot RuntimeHealthProbe::snapshot() const {

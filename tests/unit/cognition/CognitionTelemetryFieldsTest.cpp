@@ -180,12 +180,96 @@ void test_emit_stage_failed_propagates_structured_projection_failure_fields() {
               "failed event should carry the fallback projection source");
 }
 
+void test_emit_detail_event_propagates_pipeline_checkpoint_fields() {
+  auto sink = std::make_shared<MockCognitionTelemetrySink>();
+  CognitionTelemetry telemetry(dasall::cognition::CognitionConfig{}, sink);
+
+  const auto result = telemetry.emit_detail_event(
+      "pipeline.checkpoint",
+      make_context(),
+      {
+          TelemetryField{.key = "pipeline", .value = "decision"},
+          TelemetryField{.key = "step", .value = "perception"},
+          TelemetryField{.key = "outcome", .value = "completed"},
+          TelemetryField{.key = "source", .value = "perception_engine"},
+          TelemetryField{.key = "elapsed_ms", .value = "12"},
+      });
+
+  assert_true(result.emitted,
+              "detail event should emit telemetry across available sinks");
+  assert_equal(1, static_cast<int>(sink->log_events.size()),
+               "one detail log event should be recorded");
+  assert_equal(std::string("pipeline.checkpoint"),
+               sink->log_events.back().name,
+               "detail event should preserve the custom event name");
+  assert_true(has_field(sink->log_events.back().fields, "pipeline", "decision"),
+              "detail event should carry pipeline name");
+  assert_true(has_field(sink->log_events.back().fields, "step", "perception"),
+              "detail event should carry step name");
+  assert_true(has_field(sink->log_events.back().fields, "source", "perception_engine"),
+              "detail event should carry source");
+  assert_true(has_field(sink->log_events.back().fields, "elapsed_ms", "12"),
+              "detail event should carry elapsed time");
+}
+
+void test_emit_response_degraded_propagates_route_failure_and_metric_fields() {
+  auto sink = std::make_shared<MockCognitionTelemetrySink>();
+  CognitionTelemetry telemetry(dasall::cognition::CognitionConfig{}, sink);
+
+  auto context = make_context();
+  context.stage = "response";
+  context.fallback_used = true;
+  context.result_code.reset();
+
+  const auto result = telemetry.emit_response_degraded(
+      context,
+      dasall::cognition::observability::DegradeTelemetryRecord{
+          .fallback_mode = "template_fallback",
+          .reason = "llm_bridge_failed",
+          .resolved_route = std::string{"mock.route.response"},
+          .failure_category = std::string{"adapter_transport"},
+          .error_type = std::string{"provider"},
+          .payload_excerpt = std::nullopt,
+          .omitted_details = {"response_llm_bridge_failed"},
+          .audit_refs = {},
+      });
+
+  assert_true(result.emitted,
+              "response degraded should emit telemetry across available sinks");
+  assert_equal(1, static_cast<int>(sink->log_events.size()),
+               "one degraded log event should be recorded");
+  assert_equal(1, static_cast<int>(sink->metrics.size()),
+               "one degraded metric should be recorded");
+  assert_true(has_field(sink->log_events.back().fields,
+                        "resolved_route",
+                        "mock.route.response"),
+              "degraded event should carry resolved route");
+  assert_true(has_field(sink->log_events.back().fields,
+                        "failure_category",
+                        "adapter_transport"),
+              "degraded event should carry failure category");
+  assert_true(has_field(sink->log_events.back().fields, "error_type", "provider"),
+              "degraded event should carry error type");
+  assert_true(has_field(sink->metrics.back().labels,
+                        "resolved_route",
+                        "mock.route.response"),
+              "degraded metric should carry resolved route label");
+  assert_true(has_field(sink->metrics.back().labels,
+                        "failure_category",
+                        "adapter_transport"),
+              "degraded metric should carry failure category label");
+  assert_true(has_field(sink->metrics.back().labels, "error_type", "provider"),
+              "degraded metric should carry error type label");
+}
+
 }  // namespace
 
 int main() {
   try {
     test_emit_stage_started_and_completed_propagates_required_fields();
     test_emit_stage_failed_propagates_structured_projection_failure_fields();
+    test_emit_detail_event_propagates_pipeline_checkpoint_fields();
+    test_emit_response_degraded_propagates_route_failure_and_metric_fields();
   } catch (const std::exception& ex) {
     std::cerr << ex.what() << '\n';
     return 1;

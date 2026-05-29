@@ -110,6 +110,15 @@ MetricLabels CardinalityGuard::normalize_labels(const MetricLabels& labels) {
   if (normalized.error_code.empty()) {
     normalized.error_code = "none";
   }
+  if (normalized.resolved_route.empty()) {
+    normalized.resolved_route = "none";
+  }
+  if (normalized.failure_category.empty()) {
+    normalized.failure_category = "none";
+  }
+  if (normalized.error_type.empty()) {
+    normalized.error_type = "none";
+  }
 
   return normalized;
 }
@@ -121,6 +130,9 @@ std::vector<MetricLabelEntry> CardinalityGuard::to_entries(const MetricLabels& l
       MetricLabelEntry{.key = "profile", .value = labels.profile},
       MetricLabelEntry{.key = "outcome", .value = labels.outcome},
       MetricLabelEntry{.key = "error_code", .value = labels.error_code},
+      MetricLabelEntry{.key = "resolved_route", .value = labels.resolved_route},
+      MetricLabelEntry{.key = "failure_category", .value = labels.failure_category},
+      MetricLabelEntry{.key = "error_type", .value = labels.error_type},
   };
 }
 
@@ -132,6 +144,9 @@ std::optional<MetricLabels> CardinalityGuard::materialize_labels(
   bool has_profile = false;
   bool has_outcome = false;
   bool has_error_code = false;
+  bool has_resolved_route = false;
+  bool has_failure_category = false;
+  bool has_error_type = false;
 
   for (const auto& label : labels) {
     if (label.key == "module") {
@@ -179,11 +194,47 @@ std::optional<MetricLabels> CardinalityGuard::materialize_labels(
       continue;
     }
 
+    if (label.key == "resolved_route") {
+      if (has_resolved_route) {
+        return std::nullopt;
+      }
+      materialized.resolved_route = label.value;
+      has_resolved_route = true;
+      continue;
+    }
+
+    if (label.key == "failure_category") {
+      if (has_failure_category) {
+        return std::nullopt;
+      }
+      materialized.failure_category = label.value;
+      has_failure_category = true;
+      continue;
+    }
+
+    if (label.key == "error_type") {
+      if (has_error_type) {
+        return std::nullopt;
+      }
+      materialized.error_type = label.value;
+      has_error_type = true;
+      continue;
+    }
+
     return std::nullopt;
   }
 
   if (!has_error_code || materialized.error_code.empty()) {
     materialized.error_code = "none";
+  }
+  if (!has_resolved_route || materialized.resolved_route.empty()) {
+    materialized.resolved_route = "none";
+  }
+  if (!has_failure_category || materialized.failure_category.empty()) {
+    materialized.failure_category = "none";
+  }
+  if (!has_error_type || materialized.error_type.empty()) {
+    materialized.error_type = "none";
   }
 
   if (!has_module || !has_stage || !has_profile || !has_outcome || !materialized.is_valid()) {
@@ -200,7 +251,9 @@ bool CardinalityGuard::is_allowlisted(std::string_view key) {
 
 std::string CardinalityGuard::make_series_signature(const MetricLabels& labels) {
   return labels.module + "\x1f" + labels.stage + "\x1f" + labels.profile + "\x1f" +
-         labels.outcome + "\x1f" + labels.error_code;
+         labels.outcome + "\x1f" + labels.error_code + "\x1f" +
+         labels.resolved_route + "\x1f" + labels.failure_category + "\x1f" +
+         labels.error_type;
 }
 
 void CardinalityGuard::increment_reject_total() {

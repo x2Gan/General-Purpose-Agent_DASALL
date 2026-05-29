@@ -183,6 +183,10 @@ void test_response_builder_falls_back_when_bridge_returns_failure() {
       CognitionRuntimeDependencies{
           .llm_manager = llm_manager,
           .policy_snapshot = nullptr,
+        .logger = nullptr,
+        .audit_logger = nullptr,
+        .metrics_provider = nullptr,
+        .tracer_provider = nullptr,
       });
   auto request = make_request(true);
   request.latest_observation = make_observation();
@@ -199,8 +203,12 @@ void test_response_builder_falls_back_when_bridge_returns_failure() {
               "bridge failure with template fallback should still materialize an AgentResult");
   assert_true(result.fallback_used,
               "bridge failure should explicitly mark template fallback");
+  assert_true(contains_token(result.diagnostics, "route:mock.route.response"),
+              "bridge failure diagnostics should preserve the resolved response route");
   assert_true(contains_token(result.diagnostics, "response_llm_bridge_failed"),
               "bridge failure should be visible in response diagnostics");
+  assert_true(contains_token(result.diagnostics, "error_type:provider"),
+              "bridge failure diagnostics should preserve the contract error type");
   assert_true(contains_token(result.diagnostics, "response_template_fallback"),
               "bridge failure should fall back through the existing template path");
 }

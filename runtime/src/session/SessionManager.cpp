@@ -2,9 +2,11 @@
 
 #include <filesystem>
 #include <fstream>
-#include <sstream>
 #include <optional>
+#include <sstream>
 #include <string>
+
+#include "../logging/RuntimeStructuredLogUtils.h"
 
 namespace {
 
@@ -374,9 +376,21 @@ template <typename Integer>
   return true;
 }
 
+[[nodiscard]] dasall::infra::LogLevel session_log_level(const bool accepted) {
+  return accepted ? dasall::infra::LogLevel::Info
+                  : dasall::infra::LogLevel::Warn;
+}
+
 }  // namespace
 
 namespace dasall::runtime {
+
+void SessionManager::set_logger(
+    std::shared_ptr<infra::logging::ILogger> logger,
+    std::optional<std::string> runtime_instance_id) {
+  logger_ = std::move(logger);
+  runtime_instance_id_ = std::move(runtime_instance_id);
+}
 
 void SessionManager::set_durable_state_root(
     const std::optional<std::string>& state_root) {
@@ -400,219 +414,390 @@ void SessionManager::seed_for_test(const SessionSnapshot& session_snapshot) {
 
 SessionLoadResult SessionManager::load_session(
     const SessionLoadRequest& request) const {
+  SessionLoadResult result;
   if (!request.has_minimum_requirements()) {
-    return SessionLoadResult{
+    result = SessionLoadResult{
         .accepted = false,
         .created_new_session = false,
         .snapshot = std::nullopt,
         .error_code = RuntimeErrorCode::RT_E_400_SESSION_NOT_FOUND,
         .detail = "session_id and request_id are required",
     };
-  }
-
-  const std::lock_guard<std::mutex> lock(session_mutex_);
-  auto iterator = stored_snapshots_.find(request.session_id);
-  if (iterator == stored_snapshots_.end() && durable_state_root_.has_value()) {
-    SessionSnapshot durable_snapshot;
-    std::string durable_detail;
-    if (read_durable_session_record(
-            *durable_state_root_, request.session_id, durable_snapshot, durable_detail)) {
-      iterator = stored_snapshots_.emplace(request.session_id, std::move(durable_snapshot)).first;
+  } else {
+    const std::lock_guard<std::mutex> lock(session_mutex_);
+    auto iterator = stored_snapshots_.find(request.session_id);
+    if (iterator == stored_snapshots_.end() && durable_state_root_.has_value()) {
+      SessionSnapshot durable_snapshot;
+      std::string durable_detail;
+      if (read_durable_session_record(
+              *durable_state_root_, request.session_id, durable_snapshot, durable_detail)) {
+        iterator =
+            stored_snapshots_.emplace(request.session_id, std::move(durable_snapshot)).first;
+      }
     }
-  }
 
-  if (iterator != stored_snapshots_.end()) {
-    const auto& snapshot = iterator->second;
-    if (request.checkpoint_ref.has_value() &&
-        snapshot.active_checkpoint_ref != request.checkpoint_ref) {
-      return SessionLoadResult{
+    if (iterator != stored_snapshots_.end()) {
+      const auto& snapshot = iterator->second;
+      if (request.checkpoint_ref.has_value() &&
+          snapshot.active_checkpoint_ref != request.checkpoint_ref) {
+        result = SessionLoadResult{
+            .accepted = false,
+            .created_new_session = false,
+            .snapshot = std::nullopt,
+            .error_code = RuntimeErrorCode::RT_E_401_SESSION_INCONSISTENT,
+            .detail = "requested checkpoint_ref does not match active session anchor",
+        };
+      } else {
+        result = make_session_load_result(
+            snapshot,
+            false,
+            durable_state_root_.has_value()
+                ? "existing session loaded from durable store cache"
+                : "existing session loaded from in-memory store");
+      }
+    } else if (!request.allow_session_create) {
+      result = SessionLoadResult{
           .accepted = false,
           .created_new_session = false,
           .snapshot = std::nullopt,
-          .error_code = RuntimeErrorCode::RT_E_401_SESSION_INCONSISTENT,
-          .detail = "requested checkpoint_ref does not match active session anchor",
+          .error_code = RuntimeErrorCode::RT_E_400_SESSION_NOT_FOUND,
+          .detail = "session does not exist and creation is disabled",
       };
+    } else {
+      result = make_session_load_result(
+          SessionSnapshot{
+              .session_id = request.session_id,
+              .request_id = request.request_id,
+              .turn_index = 0,
+              .active_checkpoint_ref = request.checkpoint_ref,
+              .fsm_state = RuntimeState::Idle,
+              .budget_snapshot_ref = std::nullopt,
+              .pending_interaction = std::nullopt,
+              .last_result_summary = std::nullopt,
+          },
+          true,
+          "new session snapshot created for runtime-local store");
     }
-
-    return make_session_load_result(
-        snapshot,
-        false,
-        durable_state_root_.has_value() ? "existing session loaded from durable store cache"
-                                        : "existing session loaded from in-memory store");
   }
 
-  if (!request.allow_session_create) {
-    return SessionLoadResult{
-        .accepted = false,
-        .created_new_session = false,
-        .snapshot = std::nullopt,
-        .error_code = RuntimeErrorCode::RT_E_400_SESSION_NOT_FOUND,
-        .detail = "session does not exist and creation is disabled",
-    };
+  infra::LogEvent::AttributeMap attrs;
+  detail::add_string_attr(attrs, "operation", "load_session");
+  detail::add_string_attr(attrs, "session_id", request.session_id);
+  detail::add_string_attr(attrs, "request_id", request.request_id);
+  detail::add_optional_string_attr(attrs, "requested_checkpoint_ref", request.checkpoint_ref);
+  detail::add_bool_attr(attrs, "allow_session_create", request.allow_session_create);
+  detail::add_bool_attr(attrs, "accepted", result.accepted);
+  detail::add_bool_attr(attrs, "created_new_session", result.created_new_session);
+  detail::add_bool_attr(attrs, "has_snapshot", result.snapshot.has_value());
+  if (result.snapshot.has_value()) {
+    detail::add_string_attr(
+        attrs,
+        "fsm_state",
+        runtime_state_name(result.snapshot->fsm_state));
+    detail::add_optional_string_attr(
+        attrs,
+        "active_checkpoint_ref",
+        result.snapshot->active_checkpoint_ref);
+    detail::add_bool_attr(
+        attrs,
+        "pending_interaction_active",
+        result.snapshot->pending_interaction.has_value() &&
+            result.snapshot->pending_interaction->active());
+    if (result.snapshot->pending_interaction.has_value()) {
+      detail::add_string_attr(
+          attrs,
+          "pending_interaction_kind",
+          pending_interaction_kind_name(
+              result.snapshot->pending_interaction->interaction_kind));
+    }
   }
-
-  return make_session_load_result(
-      SessionSnapshot{
-          .session_id = request.session_id,
-          .request_id = request.request_id,
-          .turn_index = 0,
-          .active_checkpoint_ref = request.checkpoint_ref,
-          .fsm_state = RuntimeState::Idle,
-          .budget_snapshot_ref = std::nullopt,
-          .pending_interaction = std::nullopt,
-          .last_result_summary = std::nullopt,
-      },
-      true,
-      "new session snapshot created for runtime-local store");
+  if (result.error_code.has_value()) {
+    detail::add_integer_attr(attrs, "error_code", static_cast<int>(*result.error_code));
+  }
+  detail::add_string_attr(attrs, "detail", result.detail);
+  detail::emit_runtime_log(
+      logger_,
+      session_log_level(result.accepted),
+      "runtime.session.load",
+      "session_manager",
+      runtime_instance_id_,
+      std::move(attrs));
+  return result;
 }
 
 PrepareTurnResult SessionManager::prepare_turn(
     const PrepareTurnRequest& request) const {
+  PrepareTurnResult result;
   const auto& snapshot = request.session_snapshot;
   if (request.expected_checkpoint_ref.has_value() &&
       snapshot.active_checkpoint_ref != request.expected_checkpoint_ref) {
-    return PrepareTurnResult{
+    result = PrepareTurnResult{
         .accepted = false,
         .effective_session = std::nullopt,
         .error_code = RuntimeErrorCode::RT_E_401_SESSION_INCONSISTENT,
         .detail = "prepare_turn expected checkpoint_ref does not match session snapshot",
     };
-  }
-
-  if (snapshot.pending_interaction.has_value() && snapshot.pending_interaction->active() &&
-      snapshot.fsm_state != RuntimeState::WaitingClarify &&
-      snapshot.fsm_state != RuntimeState::WaitingConfirm &&
-      snapshot.fsm_state != RuntimeState::WaitingExternal) {
-    return PrepareTurnResult{
+  } else if (snapshot.pending_interaction.has_value() &&
+             snapshot.pending_interaction->active() &&
+             snapshot.fsm_state != RuntimeState::WaitingClarify &&
+             snapshot.fsm_state != RuntimeState::WaitingConfirm &&
+             snapshot.fsm_state != RuntimeState::WaitingExternal) {
+    result = PrepareTurnResult{
         .accepted = false,
         .effective_session = std::nullopt,
         .error_code = RuntimeErrorCode::RT_E_401_SESSION_INCONSISTENT,
         .detail = "pending interaction requires a waiting-state session snapshot",
     };
+  } else {
+    result = make_prepare_turn_result(
+        snapshot,
+        request.resume_turn ? "resume turn prepared" : "fresh turn prepared");
   }
 
-  return make_prepare_turn_result(
-      snapshot,
-      request.resume_turn ? "resume turn prepared" : "fresh turn prepared");
+  infra::LogEvent::AttributeMap attrs;
+  detail::add_string_attr(attrs, "operation", "prepare_turn");
+  detail::add_string_attr(attrs, "session_id", snapshot.session_id);
+  detail::add_string_attr(attrs, "request_id", snapshot.request_id);
+  detail::add_optional_string_attr(attrs, "expected_checkpoint_ref", request.expected_checkpoint_ref);
+  detail::add_optional_string_attr(attrs, "active_checkpoint_ref", snapshot.active_checkpoint_ref);
+  detail::add_string_attr(attrs, "fsm_state", runtime_state_name(snapshot.fsm_state));
+  detail::add_bool_attr(attrs, "resume_turn", request.resume_turn);
+  detail::add_bool_attr(attrs, "accepted", result.accepted);
+  detail::add_bool_attr(
+      attrs,
+      "pending_interaction_active",
+      snapshot.pending_interaction.has_value() && snapshot.pending_interaction->active());
+  if (snapshot.pending_interaction.has_value()) {
+    detail::add_string_attr(
+        attrs,
+        "pending_interaction_kind",
+        pending_interaction_kind_name(snapshot.pending_interaction->interaction_kind));
+  }
+  if (result.error_code.has_value()) {
+    detail::add_integer_attr(attrs, "error_code", static_cast<int>(*result.error_code));
+  }
+  detail::add_string_attr(attrs, "detail", result.detail);
+  detail::emit_runtime_log(
+      logger_,
+      session_log_level(result.accepted),
+      "runtime.session.prepare_turn",
+      "session_manager",
+      runtime_instance_id_,
+      std::move(attrs));
+  return result;
 }
 
 SessionPersistResult SessionManager::persist_turn(
     const SessionPersistRequest& request) {
+  SessionPersistResult result;
   if (!request.has_minimum_requirements() || request.terminal_state == RuntimeState::Idle) {
-    return SessionPersistResult{
+    result = SessionPersistResult{
         .persisted = false,
         .active_checkpoint_ref = std::nullopt,
         .error_code = RuntimeErrorCode::RT_E_401_SESSION_INCONSISTENT,
         .detail = "persist_turn requires session identity and a non-idle terminal state",
     };
+  } else {
+    const std::lock_guard<std::mutex> lock(session_mutex_);
+    auto& stored_snapshot = stored_snapshots_[request.session_snapshot.session_id];
+    stored_snapshot = request.session_snapshot;
+    stored_snapshot.fsm_state = request.terminal_state;
+    if (request.checkpoint_ref.has_value()) {
+      stored_snapshot.active_checkpoint_ref = request.checkpoint_ref;
+    }
+
+    std::string persist_detail = "turn persisted in in-memory session store";
+    if (durable_state_root_.has_value() &&
+        !write_durable_session_record(*durable_state_root_, stored_snapshot, persist_detail)) {
+      result = SessionPersistResult{
+          .persisted = false,
+          .active_checkpoint_ref = std::nullopt,
+          .error_code = RuntimeErrorCode::RT_E_401_SESSION_INCONSISTENT,
+          .detail = persist_detail,
+      };
+    } else {
+      result = make_session_persist_result(
+          stored_snapshot.active_checkpoint_ref,
+          persist_detail);
+    }
   }
 
-  const std::lock_guard<std::mutex> lock(session_mutex_);
-  auto& stored_snapshot = stored_snapshots_[request.session_snapshot.session_id];
-  stored_snapshot = request.session_snapshot;
-  stored_snapshot.fsm_state = request.terminal_state;
-  if (request.checkpoint_ref.has_value()) {
-    stored_snapshot.active_checkpoint_ref = request.checkpoint_ref;
+  infra::LogEvent::AttributeMap attrs;
+  detail::add_string_attr(attrs, "operation", "persist_turn");
+  detail::add_string_attr(attrs, "session_id", request.session_snapshot.session_id);
+  detail::add_string_attr(attrs, "request_id", request.session_snapshot.request_id);
+  detail::add_string_attr(attrs, "terminal_state", runtime_state_name(request.terminal_state));
+  detail::add_optional_string_attr(attrs, "checkpoint_ref", request.checkpoint_ref);
+  detail::add_bool_attr(attrs, "persisted", result.persisted);
+  detail::add_optional_string_attr(attrs, "active_checkpoint_ref", result.active_checkpoint_ref);
+  detail::add_bool_attr(
+      attrs,
+      "pending_interaction_active",
+      request.session_snapshot.pending_interaction.has_value() &&
+          request.session_snapshot.pending_interaction->active());
+  if (result.error_code.has_value()) {
+    detail::add_integer_attr(attrs, "error_code", static_cast<int>(*result.error_code));
   }
-
-  std::string persist_detail = "turn persisted in in-memory session store";
-  if (durable_state_root_.has_value() &&
-      !write_durable_session_record(*durable_state_root_, stored_snapshot, persist_detail)) {
-    return SessionPersistResult{
-        .persisted = false,
-        .active_checkpoint_ref = std::nullopt,
-        .error_code = RuntimeErrorCode::RT_E_401_SESSION_INCONSISTENT,
-        .detail = persist_detail,
-    };
-  }
-
-  return make_session_persist_result(
-      stored_snapshot.active_checkpoint_ref,
-      persist_detail);
+  detail::add_string_attr(attrs, "detail", result.detail);
+  detail::emit_runtime_log(
+      logger_,
+      session_log_level(result.persisted),
+      "runtime.session.persist_turn",
+      "session_manager",
+      runtime_instance_id_,
+      std::move(attrs));
+  return result;
 }
 
 SessionPersistResult SessionManager::bind_checkpoint_ref(
     const BindCheckpointRefRequest& request) {
+  SessionPersistResult result;
   if (!request.has_minimum_requirements()) {
-    return SessionPersistResult{
+    result = SessionPersistResult{
         .persisted = false,
         .active_checkpoint_ref = std::nullopt,
         .error_code = RuntimeErrorCode::RT_E_401_SESSION_INCONSISTENT,
         .detail = "bind_checkpoint_ref requires session_id, request_id and checkpoint_ref",
     };
-  }
-
-  const std::lock_guard<std::mutex> lock(session_mutex_);
-  auto iterator = stored_snapshots_.find(request.session_id);
-  if (iterator == stored_snapshots_.end()) {
-    iterator = stored_snapshots_.emplace(
-                   request.session_id,
-                   SessionSnapshot{
-        .session_id = request.session_id,
-        .request_id = request.request_id,
-        .turn_index = 0,
-        .active_checkpoint_ref = request.checkpoint_ref,
-        .fsm_state = request.fsm_state,
-        .budget_snapshot_ref = std::nullopt,
-        .pending_interaction = request.pending_interaction,
-        .last_result_summary = std::nullopt,
-                   })
-                   .first;
   } else {
-    iterator->second.session_id = request.session_id;
-    iterator->second.request_id = request.request_id;
-    iterator->second.active_checkpoint_ref = request.checkpoint_ref;
-    iterator->second.fsm_state = request.fsm_state;
-    iterator->second.pending_interaction = request.pending_interaction;
+    const std::lock_guard<std::mutex> lock(session_mutex_);
+    auto iterator = stored_snapshots_.find(request.session_id);
+    if (iterator == stored_snapshots_.end()) {
+      iterator = stored_snapshots_
+                     .emplace(
+                         request.session_id,
+                         SessionSnapshot{
+                             .session_id = request.session_id,
+                             .request_id = request.request_id,
+                             .turn_index = 0,
+                             .active_checkpoint_ref = request.checkpoint_ref,
+                             .fsm_state = request.fsm_state,
+                             .budget_snapshot_ref = std::nullopt,
+                             .pending_interaction = request.pending_interaction,
+                             .last_result_summary = std::nullopt,
+                         })
+                     .first;
+    } else {
+      iterator->second.session_id = request.session_id;
+      iterator->second.request_id = request.request_id;
+      iterator->second.active_checkpoint_ref = request.checkpoint_ref;
+      iterator->second.fsm_state = request.fsm_state;
+      iterator->second.pending_interaction = request.pending_interaction;
+    }
+
+    std::string persist_detail = "checkpoint reference bound to in-memory session";
+    if (durable_state_root_.has_value() &&
+        !write_durable_session_record(*durable_state_root_, iterator->second, persist_detail)) {
+      result = SessionPersistResult{
+          .persisted = false,
+          .active_checkpoint_ref = std::nullopt,
+          .error_code = RuntimeErrorCode::RT_E_401_SESSION_INCONSISTENT,
+          .detail = persist_detail,
+      };
+    } else {
+      result = make_session_persist_result(
+          iterator->second.active_checkpoint_ref,
+          persist_detail);
+    }
   }
 
-  std::string persist_detail = "checkpoint reference bound to in-memory session";
-  if (durable_state_root_.has_value() &&
-      !write_durable_session_record(*durable_state_root_, iterator->second, persist_detail)) {
-    return SessionPersistResult{
-        .persisted = false,
-        .active_checkpoint_ref = std::nullopt,
-        .error_code = RuntimeErrorCode::RT_E_401_SESSION_INCONSISTENT,
-        .detail = persist_detail,
-    };
+  infra::LogEvent::AttributeMap attrs;
+  detail::add_string_attr(attrs, "operation", "bind_checkpoint_ref");
+  detail::add_string_attr(attrs, "session_id", request.session_id);
+  detail::add_string_attr(attrs, "request_id", request.request_id);
+  detail::add_string_attr(attrs, "checkpoint_ref", request.checkpoint_ref);
+  detail::add_string_attr(attrs, "fsm_state", runtime_state_name(request.fsm_state));
+  detail::add_bool_attr(attrs, "persisted", result.persisted);
+  detail::add_bool_attr(
+      attrs,
+      "pending_interaction_active",
+      request.pending_interaction.has_value() && request.pending_interaction->active());
+  if (request.pending_interaction.has_value()) {
+    detail::add_string_attr(
+        attrs,
+        "pending_interaction_kind",
+        pending_interaction_kind_name(request.pending_interaction->interaction_kind));
   }
-
-  return make_session_persist_result(
-      iterator->second.active_checkpoint_ref,
-      persist_detail);
+  if (result.error_code.has_value()) {
+    detail::add_integer_attr(attrs, "error_code", static_cast<int>(*result.error_code));
+  }
+  detail::add_string_attr(attrs, "detail", result.detail);
+  detail::emit_runtime_log(
+      logger_,
+      session_log_level(result.persisted),
+      "runtime.session.bind_checkpoint_ref",
+      "session_manager",
+      runtime_instance_id_,
+      std::move(attrs));
+  return result;
 }
 
 ResumeSeedResult SessionManager::build_resume_seed(
     const BuildResumeSeedRequest& request) const {
+  ResumeSeedResult result;
   if (!request.has_minimum_requirements()) {
-    return ResumeSeedResult{
+    result = ResumeSeedResult{
         .resume_seed = std::nullopt,
         .error_code = RuntimeErrorCode::RT_E_401_SESSION_INCONSISTENT,
         .detail = "build_resume_seed requires session identity, checkpoint_ref and resume_reason",
     };
-  }
-
-  if (request.session_snapshot.active_checkpoint_ref.has_value() &&
-      request.session_snapshot.active_checkpoint_ref != request.checkpoint_ref) {
-    return ResumeSeedResult{
+  } else if (request.session_snapshot.active_checkpoint_ref.has_value() &&
+             request.session_snapshot.active_checkpoint_ref != request.checkpoint_ref) {
+    result = ResumeSeedResult{
         .resume_seed = std::nullopt,
         .error_code = RuntimeErrorCode::RT_E_401_SESSION_INCONSISTENT,
         .detail = "resume seed checkpoint_ref must match active session anchor",
     };
+  } else {
+    result = make_resume_seed_result(
+        ResumeSeed{
+            .session_id = request.session_snapshot.session_id,
+            .request_id = request.session_snapshot.request_id,
+            .checkpoint_ref = request.checkpoint_ref,
+            .resume_token = request.resume_token,
+            .fsm_state = request.session_snapshot.fsm_state,
+            .pending_interaction = request.session_snapshot.pending_interaction,
+            .policy_snapshot_ref = request.policy_snapshot_ref,
+            .resume_reason = request.resume_reason,
+        },
+        "resume seed built from in-memory session snapshot");
   }
 
-  return make_resume_seed_result(
-      ResumeSeed{
-          .session_id = request.session_snapshot.session_id,
-          .request_id = request.session_snapshot.request_id,
-          .checkpoint_ref = request.checkpoint_ref,
-        .resume_token = request.resume_token,
-          .fsm_state = request.session_snapshot.fsm_state,
-          .pending_interaction = request.session_snapshot.pending_interaction,
-          .policy_snapshot_ref = request.policy_snapshot_ref,
-          .resume_reason = request.resume_reason,
-      },
-      "resume seed built from in-memory session snapshot");
+  infra::LogEvent::AttributeMap attrs;
+  detail::add_string_attr(attrs, "operation", "build_resume_seed");
+  detail::add_string_attr(attrs, "session_id", request.session_snapshot.session_id);
+  detail::add_string_attr(attrs, "request_id", request.session_snapshot.request_id);
+  detail::add_string_attr(attrs, "checkpoint_ref", request.checkpoint_ref);
+  detail::add_string_attr(
+      attrs,
+      "fsm_state",
+      runtime_state_name(request.session_snapshot.fsm_state));
+  detail::add_bool_attr(attrs, "built", result.built());
+  detail::add_bool_attr(
+      attrs,
+      "pending_interaction_active",
+      request.session_snapshot.pending_interaction.has_value() &&
+          request.session_snapshot.pending_interaction->active());
+  detail::add_bool_attr(attrs, "policy_snapshot_ref_present", request.policy_snapshot_ref.has_value());
+  if (request.session_snapshot.pending_interaction.has_value()) {
+    detail::add_string_attr(
+        attrs,
+        "pending_interaction_kind",
+        pending_interaction_kind_name(
+            request.session_snapshot.pending_interaction->interaction_kind));
+  }
+  if (result.error_code.has_value()) {
+    detail::add_integer_attr(attrs, "error_code", static_cast<int>(*result.error_code));
+  }
+  detail::add_string_attr(attrs, "detail", result.detail);
+  detail::emit_runtime_log(
+      logger_,
+      session_log_level(result.built()),
+      "runtime.session.build_resume_seed",
+      "session_manager",
+      runtime_instance_id_,
+      std::move(attrs));
+  return result;
 }
 
 }  // namespace dasall::runtime

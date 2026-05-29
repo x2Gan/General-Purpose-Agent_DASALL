@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <string_view>
 #include <utility>
 
 #include "ICognitionEngine.h"
@@ -9,6 +10,7 @@
 #include "AgentOrchestrator.h"
 #include "RuntimeDependencySet.h"
 #include "error/ResultCode.h"
+#include "logging/RuntimeStructuredLogUtils.h"
 
 namespace dasall::runtime {
 namespace {
@@ -41,6 +43,187 @@ constexpr char kRuntimePathRecoveryPositiveTag[] = "runtime_path:recovery_positi
   }
 
   return value;
+}
+
+[[nodiscard]] std::optional<std::string> runtime_instance_id_attr(
+    const RuntimeCompositionRoot& root) {
+  return optional_string(root.runtime_instance_id);
+}
+
+[[nodiscard]] std::shared_ptr<infra::logging::ILogger> logger_from_root(
+    const RuntimeCompositionRoot& root) {
+  if (root.dependency_set == nullptr) {
+    return nullptr;
+  }
+
+  return root.dependency_set->logger;
+}
+
+[[nodiscard]] std::shared_ptr<infra::logging::ILogger> logger_from_request(
+    const AgentInitRequest& request) {
+  if (request.dependency_set == nullptr) {
+    return nullptr;
+  }
+
+  return request.dependency_set->logger;
+}
+
+[[nodiscard]] const char* agent_result_status_name(
+    const std::optional<contracts::AgentResultStatus>& status) {
+  if (!status.has_value()) {
+    return "Unspecified";
+  }
+
+  switch (*status) {
+    case contracts::AgentResultStatus::Unspecified:
+      return "Unspecified";
+    case contracts::AgentResultStatus::Completed:
+      return "Completed";
+    case contracts::AgentResultStatus::Failed:
+      return "Failed";
+    case contracts::AgentResultStatus::PartiallyCompleted:
+      return "PartiallyCompleted";
+    case contracts::AgentResultStatus::Cancelled:
+      return "Cancelled";
+    case contracts::AgentResultStatus::Timeout:
+      return "Timeout";
+  }
+
+  return "Unknown";
+}
+
+[[nodiscard]] infra::LogLevel facade_init_log_level(const AgentInitResult& result) {
+  return result.accepted ? infra::LogLevel::Info : infra::LogLevel::Error;
+}
+
+[[nodiscard]] infra::LogLevel facade_result_log_level(
+    const contracts::AgentResult& result) {
+  if (!result.status.has_value()) {
+    return infra::LogLevel::Warn;
+  }
+
+  switch (*result.status) {
+    case contracts::AgentResultStatus::Completed:
+      return infra::LogLevel::Info;
+    case contracts::AgentResultStatus::PartiallyCompleted:
+    case contracts::AgentResultStatus::Cancelled:
+      return infra::LogLevel::Warn;
+    case contracts::AgentResultStatus::Failed:
+    case contracts::AgentResultStatus::Timeout:
+      return infra::LogLevel::Error;
+    case contracts::AgentResultStatus::Unspecified:
+      return infra::LogLevel::Warn;
+  }
+
+  return infra::LogLevel::Warn;
+}
+
+[[nodiscard]] std::optional<std::string> find_runtime_path_tag(
+    const contracts::AgentResult& result) {
+  if (!result.tags.has_value()) {
+    return std::nullopt;
+  }
+
+  const auto tag_it = std::find_if(
+      result.tags->begin(),
+      result.tags->end(),
+      [](const std::string& tag) {
+        return tag.rfind(kRuntimePathTagPrefix, 0) == 0;
+      });
+  if (tag_it == result.tags->end()) {
+    return std::nullopt;
+  }
+
+  return *tag_it;
+}
+
+void emit_facade_init_log(
+    const std::shared_ptr<infra::logging::ILogger>& logger,
+    const AgentInitRequest& request,
+    const AgentInitResult& result) {
+  infra::LogEvent::AttributeMap attrs;
+  detail::add_string_attr(attrs, "profile_id", request.profile_id);
+  detail::add_string_attr(attrs, "resolved_profile_id", result.resolved_profile_id);
+  detail::add_bool_attr(attrs, "accepted", result.accepted);
+  detail::add_bool_attr(attrs, "degraded", result.degraded);
+  detail::add_bool_attr(attrs, "cold_start", request.cold_start);
+  detail::add_string_attr(attrs, "readiness_level", result.readiness_label());
+  detail::add_integer_attr(attrs,
+                           "missing_required_port_count",
+                           result.missing_required_ports.size());
+  detail::add_integer_attr(attrs,
+                           "missing_optional_port_count",
+                           result.missing_optional_ports.size());
+  detail::add_integer_attr(attrs, "degraded_reason_count", result.degraded_reasons.size());
+  if (result.error_code != 0) {
+    detail::add_integer_attr(attrs, "error_code", result.error_code);
+  }
+  detail::add_string_attr(
+      attrs,
+      "detail",
+      !result.diagnostics.empty() ? result.diagnostics : result.health_summary);
+  detail::emit_runtime_log(
+      logger,
+      facade_init_log_level(result),
+      "runtime.facade.init",
+      "agent_facade",
+      optional_string(result.runtime_instance_id),
+      std::move(attrs));
+}
+
+void emit_facade_result_log(
+    const std::shared_ptr<infra::logging::ILogger>& logger,
+    const std::optional<std::string>& runtime_instance_id,
+    const std::string_view event_name,
+    const std::optional<std::string>& request_id,
+    const std::optional<std::string>& session_id,
+    const std::optional<std::string>& trace_id,
+    const std::optional<std::string>& checkpoint_ref,
+    const contracts::AgentResult& result,
+    const std::string_view outcome_reason,
+    const bool waiting_session_active) {
+  infra::LogEvent::AttributeMap attrs;
+  detail::add_optional_string_attr(attrs, "request_id", request_id);
+  detail::add_optional_string_attr(attrs, "session_id", session_id);
+  detail::add_optional_string_attr(attrs, "trace_id", trace_id);
+  detail::add_optional_string_attr(attrs, "checkpoint_ref", checkpoint_ref);
+  detail::add_optional_string_attr(attrs, "result_id", result.result_id);
+  detail::add_string_attr(attrs, "result_status", agent_result_status_name(result.status));
+  if (result.result_code.has_value()) {
+    detail::add_integer_attr(attrs, "result_code", *result.result_code);
+  }
+  detail::add_bool_attr(attrs, "task_completed", result.task_completed.value_or(false));
+  detail::add_bool_attr(attrs, "waiting_session_active", waiting_session_active);
+  detail::add_optional_string_attr(attrs, "runtime_path_tag", find_runtime_path_tag(result));
+  if (result.tags.has_value()) {
+    detail::add_integer_attr(attrs, "tag_count", result.tags->size());
+  }
+  detail::add_string_attr(attrs, "outcome_reason", outcome_reason);
+  detail::emit_runtime_log(
+      logger,
+      facade_result_log_level(result),
+      event_name,
+      "agent_facade",
+      runtime_instance_id,
+      std::move(attrs));
+}
+
+void emit_facade_stop_log(
+    const std::shared_ptr<infra::logging::ILogger>& logger,
+    const std::optional<std::string>& runtime_instance_id,
+    const bool was_initialized,
+    const std::uint32_t timeout_ms) {
+  infra::LogEvent::AttributeMap attrs;
+  detail::add_bool_attr(attrs, "was_initialized", was_initialized);
+  detail::add_bool_attr(attrs, "stopped", true);
+  detail::add_integer_attr(attrs, "timeout_ms", timeout_ms);
+  detail::emit_runtime_log(
+      logger,
+      infra::LogLevel::Info,
+      "runtime.facade.stop",
+      "agent_facade",
+      runtime_instance_id,
+      std::move(attrs));
 }
 
 void append_diagnostic_fragment(std::string& diagnostics,
@@ -347,12 +530,14 @@ class AgentFacade::State {
     AgentInitResult result;
     result.runtime_instance_id = request.runtime_instance_id;
     result.resolved_profile_id = request.profile_id;
+    const auto init_logger = logger_from_request(request);
 
     if (!request.has_minimum_requirements()) {
       result.health_summary = "runtime facade skeleton rejected incomplete init request";
       result.error_code = static_cast<std::int32_t>(contracts::ResultCode::RuntimeRetryExhausted);
       result.diagnostics =
           "runtime_instance_id, profile_id, policy_snapshot and dependency_set are required";
+      emit_facade_init_log(init_logger, request, result);
       return result;
     }
 
@@ -361,6 +546,7 @@ class AgentFacade::State {
     }
 
     if (!compose_cognition_ports_if_needed(request, result)) {
+      emit_facade_init_log(init_logger, request, result);
       return result;
     }
 
@@ -394,6 +580,7 @@ class AgentFacade::State {
           "runtime facade rejected missing required dependency ports";
       result.error_code =
           static_cast<std::int32_t>(contracts::ResultCode::RuntimeRetryExhausted);
+        emit_facade_init_log(init_logger, request, result);
       return result;
     }
 
@@ -402,6 +589,7 @@ class AgentFacade::State {
           "runtime facade rejected degraded optional-port init under current profile";
       result.error_code =
           static_cast<std::int32_t>(contracts::ResultCode::PolicyDenied);
+        emit_facade_init_log(init_logger, request, result);
       return result;
     }
 
@@ -452,60 +640,159 @@ class AgentFacade::State {
                                 : result.diagnostics.empty()
                                       ? "runtime facade skeleton initialized"
                                       : "runtime facade initialized with policy-projected cognition ports";
+    emit_facade_init_log(init_logger, request, result);
     return result;
   }
 
   contracts::AgentResult handle(const contracts::AgentRequest& request) {
     if (!initialized_) {
-      return make_failed_result(request.request_id, request.trace_id,
-                                "runtime facade is not initialized");
+      auto result = make_failed_result(request.request_id, request.trace_id,
+                                       "runtime facade is not initialized");
+      emit_facade_result_log(
+          logger_from_root(root_),
+          runtime_instance_id_attr(root_),
+          "runtime.facade.handle",
+          request.request_id,
+          request.session_id,
+          request.trace_id,
+          std::nullopt,
+          result,
+          "not_initialized",
+          false);
+      return result;
     }
 
     if (!root_.orchestrator) {
-      return make_failed_result(request.request_id,
-                                request.trace_id,
-                                "runtime facade is missing orchestrator composition");
+      auto result = make_failed_result(request.request_id,
+                                       request.trace_id,
+                                       "runtime facade is missing orchestrator composition");
+      emit_facade_result_log(
+          logger_from_root(root_),
+          runtime_instance_id_attr(root_),
+          "runtime.facade.handle",
+          request.request_id,
+          request.session_id,
+          request.trace_id,
+          std::nullopt,
+          result,
+          "missing_orchestrator",
+          root_.waiting_session.has_value() &&
+              is_active_waiting_session(*root_.waiting_session));
+      return result;
     }
 
     auto run_result = root_.orchestrator->run_once(request);
     apply_runtime_path_tag(root_, run_result);
     apply_runtime_readiness_tags(root_.readiness, run_result.agent_result);
     update_waiting_session(run_result);
+    emit_facade_result_log(
+        logger_from_root(root_),
+        runtime_instance_id_attr(root_),
+        "runtime.facade.handle",
+        request.request_id,
+        request.session_id,
+        request.trace_id,
+        run_result.agent_result.checkpoint_ref,
+        run_result.agent_result,
+        "completed",
+        root_.waiting_session.has_value() && is_active_waiting_session(*root_.waiting_session));
     return run_result.agent_result;
   }
 
   contracts::AgentResult resume(const ResumeHandleRequest& request) {
     if (!initialized_) {
-      return make_failed_result(optional_string(request.request_id),
-                                optional_string(request.trace_context),
-                                "runtime facade is not initialized");
+      auto result = make_failed_result(optional_string(request.request_id),
+                                       optional_string(request.trace_context),
+                                       "runtime facade is not initialized");
+      emit_facade_result_log(
+          logger_from_root(root_),
+          runtime_instance_id_attr(root_),
+          "runtime.facade.resume",
+          optional_string(request.request_id),
+          optional_string(request.session_id),
+          optional_string(request.trace_context),
+          optional_string(request.checkpoint_ref),
+          result,
+          "not_initialized",
+          false);
+      return result;
     }
 
     if (!request.has_minimum_requirements()) {
-      return make_failed_result(optional_string(request.request_id),
-                                optional_string(request.trace_context),
-                                "resume request is missing required checkpoint anchors");
+      auto result = make_failed_result(optional_string(request.request_id),
+                                       optional_string(request.trace_context),
+                                       "resume request is missing required checkpoint anchors");
+      emit_facade_result_log(
+          logger_from_root(root_),
+          runtime_instance_id_attr(root_),
+          "runtime.facade.resume",
+          optional_string(request.request_id),
+          optional_string(request.session_id),
+          optional_string(request.trace_context),
+          optional_string(request.checkpoint_ref),
+          result,
+          "missing_required_anchors",
+          root_.waiting_session.has_value() &&
+              is_active_waiting_session(*root_.waiting_session));
+      return result;
     }
 
     if (!root_.orchestrator) {
-      return make_failed_result(optional_string(request.request_id),
-                                optional_string(request.trace_context),
-                                "runtime facade is missing orchestrator composition");
+      auto result = make_failed_result(optional_string(request.request_id),
+                                       optional_string(request.trace_context),
+                                       "runtime facade is missing orchestrator composition");
+      emit_facade_result_log(
+          logger_from_root(root_),
+          runtime_instance_id_attr(root_),
+          "runtime.facade.resume",
+          optional_string(request.request_id),
+          optional_string(request.session_id),
+          optional_string(request.trace_context),
+          optional_string(request.checkpoint_ref),
+          result,
+          "missing_orchestrator",
+          root_.waiting_session.has_value() &&
+              is_active_waiting_session(*root_.waiting_session));
+      return result;
     }
 
     SessionSnapshot resume_session;
     if (root_.waiting_session.has_value() &&
         is_active_waiting_session(*root_.waiting_session)) {
       if (root_.waiting_session->session_id != request.session_id) {
-        return make_failed_result(optional_string(request.request_id),
-                                  optional_string(request.trace_context),
-                                  "runtime resume request session does not match active waiting session");
+        auto result = make_failed_result(optional_string(request.request_id),
+                                         optional_string(request.trace_context),
+                                         "runtime resume request session does not match active waiting session");
+        emit_facade_result_log(
+            logger_from_root(root_),
+            runtime_instance_id_attr(root_),
+            "runtime.facade.resume",
+            optional_string(request.request_id),
+            optional_string(request.session_id),
+            optional_string(request.trace_context),
+            optional_string(request.checkpoint_ref),
+            result,
+            "session_mismatch",
+            true);
+        return result;
       }
 
       if (root_.waiting_session->active_checkpoint_ref != request.checkpoint_ref) {
-        return make_failed_result(optional_string(request.request_id),
-                                  optional_string(request.trace_context),
-                                  "runtime resume request checkpoint does not match active waiting anchor");
+        auto result = make_failed_result(optional_string(request.request_id),
+                                         optional_string(request.trace_context),
+                                         "runtime resume request checkpoint does not match active waiting anchor");
+        emit_facade_result_log(
+            logger_from_root(root_),
+            runtime_instance_id_attr(root_),
+            "runtime.facade.resume",
+            optional_string(request.request_id),
+            optional_string(request.session_id),
+            optional_string(request.trace_context),
+            optional_string(request.checkpoint_ref),
+            result,
+            "checkpoint_mismatch",
+            true);
+        return result;
       }
 
       resume_session = *root_.waiting_session;
@@ -524,9 +811,22 @@ class AgentFacade::State {
 
     if (request.resume_token !=
         make_resume_binding_token(request.session_id, request.checkpoint_ref)) {
-      return make_failed_result(optional_string(request.request_id),
-                                optional_string(request.trace_context),
-                                "runtime resume request token does not match waiting checkpoint binding");
+      auto result = make_failed_result(optional_string(request.request_id),
+                                       optional_string(request.trace_context),
+                                       "runtime resume request token does not match waiting checkpoint binding");
+      emit_facade_result_log(
+          logger_from_root(root_),
+          runtime_instance_id_attr(root_),
+          "runtime.facade.resume",
+          optional_string(request.request_id),
+          optional_string(request.session_id),
+          optional_string(request.trace_context),
+          optional_string(request.checkpoint_ref),
+          result,
+          "token_mismatch",
+          root_.waiting_session.has_value() &&
+              is_active_waiting_session(*root_.waiting_session));
+      return result;
     }
 
     auto run_result = root_.orchestrator->handle_waiting_state(resume_session,
@@ -534,11 +834,26 @@ class AgentFacade::State {
     apply_runtime_path_tag(root_, run_result);
     apply_runtime_readiness_tags(root_.readiness, run_result.agent_result);
     update_waiting_session(run_result);
+    emit_facade_result_log(
+        logger_from_root(root_),
+        runtime_instance_id_attr(root_),
+        "runtime.facade.resume",
+        optional_string(request.request_id),
+        optional_string(request.session_id),
+        optional_string(request.trace_context),
+        optional_string(request.checkpoint_ref),
+        run_result.agent_result,
+        "completed",
+        root_.waiting_session.has_value() && is_active_waiting_session(*root_.waiting_session));
     return run_result.agent_result;
   }
 
   bool stop(std::uint32_t timeout_ms) {
-    (void)timeout_ms;
+    emit_facade_stop_log(
+        logger_from_root(root_),
+        runtime_instance_id_attr(root_),
+        initialized_,
+        timeout_ms);
     initialized_ = false;
     root_ = RuntimeCompositionRoot{};
     return true;

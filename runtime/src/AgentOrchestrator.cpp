@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -26,6 +27,7 @@
 #include "error/ErrorInfo.h"
 #include "error/ResultCode.h"
 #include "fsm/AgentFsm.h"
+#include "logging/ILogger.h"
 #include "observation/Observation.h"
 #include "telemetry/RuntimeTelemetryBridge.h"
 
@@ -73,6 +75,18 @@ constexpr char kRuntimeCheckpointEffectiveMaxWorkersTag[] =
   return composition.dependency_set != nullptr
              ? composition.dependency_set->runtime_telemetry_bridge
              : nullptr;
+}
+
+[[nodiscard]] std::shared_ptr<infra::logging::ILogger> runtime_logger(
+    const OrchestratorComposition& composition) {
+  return composition.dependency_set != nullptr ? composition.dependency_set->logger
+                                               : nullptr;
+}
+
+[[nodiscard]] std::string runtime_instance_id(
+    const OrchestratorComposition& composition) {
+  return composition.runtime_instance_id.empty() ? std::string("runtime")
+                                                 : composition.runtime_instance_id;
 }
 
 [[nodiscard]] std::optional<std::string> runtime_turn_id(
@@ -167,6 +181,312 @@ void backfill_runtime_telemetry_context(RuntimeTelemetryContext* context,
   return context;
 }
 
+[[nodiscard]] const char* agent_result_status_name(
+    const contracts::AgentResultStatus status) {
+  switch (status) {
+    case contracts::AgentResultStatus::Unspecified:
+      return "Unspecified";
+    case contracts::AgentResultStatus::Completed:
+      return "Completed";
+    case contracts::AgentResultStatus::Failed:
+      return "Failed";
+    case contracts::AgentResultStatus::PartiallyCompleted:
+      return "PartiallyCompleted";
+    case contracts::AgentResultStatus::Cancelled:
+      return "Cancelled";
+    case contracts::AgentResultStatus::Timeout:
+      return "Timeout";
+  }
+
+  return "Unspecified";
+}
+
+[[nodiscard]] infra::LogLevel orchestrator_run_finish_log_level(
+    const OrchestratorRunResult& run_result) {
+  const auto status = run_result.agent_result.status.value_or(
+      contracts::AgentResultStatus::Unspecified);
+  switch (status) {
+    case contracts::AgentResultStatus::Completed:
+      return infra::LogLevel::Info;
+    case contracts::AgentResultStatus::PartiallyCompleted:
+    case contracts::AgentResultStatus::Cancelled:
+    case contracts::AgentResultStatus::Timeout:
+      return infra::LogLevel::Warn;
+    case contracts::AgentResultStatus::Failed:
+    case contracts::AgentResultStatus::Unspecified:
+    default:
+      return infra::LogLevel::Error;
+  }
+}
+
+[[nodiscard]] std::string bool_attr(const bool value) {
+  return value ? "true" : "false";
+}
+
+[[nodiscard]] std::string compact_log_value(std::string value) {
+  for (char& ch : value) {
+    if (ch == '\n' || ch == '\r' || ch == '\t') {
+      ch = ' ';
+    }
+  }
+
+  constexpr std::size_t kMaxValueLength = 192U;
+  if (value.size() > kMaxValueLength) {
+    value.resize(kMaxValueLength - 3U);
+    value += "...";
+  }
+
+  return value;
+}
+
+void add_string_attr(infra::LogEvent::AttributeMap* attrs,
+                     std::string_view key,
+                     std::string value) {
+  if (attrs == nullptr || key.empty() || value.empty()) {
+    return;
+  }
+
+  (*attrs)[std::string(key)] = compact_log_value(std::move(value));
+}
+
+void add_optional_string_attr(infra::LogEvent::AttributeMap* attrs,
+                              std::string_view key,
+                              const std::optional<std::string>& value) {
+  if (!value.has_value()) {
+    return;
+  }
+
+  add_string_attr(attrs, key, *value);
+}
+
+template <typename Integer>
+void add_integer_attr(infra::LogEvent::AttributeMap* attrs,
+                      std::string_view key,
+                      const Integer value) {
+  if (attrs == nullptr || key.empty()) {
+    return;
+  }
+
+  (*attrs)[std::string(key)] = std::to_string(value);
+}
+
+void add_context_attrs(infra::LogEvent::AttributeMap* attrs,
+                       const RuntimeTelemetryContext& context) {
+  add_optional_string_attr(attrs, "request_id", context.request_id);
+  add_optional_string_attr(attrs, "session_id", context.session_id);
+  add_optional_string_attr(attrs, "trace_id", context.trace_id);
+  add_optional_string_attr(attrs, "turn_id", context.turn_id);
+  add_optional_string_attr(attrs, "checkpoint_id", context.checkpoint_id);
+}
+
+void add_scheduler_backpressure_attrs(
+    infra::LogEvent::AttributeMap* attrs,
+    const std::optional<SchedulerBackpressureState>& backpressure_state) {
+  if (attrs == nullptr || !backpressure_state.has_value()) {
+    return;
+  }
+
+  add_integer_attr(attrs,
+                   "scheduler_foreground_queue_depth",
+                   backpressure_state->foreground_queue_depth);
+  add_integer_attr(attrs,
+                   "scheduler_recovery_queue_depth",
+                   backpressure_state->recovery_queue_depth);
+  add_integer_attr(attrs,
+                   "scheduler_maintenance_queue_depth",
+                   backpressure_state->maintenance_queue_depth);
+  add_integer_attr(attrs,
+                   "scheduler_busy_workers",
+                   backpressure_state->worker_budget.busy_workers);
+  add_integer_attr(attrs,
+                   "scheduler_max_workers",
+                   backpressure_state->worker_budget.max_workers);
+  add_string_attr(attrs,
+                  "scheduler_dominant_signal",
+                  std::string(scheduler_backpressure_signal_name(
+                      backpressure_state->dominant_signal)));
+  add_string_attr(attrs,
+                  "scheduler_overloaded",
+                  bool_attr(backpressure_state->overloaded()));
+}
+
+class ScopedRuntimeExecutionLogger;
+
+[[nodiscard]] ScopedRuntimeExecutionLogger*& active_runtime_execution_logger() {
+  static thread_local ScopedRuntimeExecutionLogger* active_logger = nullptr;
+  return active_logger;
+}
+
+class ScopedRuntimeExecutionLogger final {
+ public:
+  ScopedRuntimeExecutionLogger(
+      std::shared_ptr<infra::logging::ILogger> logger,
+      std::string runtime_instance_id,
+      std::string operation,
+      RuntimeTelemetryContext base_context,
+      OrchestratorRunResult* run_result)
+      : logger_(std::move(logger)),
+        runtime_instance_id_(std::move(runtime_instance_id)),
+        operation_(std::move(operation)),
+        base_context_(std::move(base_context)),
+        run_result_(run_result) {
+    previous_logger_ = active_runtime_execution_logger();
+    active_runtime_execution_logger() = this;
+    emit_start();
+  }
+
+  ~ScopedRuntimeExecutionLogger() {
+    if (logger_ != nullptr && run_result_ != nullptr) {
+      const auto context =
+          effective_runtime_telemetry_context(base_context_, *run_result_);
+      emit_finish(context);
+    }
+
+    active_runtime_execution_logger() = previous_logger_;
+  }
+
+  void emit_stage_trace(const OrchestratorStageTrace& trace) {
+    if (logger_ == nullptr || run_result_ == nullptr) {
+      return;
+    }
+
+    const auto context =
+        effective_runtime_telemetry_context(base_context_, *run_result_);
+    emit_stage(stage_emit_count_++, trace, context);
+  }
+
+ private:
+  void emit_start() const {
+    if (logger_ == nullptr) {
+      return;
+    }
+
+    infra::LogEvent::AttributeMap attrs;
+    emit_log(infra::LogLevel::Info,
+             "runtime.orchestrator.run.start",
+             std::move(attrs),
+             base_context_);
+  }
+
+  void emit_stage(const std::size_t stage_index,
+                  const OrchestratorStageTrace& trace,
+                  const RuntimeTelemetryContext& context) const {
+    infra::LogEvent::AttributeMap attrs;
+    add_integer_attr(&attrs, "stage_index", stage_index);
+    add_string_attr(&attrs, "stage", orchestrator_stage_name(trace.stage));
+    add_string_attr(&attrs, "entered", bool_attr(trace.entered));
+    add_string_attr(&attrs, "state_before", runtime_state_name(trace.state_before));
+    add_string_attr(&attrs, "state_after", runtime_state_name(trace.state_after));
+    add_string_attr(&attrs, "used_tool_round", bool_attr(run_result_->used_tool_round));
+    add_string_attr(&attrs,
+                    "used_recovery_round",
+                    bool_attr(run_result_->used_recovery_round));
+    if (!trace.detail.empty()) {
+      add_string_attr(&attrs, "stage_detail", trace.detail);
+    }
+
+    emit_log(infra::LogLevel::Info,
+             "runtime.orchestrator.stage",
+             std::move(attrs),
+             context);
+  }
+
+  void emit_finish(const RuntimeTelemetryContext& context) const {
+    infra::LogEvent::AttributeMap attrs;
+    add_string_attr(&attrs, "final_state", runtime_state_name(run_result_->final_state));
+    add_string_attr(&attrs,
+                    "agent_status",
+                    agent_result_status_name(run_result_->agent_result.status.value_or(
+                        contracts::AgentResultStatus::Unspecified)));
+    add_string_attr(&attrs,
+                    "task_completed",
+                    bool_attr(run_result_->agent_result.task_completed.value_or(false)));
+    add_string_attr(&attrs, "used_tool_round", bool_attr(run_result_->used_tool_round));
+    add_string_attr(&attrs,
+                    "used_recovery_round",
+                    bool_attr(run_result_->used_recovery_round));
+    add_integer_attr(&attrs, "stage_count", stage_emit_count_);
+    if (run_result_->agent_result.result_code.has_value()) {
+      add_integer_attr(&attrs, "result_code", *run_result_->agent_result.result_code);
+    }
+    add_optional_string_attr(&attrs,
+                             "checkpoint_ref",
+                             run_result_->agent_result.checkpoint_ref);
+    if (run_result_->agent_result.error_info.has_value()) {
+      if (run_result_->agent_result.error_info->details.code.has_value()) {
+        add_integer_attr(&attrs,
+                         "error_code",
+                         *run_result_->agent_result.error_info->details.code);
+      }
+      add_string_attr(&attrs,
+                      "error_stage",
+                      run_result_->agent_result.error_info->details.stage);
+      add_string_attr(&attrs,
+                      "error_message",
+                      run_result_->agent_result.error_info->details.message);
+    }
+    if (run_result_->effective_session.has_value()) {
+      add_string_attr(&attrs,
+                      "session_state",
+                      runtime_state_name(run_result_->effective_session->fsm_state));
+      if (run_result_->effective_session->pending_interaction.has_value()) {
+        add_string_attr(&attrs,
+                        "pending_interaction_active",
+                        bool_attr(run_result_->effective_session->pending_interaction->active()));
+      }
+    }
+    if (run_result_->resume_plan.has_value()) {
+      add_string_attr(&attrs,
+                      "resume_target_state",
+                      runtime_state_name(run_result_->resume_plan->target_state));
+    }
+    if (run_result_->recovery_outcome.has_value()) {
+      add_optional_string_attr(&attrs,
+                               "recovery_action",
+                               run_result_->recovery_outcome->executed_action);
+      add_optional_string_attr(&attrs,
+                               "recovery_final_runtime_state",
+                               run_result_->recovery_outcome->final_runtime_state);
+    }
+    add_scheduler_backpressure_attrs(&attrs, run_result_->scheduler_backpressure);
+
+    emit_log(orchestrator_run_finish_log_level(*run_result_),
+             "runtime.orchestrator.run.finish",
+             std::move(attrs),
+             context);
+  }
+
+  void emit_log(const infra::LogLevel level,
+                const std::string& event_name,
+                infra::LogEvent::AttributeMap attrs,
+                const RuntimeTelemetryContext& context) const {
+    if (logger_ == nullptr) {
+      return;
+    }
+
+    add_context_attrs(&attrs, context);
+    add_string_attr(&attrs, "event_name", event_name);
+    add_string_attr(&attrs, "operation", operation_);
+    add_string_attr(&attrs, "runtime_instance_id", runtime_instance_id_);
+
+    infra::LogEvent event;
+    event.level = level;
+    event.module = "runtime";
+    event.message = event_name;
+    event.attrs = std::move(attrs);
+    event.ts = current_time_ms();
+    (void)logger_->log(event);
+  }
+
+  std::shared_ptr<infra::logging::ILogger> logger_;
+  std::string runtime_instance_id_;
+  std::string operation_;
+  RuntimeTelemetryContext base_context_;
+  OrchestratorRunResult* run_result_ = nullptr;
+  ScopedRuntimeExecutionLogger* previous_logger_ = nullptr;
+  std::size_t stage_emit_count_ = 0U;
+};
+
 class ScopedRuntimeTransitionEmitter final {
  public:
   ScopedRuntimeTransitionEmitter(
@@ -188,10 +508,10 @@ class ScopedRuntimeTransitionEmitter final {
         continue;
       }
 
-      telemetry_bridge_->emit_transition(trace.state_before,
-                                         trace.state_after,
-                                         context,
-                                         trace.detail);
+      (void)telemetry_bridge_->emit_transition(trace.state_before,
+                       trace.state_after,
+                       context,
+                       trace.detail);
     }
   }
 
@@ -210,7 +530,7 @@ void emit_budget_reject_if_available(
     return;
   }
 
-  telemetry_bridge->emit_budget_reject(
+    (void)telemetry_bridge->emit_budget_reject(
       decision,
       effective_runtime_telemetry_context(std::move(context), run_result));
 }
@@ -224,7 +544,7 @@ void emit_recovery_reject_if_available(
     return;
   }
 
-  telemetry_bridge->emit_recovery_reject(
+    (void)telemetry_bridge->emit_recovery_reject(
       outcome,
       effective_runtime_telemetry_context(std::move(context), run_result));
 }
@@ -238,7 +558,7 @@ void emit_safe_mode_if_available(
     return;
   }
 
-  telemetry_bridge->emit_safe_mode(
+    (void)telemetry_bridge->emit_safe_mode(
       decision,
       effective_runtime_telemetry_context(std::move(context), run_result));
 }
@@ -1436,6 +1756,11 @@ void push_trace(std::vector<OrchestratorStageTrace>* trace,
       .entered = entered,
       .detail = std::move(detail),
   });
+
+  if (auto* execution_logger = active_runtime_execution_logger();
+      execution_logger != nullptr) {
+    execution_logger->emit_stage_trace(trace->back());
+  }
 }
 
 [[nodiscard]] PendingInteractionState make_pending_interaction(
@@ -1830,6 +2155,24 @@ AgentOrchestrator::AgentOrchestrator(OrchestratorComposition composition)
     : composition_(std::move(composition)),
       scheduler_(2, 16),
       safe_mode_controller_(composition_.policy_snapshot) {
+  if (composition_.dependency_set != nullptr && composition_.dependency_set->logger) {
+    checkpoint_manager_.set_logger(
+        composition_.dependency_set->logger,
+        runtime_instance_id(composition_));
+    recovery_manager_.set_logger(
+      composition_.dependency_set->logger,
+      runtime_instance_id(composition_));
+    session_manager_.set_logger(
+        composition_.dependency_set->logger,
+        runtime_instance_id(composition_));
+    scheduler_.set_logger(
+        composition_.dependency_set->logger,
+        runtime_instance_id(composition_));
+    safe_mode_controller_.set_logger(
+      composition_.dependency_set->logger,
+      runtime_instance_id(composition_));
+  }
+
   if (composition_.dependency_set != nullptr &&
       composition_.dependency_set->durable_state_root.has_value() &&
       !composition_.dependency_set->durable_state_root->empty()) {
@@ -1874,6 +2217,12 @@ OrchestratorRunResult AgentOrchestrator::run_once(const contracts::AgentRequest&
       make_runtime_telemetry_context(normalized_request);
   ScopedRuntimeTransitionEmitter transition_emitter(
       telemetry_bridge,
+      base_telemetry_context,
+      &run_result);
+    [[maybe_unused]] ScopedRuntimeExecutionLogger execution_logger(
+      runtime_logger(composition_),
+      runtime_instance_id(composition_),
+      "run_once",
       base_telemetry_context,
       &run_result);
   const auto goal_id = effective_goal_id(normalized_request, composition_);
@@ -4722,6 +5071,12 @@ OrchestratorRunResult AgentOrchestrator::continue_from_checkpoint(
       telemetry_bridge,
       base_telemetry_context,
       &run_result);
+    [[maybe_unused]] ScopedRuntimeExecutionLogger execution_logger(
+      runtime_logger(composition_),
+      runtime_instance_id(composition_),
+      "continue_from_checkpoint",
+      base_telemetry_context,
+      &run_result);
   const auto goal_id = composition_.default_goal_id;
 
   const auto load_result = checkpoint_manager_.load(plan.checkpoint_ref);
@@ -5102,6 +5457,12 @@ OrchestratorRunResult AgentOrchestrator::handle_waiting_state(
     make_runtime_telemetry_context(request, session_snapshot);
   ScopedRuntimeTransitionEmitter transition_emitter(
     telemetry_bridge,
+    base_telemetry_context,
+    &run_result);
+  [[maybe_unused]] ScopedRuntimeExecutionLogger execution_logger(
+    runtime_logger(composition_),
+    runtime_instance_id(composition_),
+    "handle_waiting_state",
     base_telemetry_context,
     &run_result);
   const auto load_result = session_manager_.load_session(

@@ -13,6 +13,10 @@
 #include "health/HealthStateTypes.h"
 #include "health/IHealthProbe.h"
 
+namespace dasall::infra::logging {
+class ILogger;
+}
+
 namespace dasall::runtime {
 
 inline constexpr std::string_view kRuntimeHealthProbeName = "runtime.control_plane";
@@ -45,6 +49,8 @@ struct RuntimeHealthProbeOptions {
   infra::HealthResolvedConfig health_config{};
   std::string detail_namespace = std::string(kRuntimeHealthDetailNamespace);
   std::function<std::int64_t()> now_ms;
+  std::shared_ptr<infra::logging::ILogger> logger;
+  std::optional<std::string> runtime_instance_id;
 };
 
 class RuntimeHealthProbe final : public infra::IHealthProbe {
@@ -82,6 +88,7 @@ class RuntimeHealthProbe final : public infra::IHealthProbe {
   mutable std::mutex snapshot_mutex_;
   std::optional<RuntimeHealthSample> latest_sample_;
   std::optional<infra::HealthSnapshot> latest_snapshot_;
+  std::optional<infra::ProbeStatus> last_logged_probe_status_;
   std::uint64_t next_snapshot_version_ = 1U;
 };
 

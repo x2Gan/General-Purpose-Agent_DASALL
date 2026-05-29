@@ -52,6 +52,8 @@ void test_runtime_health_probe_reports_healthy_snapshot_when_all_signals_are_gre
   RuntimeHealthProbe probe(provider, RuntimeHealthProbeOptions{
                                       .detail_namespace = "status://runtime/health",
                                       .now_ms = []() { return 1700000002001LL; },
+                      .logger = nullptr,
+                      .runtime_instance_id = {},
                                   });
 
   const auto snapshot = probe.collect_snapshot();
@@ -123,6 +125,8 @@ void test_runtime_health_probe_consumes_health_config_projection_for_descriptor(
                                         .health_config = config,
                                         .detail_namespace = "status://runtime/health",
                                         .now_ms = []() { return 1700000002200LL; },
+                      .logger = nullptr,
+                      .runtime_instance_id = {},
                                     });
 
   const auto& descriptor = probe.descriptor();

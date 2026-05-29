@@ -164,6 +164,22 @@ class InfraTelemetrySink final : public ICognitionTelemetrySink {
         "model_hint_tier",
         "fallback_used",
         "result_code",
+        "pipeline",
+        "step",
+        "outcome",
+        "source",
+        "mode",
+        "resolved_route",
+        "failure_category",
+        "error_type",
+        "elapsed_ms",
+        "deadline_ms",
+        "node_count",
+        "candidate_count",
+        "missing_evidence_count",
+        "diagnostic_count",
+        "llm_bridge_enabled",
+        "fallback_allowed",
         "structured_projection_enabled",
         "structured_projection_required",
         "structured_schema_version",
@@ -177,6 +193,7 @@ class InfraTelemetrySink final : public ICognitionTelemetrySink {
         "clarification_needed",
         "error_code",
         "error_stage",
+        "error_message",
         "retryable",
         "safe_to_replan",
         "fallback_mode",
@@ -317,6 +334,10 @@ class InfraTelemetrySink final : public ICognitionTelemetrySink {
     std::string stage = "unknown";
     std::string profile = "unknown";
     std::string error_code;
+    std::string outcome = make_metric_outcome(metric.name);
+    std::string resolved_route;
+    std::string failure_category;
+    std::string error_type;
     for (const auto& label : metric.labels) {
       if (label.key == "stage" && !label.value.empty()) {
         stage = label.value;
@@ -324,6 +345,14 @@ class InfraTelemetrySink final : public ICognitionTelemetrySink {
         profile = label.value;
       } else if (label.key == "error_code") {
         error_code = label.value;
+      } else if (label.key == "outcome" && !label.value.empty()) {
+        outcome = label.value;
+      } else if (label.key == "resolved_route") {
+        resolved_route = label.value;
+      } else if (label.key == "failure_category") {
+        failure_category = label.value;
+      } else if (label.key == "error_type") {
+        error_type = label.value;
       }
     }
 
@@ -331,8 +360,11 @@ class InfraTelemetrySink final : public ICognitionTelemetrySink {
         .module = "cognition",
         .stage = std::move(stage),
         .profile = std::move(profile),
-        .outcome = make_metric_outcome(metric.name),
+        .outcome = std::move(outcome),
         .error_code = std::move(error_code),
+        .resolved_route = std::move(resolved_route),
+        .failure_category = std::move(failure_category),
+        .error_type = std::move(error_type),
     };
   }
 
@@ -752,6 +784,9 @@ TelemetryEmitResult CognitionTelemetry::emit_response_degraded(
   auto fields = make_context_fields(context);
   append_field(fields, "fallback_mode", record.fallback_mode);
   append_field(fields, "degrade_reason", record.reason);
+  append_field(fields, "resolved_route", record.resolved_route);
+  append_field(fields, "failure_category", record.failure_category);
+  append_field(fields, "error_type", record.error_type);
   append_field(fields, "payload_excerpt", record.payload_excerpt);
   append_field(fields, "omitted_details", join_strings(record.omitted_details, ","));
 
@@ -763,6 +798,37 @@ TelemetryEmitResult CognitionTelemetry::emit_response_degraded(
   };
   auto metric_labels = make_context_fields(context);
   append_field(metric_labels, "fallback_mode", record.fallback_mode);
+  append_field(metric_labels, "resolved_route", record.resolved_route);
+  append_field(metric_labels, "failure_category", record.failure_category);
+  append_field(metric_labels, "error_type", record.error_type);
+  TelemetryMetric metric{
+      .name = build_metric_name(event.name),
+      .value = 1.0,
+      .labels = std::move(metric_labels),
+  };
+  return emit_event(std::move(event), std::move(metric));
+}
+
+TelemetryEmitResult CognitionTelemetry::emit_detail_event(
+    std::string event_name,
+    const StageTelemetryContext& context,
+    std::vector<TelemetryField> fields,
+    AuditReferenceSet audit_refs) const {
+  auto metric_labels = make_context_fields(context);
+  auto event_fields = metric_labels;
+  event_fields.reserve(event_fields.size() + fields.size());
+  metric_labels.reserve(metric_labels.size() + fields.size());
+  for (const auto& field : fields) {
+    event_fields.push_back(field);
+    metric_labels.push_back(field);
+  }
+
+  TelemetryEvent event{
+      .name = std::move(event_name),
+      .context = context,
+      .fields = std::move(event_fields),
+      .audit_refs = std::move(audit_refs),
+  };
   TelemetryMetric metric{
       .name = build_metric_name(event.name),
       .value = 1.0,

@@ -30,6 +30,43 @@ void test_cardinality_guard_accepts_allowlisted_labels_and_normalizes_error_code
               "CardinalityGuard should accept frozen allowlist labels and normalize an empty error_code to a stable placeholder");
 }
 
+void test_cardinality_guard_accepts_optional_observability_labels_and_tracks_series() {
+  using dasall::infra::metrics::CardinalityGuard;
+  using dasall::infra::metrics::MetricLabels;
+  using dasall::tests::support::assert_true;
+
+  CardinalityGuard guard(1U);
+  const auto first = guard.validate_labels("metrics.samples_total",
+                                           MetricLabels{
+                                               .module = std::string("cognition"),
+                                               .stage = std::string("response"),
+                                               .profile = std::string("desktop_full"),
+                                               .outcome = std::string("degraded"),
+                                               .error_code = std::string(),
+                                               .resolved_route = std::string("mock.route.response.primary"),
+                                               .failure_category = std::string("adapter_transport"),
+                                               .error_type = std::string("provider"),
+                                           });
+  const auto second = guard.validate_labels("metrics.samples_total",
+                                            MetricLabels{
+                                                .module = std::string("cognition"),
+                                                .stage = std::string("response"),
+                                                .profile = std::string("desktop_full"),
+                                                .outcome = std::string("degraded"),
+                                                .error_code = std::string(),
+                                                .resolved_route = std::string("mock.route.response.fallback"),
+                                                .failure_category = std::string("adapter_transport"),
+                                                .error_type = std::string("provider"),
+                                            });
+
+  assert_true(first.accepted &&
+                  first.labels.resolved_route == "mock.route.response.primary" &&
+                  first.labels.failure_category == "adapter_transport" &&
+                  first.labels.error_type == "provider" &&
+                  !second.accepted && guard.reject_total() == 1U,
+              "CardinalityGuard should accept the optional observability labels and treat route changes as distinct metric series");
+}
+
 void test_cardinality_guard_rejects_unknown_label_keys_observably() {
   using dasall::infra::metrics::CardinalityGuard;
   using dasall::infra::metrics::MetricLabelEntry;
@@ -160,6 +197,7 @@ void test_metrics_facade_surfaces_guard_reject_total_before_aggregation() {
 int main() {
   try {
     test_cardinality_guard_accepts_allowlisted_labels_and_normalizes_error_code();
+        test_cardinality_guard_accepts_optional_observability_labels_and_tracks_series();
     test_cardinality_guard_rejects_unknown_label_keys_observably();
     test_cardinality_guard_rejects_new_series_after_threshold();
     test_metrics_facade_surfaces_guard_reject_total_before_aggregation();
