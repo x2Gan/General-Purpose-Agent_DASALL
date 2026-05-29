@@ -11,10 +11,13 @@
 #include "../../../llm/src/LLMManager.h"
 #include "../../../llm/src/UsageAggregator.h"
 #include "../../../llm/src/execution/ResponseNormalizer.h"
+#include "../../../llm/src/observability/LLMMetricsBridge.h"
+#include "../../../llm/src/observability/LLMTraceBridge.h"
 #include "../../../llm/src/prompt/PromptPipeline.h"
 #include "../../../llm/src/stream/IStreamObserver.h"
 
 #include "../../mocks/include/MockLLMAdapter.h"
+#include "LLMIntegrationTestSupport.h"
 #include "../../unit/llm/ModelRouterTestSupport.h"
 
 namespace {
@@ -30,8 +33,17 @@ using dasall::llm::LLMManager;
 using dasall::llm::LLMSubsystemConfig;
 using dasall::llm::ModelSelectionHint;
 using dasall::llm::StreamSessionRef;
+using dasall::llm::observability::LLMMetricsBridge;
+using dasall::llm::observability::LLMTraceBridge;
 using dasall::llm::prompt::PromptPipeline;
 using dasall::llm::route::AdapterRegistration;
+using dasall::tests::integration::llm_support::RecordingLogger;
+using dasall::tests::integration::llm_support::RecordingMeter;
+using dasall::tests::integration::llm_support::RecordingMetricsProvider;
+using dasall::tests::integration::llm_support::RecordingTracer;
+using dasall::tests::integration::llm_support::find_log_attr;
+using dasall::tests::integration::llm_support::find_sample;
+using dasall::tests::integration::llm_support::trace_attr_as_string;
 using dasall::tests::mocks::MockLLMAdapter;
 using dasall::tests::support::assert_equal;
 using dasall::tests::support::assert_true;
@@ -128,6 +140,12 @@ void test_llm_streaming_integration_returns_normalized_success_and_usage_tags() 
   auto executor = std::make_shared<dasall::llm::LLMCallExecutor>();
   auto normalizer = std::make_shared<dasall::llm::execution::ResponseNormalizer>();
   auto aggregator = std::make_shared<dasall::llm::UsageAggregator>();
+  auto logger = std::make_shared<RecordingLogger>();
+  auto meter = std::make_shared<RecordingMeter>();
+  auto metrics_provider = std::make_shared<RecordingMetricsProvider>(meter);
+  auto tracer = std::make_shared<RecordingTracer>();
+  auto metrics_bridge = std::make_shared<LLMMetricsBridge>(logger, metrics_provider);
+  auto trace_bridge = std::make_shared<LLMTraceBridge>(tracer);
   auto catalog_snapshot =
       std::make_shared<const dasall::llm::provider::ProviderCatalogSnapshot>(
           dasall::llm::test_support::make_default_catalog());
@@ -187,7 +205,10 @@ void test_llm_streaming_integration_returns_normalized_success_and_usage_tags() 
                      executor,
                      normalizer,
                      aggregator,
-                     catalog_snapshot);
+                     catalog_snapshot,
+                     nullptr,
+                     metrics_bridge,
+                     trace_bridge);
   assert_true(manager.init(make_config()),
               "LLM streaming integration should initialize LLMManager with a real PromptPipeline and streaming-enabled route config");
 
@@ -239,6 +260,33 @@ void test_llm_streaming_integration_returns_normalized_success_and_usage_tags() 
                    adapter->last_stream_request()->messages.has_value() &&
                    adapter->last_stream_request()->messages->size() == 2U,
               "LLM streaming integration should hand PromptPipeline output and the concrete route into MockLLMAdapter::stream_generate");
+
+            assert_true(logger->events.size() == 1U,
+                  "LLM streaming integration should emit one structured call log on the streaming success path");
+            const auto& log_event = logger->events.front();
+            assert_true(find_log_attr(log_event, "request_mode") != nullptr &&
+                    *find_log_attr(log_event, "request_mode") == "streaming" &&
+                    *find_log_attr(log_event, "request_id") == "req-031-stream" &&
+                    *find_log_attr(log_event, "llm_call_id") == "call-031-stream" &&
+                    *find_log_attr(log_event, "resolved_route") ==
+                      "deepseek-prod/deepseek-chat" &&
+                    *find_log_attr(log_event, "outcome") == "success" &&
+                    *find_log_attr(log_event, "prompt_cache_hit_tokens") == "16" &&
+                    *find_log_attr(log_event, "prompt_cache_miss_tokens") == "48",
+                  "LLM streaming integration should preserve request identity, route, mode and usage fields in structured logging");
+            assert_true(find_sample(meter->recorded_samples, "llm_calls_total") != nullptr &&
+                    find_sample(meter->recorded_samples, "llm_call_latency_ms") != nullptr &&
+                    metrics_provider->last_scope.name == "llm.observability",
+                  "LLM streaming integration should emit the core llm observability metric anchors");
+            assert_equal(3, static_cast<int>(tracer->started_spans.size()),
+                   "LLM streaming integration should emit route, adapter and normalize trace spans");
+            assert_true(trace_attr_as_string(tracer->started_spans.at(1).descriptor.attrs,
+                             "request_mode") ==
+                      std::optional<std::string>("streaming") &&
+                    trace_attr_as_string(tracer->started_spans.at(2).descriptor.attrs,
+                               "outcome") ==
+                      std::optional<std::string>("success"),
+                  "LLM streaming integration should keep request mode and outcome visible on trace attributes");
 }
 
 }  // namespace

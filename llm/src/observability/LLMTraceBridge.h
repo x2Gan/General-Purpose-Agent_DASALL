@@ -64,6 +64,13 @@ struct LLMTraceSpanSignal {
   std::optional<infra::tracing::TraceContext> parent_context;
   std::string detail_ref = std::string(kLLMTraceDefaultDetailRef);
   std::string outcome = "success";
+  std::string request_mode = "unary";
+  std::string result_code;
+  std::string result_code_category;
+  std::string error_stage;
+  std::vector<std::string> attempted_routes;
+  bool retryable = false;
+  bool safe_to_replan = false;
 
   [[nodiscard]] bool has_consistent_values() const;
 };

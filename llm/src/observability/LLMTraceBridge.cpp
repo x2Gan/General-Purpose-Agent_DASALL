@@ -210,6 +210,7 @@ infra::tracing::SpanDescriptor LLMTraceBridge::make_descriptor(
   infra::tracing::TraceAttributeMap attrs;
   attrs.emplace("request_id", signal.request_id);
   attrs.emplace("llm_call_id", signal.llm_call_id);
+  attrs.emplace("request_mode", signal.request_mode);
   attrs.emplace("stage", signal.stage);
   attrs.emplace("resolved_route", signal.resolved_route);
   attrs.emplace("model_name", signal.model_name);
@@ -235,6 +236,21 @@ infra::tracing::SpanDescriptor LLMTraceBridge::make_descriptor(
   attrs.emplace("reasoning_mode_requested", signal.reasoning_mode_requested);
   attrs.emplace("reasoning_mode_effective", signal.reasoning_mode_effective);
   attrs.emplace("outcome", signal.outcome);
+  attrs.emplace("result_code",
+                signal.result_code.empty() ? std::string("none")
+                                           : signal.result_code);
+  attrs.emplace("result_code_category",
+                signal.result_code_category.empty()
+                    ? std::string("none")
+                    : signal.result_code_category);
+  attrs.emplace("error_stage",
+                signal.error_stage.empty() ? std::string("none")
+                                           : signal.error_stage);
+  attrs.emplace("attempted_routes", join_values(signal.attempted_routes, ","));
+  attrs.emplace("route_attempt_count",
+                static_cast<std::uint64_t>(signal.attempted_routes.size()));
+  attrs.emplace("retryable", signal.retryable);
+  attrs.emplace("safe_to_replan", signal.safe_to_replan);
   attrs.emplace("detail_ref", signal.detail_ref);
 
   return infra::tracing::SpanDescriptor{

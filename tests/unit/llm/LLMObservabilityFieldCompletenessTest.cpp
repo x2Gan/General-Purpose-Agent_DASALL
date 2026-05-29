@@ -329,6 +329,17 @@ const ProviderModelMetadata& require_model(std::string provider_id, std::string 
       .provider_id = "deepseek-prod",
       .profile_id = "desktop_full",
       .outcome = "degraded",
+      .request_mode = "unary",
+      .result_code = "4001",
+      .result_code_category = "provider",
+      .error_stage = "llm.manager.execute_unary",
+      .error_message = "provider timeout while invoking fallback route",
+      .source_ref_type = "route",
+      .source_ref_id = "deepseek-prod/deepseek-reasoner",
+      .attempted_routes = {"deepseek-prod/deepseek-chat", "deepseek-prod/deepseek-reasoner"},
+      .retryable = false,
+      .safe_to_replan = false,
+      .governance_disposition = "none",
       .from_route = "deepseek-prod/deepseek-chat",
       .to_route = "deepseek-prod/deepseek-reasoner",
       .prompt_policy_denied = true,
@@ -364,6 +375,13 @@ const ProviderModelMetadata& require_model(std::string provider_id, std::string 
       .parent_context = ScriptedTracer::make_active_context(),
       .detail_ref = "llm://trace/adapter-invoke",
       .outcome = "failure",
+      .request_mode = "unary",
+      .result_code = "4001",
+      .result_code_category = "provider",
+      .error_stage = "llm.manager.execute_unary",
+      .attempted_routes = {"deepseek-prod/deepseek-chat", "deepseek-prod/deepseek-reasoner"},
+      .retryable = false,
+      .safe_to_replan = false,
   };
 }
 
@@ -463,6 +481,20 @@ void test_metrics_bridge_keeps_required_log_fields_and_registers_metric_families
                       "chat" &&
                   *find_log_attr(logger->events.front(), "reasoning_mode_effective") ==
                       "thinking" &&
+                    *find_log_attr(logger->events.front(), "request_mode") == "unary" &&
+                    *find_log_attr(logger->events.front(), "result_code") == "4001" &&
+                    *find_log_attr(logger->events.front(), "result_code_category") ==
+                      "provider" &&
+                    *find_log_attr(logger->events.front(), "error_stage") ==
+                      "llm.manager.execute_unary" &&
+                    *find_log_attr(logger->events.front(), "attempted_routes") ==
+                      "deepseek-prod/deepseek-chat,deepseek-prod/deepseek-reasoner" &&
+                    *find_log_attr(logger->events.front(), "route_attempt_count") == "2" &&
+                    *find_log_attr(logger->events.front(), "source_ref_type") == "route" &&
+                    *find_log_attr(logger->events.front(), "source_ref_id") ==
+                      "deepseek-prod/deepseek-reasoner" &&
+                    *find_log_attr(logger->events.front(), "retryable") == "false" &&
+                    *find_log_attr(logger->events.front(), "safe_to_replan") == "false" &&
                   *find_log_attr(logger->events.front(), "error_type") == "provider",
               "LLMMetricsBridge should preserve the 028 required call summary fields in structured log attrs");
   assert_equal(std::string("llm.observability"), provider->last_scope.name,
@@ -503,6 +535,41 @@ void test_metrics_bridge_keeps_required_log_fields_and_registers_metric_families
               "LLMMetricsBridge should project fallback, policy deny and cost metrics using the frozen stage/outcome/error_code mapping");
 }
 
+          void test_metrics_bridge_redacts_sensitive_failure_details_before_logger_sink() {
+            auto logger = std::make_shared<ScriptedLogger>();
+            auto meter = std::make_shared<ScriptedMeter>();
+            auto provider = std::make_shared<ScriptedProvider>(meter);
+            LLMMetricsBridge bridge(logger, provider);
+
+            auto summary = make_summary();
+            summary.error_message =
+              "Authorization: Bearer provider-secret password=runtime-secret api_key=asset-secret";
+            summary.error_stage = "llm.manager.execute_unary\nsecret=stage-secret";
+            summary.source_ref_id = "token=source-secret";
+
+            const auto result = bridge.record_call(summary);
+
+            assert_true(result.emitted && logger->events.size() == 1U,
+                  "LLMMetricsBridge should still emit a valid log after redacting sensitive failure details");
+            const auto* error_message = find_log_attr(logger->events.front(), "error_message");
+            const auto* error_stage = find_log_attr(logger->events.front(), "error_stage");
+            const auto* source_ref_id = find_log_attr(logger->events.front(), "source_ref_id");
+            assert_true(error_message != nullptr && error_stage != nullptr && source_ref_id != nullptr,
+                  "LLMMetricsBridge should keep redacted failure detail attrs present for debugging");
+            assert_true(error_message->find("provider-secret") == std::string::npos &&
+                    error_message->find("runtime-secret") == std::string::npos &&
+                    error_message->find("asset-secret") == std::string::npos &&
+                    error_message->find("<redacted>") != std::string::npos,
+                  "LLMMetricsBridge should redact bearer, password and api key values before a logger sink observes the event");
+            assert_true(error_stage->find('\n') == std::string::npos &&
+                    error_stage->find("stage-secret") == std::string::npos &&
+                    source_ref_id->find("source-secret") == std::string::npos,
+                  "LLMMetricsBridge should sanitize line breaks and redact sensitive values from failure stage and source refs");
+            assert_true(*find_log_attr(logger->events.front(), "prompt_cache_hit_tokens") == "128" &&
+                    *find_log_attr(logger->events.front(), "prompt_cache_miss_tokens") == "2048",
+                  "LLMMetricsBridge local redaction should not mistake token count fields for secret payloads");
+          }
+
 void test_trace_bridge_projects_route_reasoning_and_cost_into_stage_spans() {
   auto tracer = std::make_shared<ScriptedTracer>();
   LLMTraceBridge bridge(tracer);
@@ -531,6 +598,18 @@ void test_trace_bridge_projects_route_reasoning_and_cost_into_stage_spans() {
                       std::optional<std::string>("chat") &&
                   trace_attr_as_string(tracer->last_descriptor.attrs, "reasoning_mode_effective") ==
                       std::optional<std::string>("thinking") &&
+                    trace_attr_as_string(tracer->last_descriptor.attrs, "request_mode") ==
+                      std::optional<std::string>("unary") &&
+                    trace_attr_as_string(tracer->last_descriptor.attrs, "result_code") ==
+                      std::optional<std::string>("4001") &&
+                    trace_attr_as_string(tracer->last_descriptor.attrs, "result_code_category") ==
+                      std::optional<std::string>("provider") &&
+                    trace_attr_as_string(tracer->last_descriptor.attrs, "error_stage") ==
+                      std::optional<std::string>("llm.manager.execute_unary") &&
+                    trace_attr_as_string(tracer->last_descriptor.attrs, "attempted_routes") ==
+                      std::optional<std::string>("deepseek-prod/deepseek-chat,deepseek-prod/deepseek-reasoner") &&
+                    trace_attr_as_uint64(tracer->last_descriptor.attrs, "route_attempt_count") ==
+                      std::optional<std::uint64_t>(2U) &&
                   trace_attr_as_uint64(tracer->last_descriptor.attrs, "prompt_cache_hit_tokens") ==
                       std::optional<std::uint64_t>(64U),
               "LLMTraceBridge should preserve route, selection reasons, reasoning mode and usage facts as trace attrs");
@@ -551,6 +630,7 @@ int main() {
     test_usage_record_keeps_cost_anchor_fields_observable();
     test_missing_pricing_metadata_gracefully_falls_back_to_zero_cost();
     test_metrics_bridge_keeps_required_log_fields_and_registers_metric_families();
+    test_metrics_bridge_redacts_sensitive_failure_details_before_logger_sink();
     test_trace_bridge_projects_route_reasoning_and_cost_into_stage_spans();
   } catch (const std::exception& ex) {
     std::cerr << ex.what() << std::endl;

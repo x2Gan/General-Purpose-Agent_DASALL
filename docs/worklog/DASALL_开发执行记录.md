@@ -1,3 +1,38 @@
+## 记录 #853
+
+- 日期：2026-05-29
+- 阶段：llm / production observability risk convergence
+- 任务：收口 LLM 失败路径 observability 与 failure detail 日志脱敏剩余风险
+- 状态：已完成（owner 侧 failure-path observability 与 local redaction regression 已闭合；不外推 RC / installed / soak 证据）
+
+### 执行前提
+
+1. 当前树已具备 success-path observability、production-composed manager sink 注入和 focused production observability 测试，但 failure path 仍存在两类剩余风险：部分失败出口未统一发 log/metrics/trace，且 logger sink 看到的 failure detail 只有换行/控制字符清理，没有明确敏感值脱敏。
+2. authoritative 边界只覆盖 llm owner 本地代码与 focused validation，不扩张到 current release candidate rerun、installed package authoritative proof、external provider soak / chaos 或 L6 长稳态。
+3. 本轮继续遵守“不记录 prompt/response/messages 正文”和“不引入 qemu / kvm”的约束。
+
+### 改动
+
+1. 更新 `llm/src/LLMManager.cpp`：为 unary / streaming 的 validation、prompt governance、routing、adapter timeout、fallback exhausted 等失败出口统一接入 `record_failure_observability()`，补齐 `request_mode`、`result_code`、`result_code_category`、`error_stage`、`attempted_routes`、`retryable`、`safe_to_replan`、`governance_disposition` 等低敏调试字段。
+2. 更新 `llm/src/observability/LLMMetricsBridge.*` 与 `llm/src/observability/LLMTraceBridge.*`：structured log / trace attrs 现在稳定投影失败结果码、阶段、route chain 与治理语义；logger 路径额外对 `bearer`、`token`、`secret`、`password`、`authorization`、`api_key` 等 failure detail 值级前缀做本地 redaction，并保持 token 计数字段不被误伤。
+3. 更新 `tests/unit/llm/LLMObservabilityFieldCompletenessTest.cpp`、`tests/integration/llm/LLMFallbackIntegrationTest.cpp`、`tests/integration/llm/LLMStreamingIntegrationTest.cpp` 与 `tests/integration/llm/LLMGovernanceFailureIntegrationTest.cpp`：补齐字段完整性、fallback exhausted、streaming success、governance failure 以及 failure detail redaction regression 的 focused assertions。
+4. 更新 `docs/todos/llm/deliverables/LLM-GAP-003-production-observability-closeout.md`：把本轮 failure-path observability / redaction 收敛、验证命令与不外推边界回写到既有 closeout。
+
+### 验证
+
+1. `Build_CMakeTools(buildTargets=["dasall_llm_observability_field_completeness_unit_test","dasall_llm_fallback_integration_test","dasall_llm_streaming_integration_test","dasall_llm_governance_failure_integration_test","dasall_llm_production_observability_integration_test"])`
+   - 结果：通过。
+2. `RunCtest_CMakeTools(tests=["LLMObservabilityFieldCompletenessTest","LLMFallbackIntegrationTest","LLMStreamingIntegrationTest","LLMGovernanceFailureIntegrationTest","LLMProductionObservabilityIntegrationTest","LLMAuditEventCoverageTest","LLMSubsystemSmokeIntegrationTest"])`
+   - 结果：通过；`100% tests passed, 0 tests failed out of 7`。
+3. VS Code diagnostics。
+   - 结果：`llm/src/LLMManager.cpp`、`llm/src/observability/LLMMetricsBridge.cpp`、`llm/src/observability/LLMTraceBridge.cpp` 与相关 llm integration/unit tests 均无错误。
+
+### 结果
+
+1. LLM 子系统现在同时具备 success-path 与 failure-path 的 production-grade log / metrics / trace 调试锚点，fallback exhausted、治理拒绝和 streaming 路径不再留下静默黑洞。
+2. logger sink 看到的 failure detail 已具备本地敏感值脱敏，不再把 provider / runtime 错误文本里的 bearer/token/password/api key 原文直接暴露给普通日志。
+3. 当前仍未关闭的只剩更高层 release evidence：current RC rerun、installed authoritative proof 与 external provider soak / chaos / L6 长稳态证据继续保持独立开放项。
+
 ## 记录 #852
 
 - 日期：2026-05-28

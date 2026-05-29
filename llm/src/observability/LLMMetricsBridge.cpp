@@ -1,5 +1,7 @@
 #include "LLMMetricsBridge.h"
 
+#include <algorithm>
+#include <array>
 #include <cctype>
 #include <cstddef>
 #include <iomanip>
@@ -14,6 +16,106 @@ constexpr std::string_view kLLMMetricsBridgeLogStage = "llm.observability.log";
 constexpr std::string_view kLLMMetricsBridgeMetricsStage =
     "llm.observability.metrics";
 constexpr std::string_view kLLMMetricsBridgeSourceRef = "LLMMetricsBridge";
+constexpr std::array<std::string_view, 13> kSensitiveValuePrefixes = {
+    "bearer ",
+    "token=",
+    "token:",
+    "secret=",
+    "secret:",
+    "password=",
+    "password:",
+    "authorization=",
+    "authorization:",
+    "api_key=",
+    "apikey=",
+    "api-key=",
+    "x-api-key=",
+};
+
+[[nodiscard]] bool is_value_delimiter(char ch) {
+  switch (ch) {
+    case ' ':
+    case '\t':
+    case '\n':
+    case '\r':
+    case ',':
+    case ';':
+    case '&':
+    case ')':
+    case '(':
+    case ']':
+    case '[':
+    case '}':
+    case '{':
+    case '"':
+    case '\'':
+      return true;
+    default:
+      return false;
+  }
+}
+
+[[nodiscard]] std::string lower_copy(std::string_view text) {
+  std::string lowered(text);
+  for (auto& ch : lowered) {
+    ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
+  }
+
+  return lowered;
+}
+
+void redact_prefix_payload(std::string& text, std::string_view prefix) {
+  constexpr std::string_view kAuthorizationPrefix = "authorization:";
+  constexpr std::string_view kAuthorizationEquals = "authorization=";
+  constexpr std::string_view kBearerPrefix = "bearer ";
+
+  std::size_t search_pos = 0;
+  while (search_pos < text.size()) {
+    const auto lowered = lower_copy(text);
+    const auto match_pos = lowered.find(prefix, search_pos);
+    if (match_pos == std::string::npos) {
+      break;
+    }
+
+    auto value_start = match_pos + prefix.size();
+    while (value_start < text.size() &&
+           std::isspace(static_cast<unsigned char>(text[value_start])) != 0) {
+      ++value_start;
+    }
+
+    if ((prefix == kAuthorizationPrefix || prefix == kAuthorizationEquals) &&
+        value_start < text.size()) {
+      const auto authorization_value =
+          lower_copy(std::string_view(text).substr(value_start));
+      if (authorization_value.rfind(kBearerPrefix, 0) == 0) {
+        value_start += kBearerPrefix.size();
+      }
+    }
+
+    auto value_end = value_start;
+    while (value_end < text.size() && !is_value_delimiter(text[value_end])) {
+      ++value_end;
+    }
+
+    if (value_end == value_start) {
+      search_pos = value_start + 1U;
+      continue;
+    }
+
+    text.replace(value_start,
+                 value_end - value_start,
+                 std::string(infra::logging::LogEvent::kRedactedValue));
+    search_pos = value_start + infra::logging::LogEvent::kRedactedValue.size();
+  }
+}
+
+[[nodiscard]] std::string redact_sensitive_log_values(std::string value) {
+  for (const auto prefix : kSensitiveValuePrefixes) {
+    redact_prefix_payload(value, prefix);
+  }
+
+  return value;
+}
 
 [[nodiscard]] std::string normalize_token(std::string_view value) {
   if (value.empty()) {
@@ -45,6 +147,33 @@ constexpr std::string_view kLLMMetricsBridgeSourceRef = "LLMMetricsBridge";
   }
 
   return joined;
+}
+
+[[nodiscard]] std::string sanitize_log_text(std::string_view value,
+                                            std::size_t max_length = 256U) {
+  std::string sanitized;
+  sanitized.reserve(std::min(value.size(), max_length));
+  for (const char ch : value) {
+    const auto code = static_cast<unsigned char>(ch);
+    if (ch == '\r' || ch == '\n' || ch == '\t') {
+      sanitized.push_back(' ');
+    } else if (std::iscntrl(code)) {
+      sanitized.push_back('_');
+    } else {
+      sanitized.push_back(ch);
+    }
+
+    if (sanitized.size() >= max_length) {
+      break;
+    }
+  }
+
+  auto redacted = redact_sensitive_log_values(std::move(sanitized));
+  if (redacted.size() > max_length) {
+    redacted.resize(max_length);
+  }
+
+  return redacted;
 }
 
 [[nodiscard]] std::string primary_reason_code(
@@ -565,6 +694,7 @@ infra::logging::LogEvent LLMMetricsBridge::make_log_event(
   infra::logging::LogEvent::AttributeMap attrs;
   attrs.emplace("request_id", summary.request_id);
   attrs.emplace("llm_call_id", summary.llm_call_id);
+  attrs.emplace("request_mode", summary.request_mode);
   attrs.emplace("stage", summary.stage);
   attrs.emplace("resolved_route", summary.resolved_route);
   attrs.emplace("model_name", summary.model_name);
@@ -590,11 +720,40 @@ infra::logging::LogEvent LLMMetricsBridge::make_log_event(
   attrs.emplace("error_type",
                 summary.error_type.empty() ? std::string("none")
                                            : summary.error_type);
+  attrs.emplace("result_code",
+                summary.result_code.empty() ? std::string("none")
+                                            : summary.result_code);
+  attrs.emplace("result_code_category",
+                summary.result_code_category.empty()
+                    ? std::string("none")
+                    : summary.result_code_category);
+  attrs.emplace("error_stage",
+                summary.error_stage.empty() ? std::string("none")
+                                            : sanitize_log_text(summary.error_stage));
+  attrs.emplace("error_message",
+                summary.error_message.empty()
+                    ? std::string("none")
+                    : sanitize_log_text(summary.error_message));
   attrs.emplace("provider_id", summary.provider_id);
   attrs.emplace("profile_id",
                 summary.profile_id.empty() ? std::string("unknown")
                                            : summary.profile_id);
   attrs.emplace("outcome", summary.outcome);
+  attrs.emplace("attempted_routes", join_values(summary.attempted_routes, ","));
+  attrs.emplace("route_attempt_count",
+                std::to_string(summary.attempted_routes.size()));
+  attrs.emplace("source_ref_type",
+                summary.source_ref_type.empty() ? std::string("none")
+                                                : sanitize_log_text(summary.source_ref_type));
+  attrs.emplace("source_ref_id",
+                summary.source_ref_id.empty() ? std::string("none")
+                                              : sanitize_log_text(summary.source_ref_id));
+  attrs.emplace("retryable", summary.retryable ? "true" : "false");
+  attrs.emplace("safe_to_replan", summary.safe_to_replan ? "true" : "false");
+  attrs.emplace("governance_disposition",
+                summary.governance_disposition.empty()
+                    ? std::string("none")
+                    : summary.governance_disposition);
 
   if (summary.fallback_used) {
     attrs.emplace("from_route", summary.from_route);
@@ -604,7 +763,7 @@ infra::logging::LogEvent LLMMetricsBridge::make_log_event(
   return infra::logging::LogEvent{
       .level = summary.outcome == "failure"
                    ? infra::logging::LogLevel::Error
-                   : (summary.outcome == "degraded"
+             : (summary.outcome == "degraded" || summary.outcome == "rejected"
                           ? infra::logging::LogLevel::Warn
                           : infra::logging::LogLevel::Info),
       .module = std::string("llm"),

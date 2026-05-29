@@ -554,10 +554,57 @@ void test_llm_fallback_integration_surfaces_fallback_exhausted_after_all_routes_
                "LLM fallback integration should attempt the LAN route once on the exhausted path");
   assert_equal(1, artifacts.local_adapter->generate_call_count(),
                "LLM fallback integration should attempt the local route once before surfacing fallback exhausted");
-  assert_true(artifacts.logger->events.empty() &&
-                  artifacts.meter->recorded_samples.empty() &&
-                  artifacts.tracer->started_spans.empty(),
-              "LLM fallback integration should avoid success-path observability emission when fallback exhausted is returned");
+    assert_true(artifacts.logger->events.size() == 1U,
+          "LLM fallback integration should emit one structured failure log when fallback is exhausted");
+    const auto& log_event = artifacts.logger->events.front();
+    assert_true(log_event.level == LogLevel::Error &&
+            find_log_attr(log_event, "request_id") != nullptr &&
+            *find_log_attr(log_event, "request_id") == "req-031-exhausted" &&
+            *find_log_attr(log_event, "llm_call_id") == "call-031-exhausted" &&
+            *find_log_attr(log_event, "request_mode") == "unary" &&
+            *find_log_attr(log_event, "resolved_route") == kLocalRoute &&
+            *find_log_attr(log_event, "outcome") == "failure" &&
+            *find_log_attr(log_event, "failure_category") == "fallback_exhausted" &&
+            *find_log_attr(log_event, "result_code") == "4001" &&
+            *find_log_attr(log_event, "result_code_category") == "provider" &&
+            *find_log_attr(log_event, "error_stage") == "llm.manager.execute_unary" &&
+            *find_log_attr(log_event, "error_message") == "local route timed out" &&
+            *find_log_attr(log_event, "attempted_routes") ==
+              "deepseek-prod/deepseek-chat,lan-ollama/lan-general,local-runtime/local-small" &&
+            *find_log_attr(log_event, "route_attempt_count") == "3" &&
+            *find_log_attr(log_event, "from_route") == kCloudRoute &&
+            *find_log_attr(log_event, "to_route") == kLocalRoute,
+          "LLM fallback integration should keep failure result, final route and attempted route chain in structured logging");
+
+    const auto* calls_sample = find_sample(artifacts.meter->recorded_samples,
+                       "llm_calls_total");
+    const auto* fallback_sample = find_sample(artifacts.meter->recorded_samples,
+                        "llm_fallback_total");
+    const auto* adapter_timeout_sample = find_sample(artifacts.meter->recorded_samples,
+                             "llm_adapter_timeout_total");
+    assert_true(calls_sample != nullptr && fallback_sample != nullptr &&
+            adapter_timeout_sample != nullptr &&
+            calls_sample->labels.outcome == "failure" &&
+            fallback_sample->labels.outcome == "failure" &&
+            adapter_timeout_sample->labels.error_code == "provider",
+          "LLM fallback integration should emit failure, fallback and adapter timeout metric anchors when every route fails");
+
+    assert_equal(1, static_cast<int>(artifacts.tracer->started_spans.size()),
+           "LLM fallback integration should emit one failure trace span when fallback is exhausted");
+    assert_equal(std::string("llm.adapter.invoke"),
+           artifacts.tracer->started_spans.front().descriptor.name,
+           "LLM fallback exhausted trace should point at adapter invocation as the failing stage");
+    assert_true(trace_attr_as_string(artifacts.tracer->started_spans.front().descriptor.attrs,
+                     "outcome") ==
+              std::optional<std::string>("failure") &&
+            trace_attr_as_string(artifacts.tracer->started_spans.front().descriptor.attrs,
+                       "result_code") ==
+              std::optional<std::string>("4001") &&
+            trace_attr_as_string(artifacts.tracer->started_spans.front().descriptor.attrs,
+                       "attempted_routes") ==
+              std::optional<std::string>(
+                "deepseek-prod/deepseek-chat,lan-ollama/lan-general,local-runtime/local-small"),
+          "LLM fallback exhausted trace should preserve low-cardinality failure and route-chain attributes");
 }
 
 }  // namespace

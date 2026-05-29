@@ -17,10 +17,13 @@
 #include "../../../llm/src/LLMManager.h"
 #include "../../../llm/src/UsageAggregator.h"
 #include "../../../llm/src/execution/ResponseNormalizer.h"
+#include "../../../llm/src/observability/LLMMetricsBridge.h"
+#include "../../../llm/src/observability/LLMTraceBridge.h"
 #include "../../../llm/src/prompt/PromptPipeline.h"
 #include "../../../llm/src/prompt/PromptRegistry.h"
 
 #include "../../mocks/include/MockLLMAdapter.h"
+#include "LLMIntegrationTestSupport.h"
 #include "../../unit/llm/ModelRouterTestSupport.h"
 
 namespace {
@@ -36,12 +39,21 @@ using dasall::llm::LLMManager;
 using dasall::llm::LLMManagerResult;
 using dasall::llm::LLMSubsystemConfig;
 using dasall::llm::ModelSelectionHint;
+using dasall::llm::observability::LLMMetricsBridge;
+using dasall::llm::observability::LLMTraceBridge;
 using dasall::llm::prompt::PromptPolicyDisposition;
 using dasall::llm::prompt::PromptPipeline;
 using dasall::llm::prompt::PromptQuery;
 using dasall::llm::prompt::PromptRegistry;
 using dasall::llm::prompt::PromptRegistryResult;
 using dasall::llm::provider::ProviderCatalogSnapshot;
+using dasall::tests::integration::llm_support::RecordingLogger;
+using dasall::tests::integration::llm_support::RecordingMeter;
+using dasall::tests::integration::llm_support::RecordingMetricsProvider;
+using dasall::tests::integration::llm_support::RecordingTracer;
+using dasall::tests::integration::llm_support::find_log_attr;
+using dasall::tests::integration::llm_support::find_sample;
+using dasall::tests::integration::llm_support::trace_attr_as_string;
 using dasall::tests::mocks::MockLLMAdapter;
 using dasall::tests::support::assert_equal;
 using dasall::tests::support::assert_true;
@@ -244,6 +256,15 @@ struct GovernanceFailureFixture {
       std::make_shared<dasall::llm::UsageAggregator>();
   std::shared_ptr<const ProviderCatalogSnapshot> catalog_snapshot =
       std::make_shared<const ProviderCatalogSnapshot>(make_chat_only_catalog());
+    std::shared_ptr<RecordingLogger> logger = std::make_shared<RecordingLogger>();
+    std::shared_ptr<RecordingMeter> meter = std::make_shared<RecordingMeter>();
+    std::shared_ptr<RecordingMetricsProvider> metrics_provider =
+      std::make_shared<RecordingMetricsProvider>(meter);
+    std::shared_ptr<RecordingTracer> tracer = std::make_shared<RecordingTracer>();
+    std::shared_ptr<LLMMetricsBridge> metrics_bridge =
+      std::make_shared<LLMMetricsBridge>(logger, metrics_provider);
+    std::shared_ptr<LLMTraceBridge> trace_bridge =
+      std::make_shared<LLMTraceBridge>(tracer);
   std::shared_ptr<MockLLMAdapter> adapter = std::make_shared<MockLLMAdapter>();
   LLMManager manager{prompt_pipeline,
                      router,
@@ -251,7 +272,10 @@ struct GovernanceFailureFixture {
                      executor,
                      normalizer,
                      aggregator,
-                     catalog_snapshot};
+             catalog_snapshot,
+             nullptr,
+             metrics_bridge,
+             trace_bridge};
 
   GovernanceFailureFixture() {
     assert_true(
@@ -315,6 +339,53 @@ void assert_failure_result(const LLMManagerResult& result,
                std::string(message_prefix) + " should not dispatch any adapter request");
 }
 
+  void assert_failure_observability(const GovernanceFailureFixture& fixture,
+                    std::string_view request_id,
+                    std::string_view llm_call_id,
+                    std::string_view expected_outcome,
+                    std::string_view expected_failure_category,
+                    std::string_view expected_result_code,
+                    std::string_view expected_result_category,
+                    std::string_view expected_governance_disposition,
+                    std::string_view expected_span_name,
+                    std::string_view message_prefix) {
+    assert_true(fixture.logger->events.size() == 1U,
+          std::string(message_prefix) + " should emit one structured failure log");
+    const auto& log_event = fixture.logger->events.front();
+    assert_true(find_log_attr(log_event, "request_id") != nullptr &&
+            *find_log_attr(log_event, "request_id") == request_id &&
+            *find_log_attr(log_event, "llm_call_id") == llm_call_id &&
+            *find_log_attr(log_event, "request_mode") == "unary" &&
+            *find_log_attr(log_event, "outcome") == expected_outcome &&
+            *find_log_attr(log_event, "failure_category") ==
+              expected_failure_category &&
+            *find_log_attr(log_event, "result_code") == expected_result_code &&
+            *find_log_attr(log_event, "result_code_category") ==
+              expected_result_category &&
+            *find_log_attr(log_event, "error_stage") == "llm.manager.generate" &&
+            *find_log_attr(log_event, "route_attempt_count") == "0" &&
+            *find_log_attr(log_event, "governance_disposition") ==
+              expected_governance_disposition,
+          std::string(message_prefix) + " should preserve governance failure identity and classification in structured logging");
+
+    const auto* calls_sample = find_sample(fixture.meter->recorded_samples,
+                       "llm_calls_total");
+    assert_true(calls_sample != nullptr && calls_sample->labels.outcome == expected_outcome,
+          std::string(message_prefix) + " should emit a classified llm call metric");
+    assert_equal(1, static_cast<int>(fixture.tracer->started_spans.size()),
+           std::string(message_prefix) + " should emit one failure trace span");
+    assert_equal(std::string(expected_span_name),
+           fixture.tracer->started_spans.front().descriptor.name,
+           std::string(message_prefix) + " should map failure category to the owning trace stage");
+    assert_true(trace_attr_as_string(fixture.tracer->started_spans.front().descriptor.attrs,
+                     "outcome") ==
+              std::optional<std::string>(std::string(expected_outcome)) &&
+            trace_attr_as_string(fixture.tracer->started_spans.front().descriptor.attrs,
+                       "result_code") ==
+              std::optional<std::string>(std::string(expected_result_code)),
+          std::string(message_prefix) + " should expose low-cardinality failure attributes on trace");
+  }
+
 void test_governance_failure_denies_release_outside_allowlist() {
   TempDirectory baseline_root("dasall_governance_failure_allowlist");
   create_prompt_package(baseline_root.path(), {});
@@ -342,6 +413,16 @@ void test_governance_failure_denies_release_outside_allowlist() {
                         false,
                         fixture.adapter,
                         "allowlist governance failure");
+  assert_failure_observability(fixture,
+                               "req-034-allowlist",
+                               "call-034-allowlist",
+                               "rejected",
+                               "prompt_governance",
+                               "2001",
+                               "policy",
+                               "deny",
+                               "llm.prompt.policy",
+                               "allowlist governance failure");
 }
 
 void test_governance_failure_rejects_untrusted_prompt_source_before_policy() {
@@ -373,6 +454,16 @@ void test_governance_failure_rejects_untrusted_prompt_source_before_policy() {
                         false,
                         fixture.adapter,
                         "trusted-source gating failure");
+  assert_failure_observability(fixture,
+                               "req-034-trusted-source",
+                               "call-034-trusted-source",
+                               "failure",
+                               "prompt_asset",
+                               "1001",
+                               "validation",
+                               "none",
+                               "llm.prompt.select",
+                               "trusted-source gating failure");
 }
 
 void test_governance_failure_surfaces_over_budget_without_adapter_dispatch() {
@@ -404,6 +495,16 @@ void test_governance_failure_surfaces_over_budget_without_adapter_dispatch() {
                         true,
                         fixture.adapter,
                         "over-budget governance failure");
+  assert_failure_observability(fixture,
+                               "req-034-over-budget",
+                               "call-034-over-budget",
+                               "rejected",
+                               "prompt_governance",
+                               "2001",
+                               "policy",
+                               "over_budget",
+                               "llm.prompt.policy",
+                               "over-budget governance failure");
 }
 
 }  // namespace

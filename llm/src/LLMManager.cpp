@@ -126,6 +126,135 @@ std::vector<std::string> normalized_selection_reasons(
   return normalized;
 }
 
+std::string non_empty_or(std::string value, std::string fallback) {
+  return value.empty() ? std::move(fallback) : std::move(value);
+}
+
+std::string optional_identifier_or_unknown(const std::optional<std::string>& value) {
+  if (value.has_value() && !value->empty()) {
+    return *value;
+  }
+
+  return "unknown";
+}
+
+std::string result_code_value(ResultCode code) {
+  return std::to_string(static_cast<int>(code));
+}
+
+std::string result_code_category_value(ResultCode code) {
+  return std::string(
+      dasall::contracts::result_code_category_name(
+          dasall::contracts::classify_result_code(code)));
+}
+
+std::string failure_category_name(LLMFailureCategory category) {
+  switch (category) {
+    case LLMFailureCategory::PromptAsset:
+      return "prompt_asset";
+    case LLMFailureCategory::PromptGovernance:
+      return "prompt_governance";
+    case LLMFailureCategory::Routing:
+      return "routing";
+    case LLMFailureCategory::AdapterTransport:
+      return "adapter_transport";
+    case LLMFailureCategory::ProviderProtocol:
+      return "provider_protocol";
+    case LLMFailureCategory::FallbackExhausted:
+      return "fallback_exhausted";
+  }
+
+  return "unknown";
+}
+
+std::string governance_disposition_name(PromptPolicyDisposition disposition) {
+  switch (disposition) {
+    case PromptPolicyDisposition::Allow:
+      return "allow";
+    case PromptPolicyDisposition::Deny:
+      return "deny";
+    case PromptPolicyDisposition::OverBudget:
+      return "over_budget";
+    case PromptPolicyDisposition::RequireRecompose:
+      return "require_recompose";
+  }
+
+  return "unknown";
+}
+
+std::string provider_id_from_route(std::string_view route) {
+  const auto slash = route.find('/');
+  if (slash == std::string_view::npos || slash == 0U) {
+    return "unknown";
+  }
+
+  return std::string(route.substr(0U, slash));
+}
+
+std::string model_id_from_route(std::string_view route) {
+  const auto slash = route.find('/');
+  if (slash == std::string_view::npos || slash + 1U >= route.size()) {
+    return "unknown";
+  }
+
+  return std::string(route.substr(slash + 1U));
+}
+
+std::vector<std::string> failure_reason_codes(const LLMManagerResult& failure) {
+  std::vector<std::string> reasons;
+  if (failure.failure_category.has_value()) {
+    append_unique_string(reasons,
+                         "failure_" + failure_category_name(*failure.failure_category));
+  }
+  if (failure.code.has_value()) {
+    append_unique_string(reasons,
+                         "result_" + result_code_category_value(*failure.code));
+  }
+  if (failure.governance_disposition.has_value()) {
+    append_unique_string(reasons,
+                         "governance_" +
+                             governance_disposition_name(*failure.governance_disposition));
+  }
+
+  if (reasons.empty()) {
+    reasons.push_back("failure_unknown");
+  }
+
+  return reasons;
+}
+
+std::string failure_outcome(const LLMManagerResult& failure) {
+  if ((failure.code.has_value() && *failure.code == ResultCode::PolicyDenied) ||
+      (failure.failure_category.has_value() &&
+       *failure.failure_category == LLMFailureCategory::PromptGovernance)) {
+    return "rejected";
+  }
+
+  return "failure";
+}
+
+LLMTraceSpanKind failure_trace_kind(const LLMManagerResult& failure) {
+  if (!failure.failure_category.has_value()) {
+    return LLMTraceSpanKind::AdapterInvoke;
+  }
+
+  switch (*failure.failure_category) {
+    case LLMFailureCategory::PromptAsset:
+      return LLMTraceSpanKind::PromptSelect;
+    case LLMFailureCategory::PromptGovernance:
+      return LLMTraceSpanKind::PromptPolicy;
+    case LLMFailureCategory::Routing:
+      return LLMTraceSpanKind::RouteResolve;
+    case LLMFailureCategory::AdapterTransport:
+    case LLMFailureCategory::FallbackExhausted:
+      return LLMTraceSpanKind::AdapterInvoke;
+    case LLMFailureCategory::ProviderProtocol:
+      return LLMTraceSpanKind::ResponseNormalize;
+  }
+
+  return LLMTraceSpanKind::AdapterInvoke;
+}
+
 std::string requested_reasoning_mode(const ModelSelectionHint& hint) {
   return (hint.requires_reasoning || hint.prefers_visible_reasoning) ? "thinking" : "chat";
 }
@@ -172,7 +301,8 @@ LLMTraceSpanSignal make_trace_signal(
     std::uint32_t latency_ms,
     const std::optional<NormalizedUsageRecord>& usage_record,
     bool fallback_used,
-    std::string outcome) {
+    std::string outcome,
+    std::string_view request_mode) {
   return LLMTraceSpanSignal{
       .kind = kind,
       .request_id = response.request_id.value_or(std::string{}),
@@ -197,6 +327,13 @@ LLMTraceSpanSignal make_trace_signal(
       .parent_context = std::nullopt,
       .detail_ref = trace_detail_ref(kind),
       .outcome = std::move(outcome),
+      .request_mode = std::string(request_mode),
+      .result_code = {},
+      .result_code_category = {},
+      .error_stage = {},
+      .attempted_routes = {},
+      .retryable = false,
+      .safe_to_replan = false,
   };
 }
 
@@ -212,7 +349,8 @@ std::optional<LLMCallSummary> make_call_summary(
     const std::vector<std::string>& selection_reason_codes,
     const std::optional<NormalizedUsageRecord>& usage_record,
     std::uint32_t total_latency_ms,
-    bool fallback_used) {
+    bool fallback_used,
+    std::string_view request_mode) {
   LLMCallSummary summary{
       .request_id = response.request_id.value_or(std::string{}),
       .llm_call_id = response.llm_call_id.value_or(std::string{}),
@@ -236,6 +374,17 @@ std::optional<LLMCallSummary> make_call_summary(
       .provider_id = std::string(provider_id),
       .profile_id = std::string(profile_id),
       .outcome = fallback_used ? "degraded" : "success",
+      .request_mode = std::string(request_mode),
+      .result_code = {},
+      .result_code_category = {},
+      .error_stage = {},
+      .error_message = {},
+      .source_ref_type = {},
+      .source_ref_id = {},
+      .attempted_routes = attempted_routes,
+      .retryable = false,
+      .safe_to_replan = false,
+      .governance_disposition = {},
       .from_route = fallback_used && !attempted_routes.empty() ? attempted_routes.front() : std::string{},
       .to_route = fallback_used ? std::string(resolved_route) : std::string{},
       .prompt_policy_denied = false,
@@ -269,13 +418,14 @@ void record_success_observability(
     std::uint32_t route_latency_ms,
     std::uint32_t adapter_latency_ms,
     std::uint32_t normalize_latency_ms,
-    bool fallback_used) {
+    bool fallback_used,
+    std::string_view request_mode) {
   const auto summary = make_call_summary(response, selection_hint, model_metadata,
                                          stage, resolved_route, provider_id,
                                          profile_id,
                                          attempted_routes, selection_reason_codes,
                                          usage_record, total_latency_ms,
-                                         fallback_used);
+                                         fallback_used, request_mode);
   if (summary.has_value() && metrics_bridge != nullptr) {
     static_cast<void>(metrics_bridge->record_call(*summary));
   }
@@ -296,7 +446,8 @@ void record_success_observability(
       route_latency_ms,
       usage_record,
       fallback_used,
-      outcome)));
+      outcome,
+      request_mode)));
   static_cast<void>(trace_bridge->record_span(make_trace_signal(
       LLMTraceSpanKind::AdapterInvoke,
       response,
@@ -308,7 +459,8 @@ void record_success_observability(
       adapter_latency_ms,
       usage_record,
       fallback_used,
-      outcome)));
+      outcome,
+      request_mode)));
   static_cast<void>(trace_bridge->record_span(make_trace_signal(
       LLMTraceSpanKind::ResponseNormalize,
       response,
@@ -320,7 +472,8 @@ void record_success_observability(
       normalize_latency_ms,
       usage_record,
       fallback_used,
-      outcome)));
+      outcome,
+      request_mode)));
 }
 
 std::optional<LLMAuditEvent> make_reasoning_content_stripped_event(
@@ -509,6 +662,144 @@ ModelSelectionHint make_selection_hint(const LLMGenerateRequest& request) {
   hint.target_output_tokens = request.request.max_output_tokens.value_or(0U);
   hint.previous_route_failures = 0U;
   return hint;
+}
+
+void record_failure_observability(
+    LLMMetricsBridge* metrics_bridge,
+    LLMTraceBridge* trace_bridge,
+    const LLMGenerateRequest& request,
+    std::string_view profile_id,
+    const std::chrono::steady_clock::time_point& request_started_at,
+    const LLMManagerResult& failure,
+    std::string_view request_mode,
+    std::string_view prompt_id,
+    std::string_view prompt_version) {
+  if (metrics_bridge == nullptr && trace_bridge == nullptr) {
+    return;
+  }
+
+  const auto selection_hint = make_selection_hint(request);
+  const std::string resolved_route = non_empty_or(
+      failure.resolved_route,
+      optional_identifier_or_unknown(request.request.model_route));
+  const std::string provider_id = provider_id_from_route(resolved_route);
+  const std::string model_id = model_id_from_route(resolved_route);
+  const std::string category = failure.failure_category.has_value()
+                                   ? failure_category_name(*failure.failure_category)
+                                   : std::string("unknown");
+  const std::string result_code = failure.code.has_value()
+                                      ? result_code_value(*failure.code)
+                                      : std::string{};
+  const std::string result_category = failure.code.has_value()
+                                          ? result_code_category_value(*failure.code)
+                                          : std::string{};
+  const std::string outcome = failure_outcome(failure);
+  const std::string error_stage = failure.error.has_value()
+                                      ? failure.error->details.stage
+                                      : std::string{};
+  const std::string stage = !request.stage.empty()
+                                ? request.stage
+                                : non_empty_or(error_stage, std::string("unknown"));
+  const auto reasons = failure_reason_codes(failure);
+  const bool fallback_attempted = failure.attempted_routes.size() >= 2U;
+  const bool prompt_policy_denied =
+      failure.code.has_value() && *failure.code == ResultCode::PolicyDenied;
+  const bool prompt_over_budget =
+      failure.governance_disposition.has_value() &&
+      *failure.governance_disposition == PromptPolicyDisposition::OverBudget;
+  const bool adapter_timeout =
+      failure.code.has_value() && *failure.code == ResultCode::ProviderTimeout;
+
+  LLMCallSummary summary{
+      .request_id = optional_identifier_or_unknown(request.request.request_id),
+      .llm_call_id = optional_identifier_or_unknown(request.request.llm_call_id),
+      .stage = stage,
+      .resolved_route = resolved_route,
+      .model_name = model_id,
+      .prompt_id = non_empty_or(std::string(prompt_id), std::string("unknown")),
+      .prompt_version = non_empty_or(std::string(prompt_version), std::string("unknown")),
+      .fallback_used = fallback_attempted,
+      .completed_at_ms = current_time_ms(),
+      .latency_ms = elapsed_ms_since(request_started_at),
+      .failure_category = category,
+      .error_type = result_category.empty() ? category : result_category,
+      .selection_reason_codes = reasons,
+      .estimated_input_tokens = selection_hint.estimated_input_tokens,
+      .prompt_cache_hit_tokens = 0U,
+      .prompt_cache_miss_tokens = 0U,
+      .actual_cost_estimate_usd = 0.0,
+      .reasoning_mode_requested = requested_reasoning_mode(selection_hint),
+      .reasoning_mode_effective = requested_reasoning_mode(selection_hint),
+      .provider_id = provider_id,
+      .profile_id = std::string(profile_id.empty() ? std::string_view("unknown") : profile_id),
+      .outcome = outcome,
+      .request_mode = std::string(request_mode),
+      .result_code = result_code,
+      .result_code_category = result_category,
+      .error_stage = error_stage,
+      .error_message = failure.error.has_value() ? failure.error->details.message : std::string{},
+      .source_ref_type = failure.error.has_value() ? failure.error->source_ref.ref_type : std::string{},
+      .source_ref_id = failure.error.has_value() ? failure.error->source_ref.ref_id : std::string{},
+      .attempted_routes = failure.attempted_routes,
+      .retryable = failure.error.has_value() && failure.error->retryable.value_or(false),
+      .safe_to_replan = failure.error.has_value() && failure.error->safe_to_replan.value_or(false),
+      .governance_disposition = failure.governance_disposition.has_value()
+                                     ? governance_disposition_name(*failure.governance_disposition)
+                                     : std::string{},
+      .from_route = fallback_attempted ? failure.attempted_routes.front() : std::string{},
+      .to_route = fallback_attempted ? resolved_route : std::string{},
+      .prompt_policy_denied = prompt_policy_denied,
+      .prompt_compose_over_budget = prompt_over_budget,
+      .adapter_timeout = adapter_timeout,
+      .health_degraded = false,
+      .reasoning_escalated = false,
+  };
+
+  if (summary.has_consistent_values() && metrics_bridge != nullptr) {
+    static_cast<void>(metrics_bridge->record_call(summary));
+  }
+
+  if (trace_bridge == nullptr) {
+    return;
+  }
+
+  const auto trace_kind = failure_trace_kind(failure);
+  LLMTraceSpanSignal signal{
+      .kind = trace_kind,
+      .request_id = summary.request_id,
+      .llm_call_id = summary.llm_call_id,
+      .stage = summary.stage,
+      .resolved_route = summary.resolved_route,
+      .model_name = summary.model_name,
+      .prompt_id = summary.prompt_id,
+      .prompt_version = summary.prompt_version,
+      .fallback_used = summary.fallback_used,
+      .latency_ms = summary.latency_ms,
+      .failure_category = summary.failure_category,
+      .error_type = summary.error_type,
+      .selection_reason_codes = summary.selection_reason_codes,
+      .estimated_input_tokens = summary.estimated_input_tokens,
+      .prompt_cache_hit_tokens = 0U,
+      .prompt_cache_miss_tokens = 0U,
+      .actual_cost_estimate_usd = 0.0,
+      .reasoning_mode_requested = summary.reasoning_mode_requested,
+      .reasoning_mode_effective = summary.reasoning_mode_effective,
+      .completed_at_ms = summary.completed_at_ms,
+      .parent_context = std::nullopt,
+      .detail_ref = trace_detail_ref(trace_kind),
+      .outcome = summary.outcome,
+      .request_mode = summary.request_mode,
+      .result_code = summary.result_code,
+      .result_code_category = summary.result_code_category,
+      .error_stage = summary.error_stage,
+      .attempted_routes = summary.attempted_routes,
+      .retryable = summary.retryable,
+      .safe_to_replan = summary.safe_to_replan,
+  };
+
+  if (signal.has_consistent_values()) {
+    static_cast<void>(trace_bridge->record_span(signal));
+  }
 }
 
 std::vector<std::string> build_route_candidates(const dasall::llm::ResolvedModelRoute& route) {
@@ -1664,14 +1955,29 @@ bool LLMManager::init(const LLMSubsystemConfig& config) {
 
 LLMManagerResult LLMManager::generate(const LLMGenerateRequest& request) {
   const auto request_started_at = std::chrono::steady_clock::now();
+  std::string observability_prompt_id;
+  std::string observability_prompt_version;
+  const auto observe_failure = [&](LLMManagerResult failure) {
+    record_failure_observability(metrics_bridge_.get(),
+                                 trace_bridge_.get(),
+                                 request,
+                                 config_.profile_id,
+                                 request_started_at,
+                                 failure,
+                                 "unary",
+                                 observability_prompt_id,
+                                 observability_prompt_version);
+    return failure;
+  };
+
   if (!initialized_) {
-    return make_manager_failure(ResultCode::RuntimeRetryExhausted,
-                                "llm manager is not initialized",
-                                false,
-                                LLMFailureCategory::AdapterTransport,
-                                std::string(kManagerStage),
-                                "manager",
-                                "uninitialized");
+    return observe_failure(make_manager_failure(ResultCode::RuntimeRetryExhausted,
+                                                "llm manager is not initialized",
+                                                false,
+                                                LLMFailureCategory::AdapterTransport,
+                                                std::string(kManagerStage),
+                                                "manager",
+                                                "uninitialized"));
   }
 
   const auto stage_route = config_.stage_route_for(request.stage);
@@ -1679,7 +1985,7 @@ LLMManagerResult LLMManager::generate(const LLMGenerateRequest& request) {
                                                              stage_route,
                                                              kManagerStage);
       invalid_request.has_value()) {
-    return *invalid_request;
+    return observe_failure(*invalid_request);
   }
 
   auto base_request = request.request;
@@ -1695,14 +2001,15 @@ LLMManagerResult LLMManager::generate(const LLMGenerateRequest& request) {
   const auto compose_validation =
       contracts::validate_prompt_compose_request_field_rules(compose_request);
   if (!compose_validation.ok) {
-    return make_manager_failure(ResultCode::ValidationFieldMissing,
-                                std::string("invalid prompt compose request: ") +
-                                    std::string(compose_validation.reason),
-                                false,
-                                LLMFailureCategory::PromptAsset,
-                                std::string(kManagerStage),
-                                "stage",
-                                request.stage);
+    return observe_failure(make_manager_failure(
+      ResultCode::ValidationFieldMissing,
+      std::string("invalid prompt compose request: ") +
+        std::string(compose_validation.reason),
+      false,
+      LLMFailureCategory::PromptAsset,
+      std::string(kManagerStage),
+      "stage",
+      request.stage));
   }
 
   auto policy_input = config_.make_prompt_policy_input(
@@ -1717,37 +2024,40 @@ LLMManagerResult LLMManager::generate(const LLMGenerateRequest& request) {
       !pipeline_result.compose_result.has_value() ||
       !pipeline_result.policy_decision.has_value() ||
       pipeline_result.policy_decision->governed_messages.empty()) {
-    return make_pipeline_failure(pipeline_result,
-                                 std::string(kManagerStage),
-                                 request.stage);
+    return observe_failure(make_pipeline_failure(pipeline_result,
+                           std::string(kManagerStage),
+                           request.stage));
   }
 
   auto call_request = base_request;
   call_request.messages = pipeline_result.policy_decision->governed_messages;
   call_request.prompt_id = pipeline_result.compose_result->selected_prompt_id;
   call_request.prompt_version = pipeline_result.compose_result->selected_version;
+    observability_prompt_id = call_request.prompt_id.value_or(std::string{});
+    observability_prompt_version = call_request.prompt_version.value_or(std::string{});
 
   const auto call_request_validation = contracts::validate_llm_request_field_rules(call_request);
   if (!call_request_validation.ok) {
-    return make_manager_failure(ResultCode::ValidationFieldMissing,
-                                std::string("invalid llm call request: ") +
-                                    std::string(call_request_validation.reason),
-                                false,
-                                LLMFailureCategory::PromptGovernance,
-                                std::string(kManagerStage),
-                                "stage",
-                                request.stage);
+    return observe_failure(make_manager_failure(
+      ResultCode::ValidationFieldMissing,
+      std::string("invalid llm call request: ") +
+        std::string(call_request_validation.reason),
+      false,
+      LLMFailureCategory::PromptGovernance,
+      std::string(kManagerStage),
+      "stage",
+      request.stage));
   }
 
   const auto catalog_snapshot = provider_catalog_snapshot_;
   if (catalog_snapshot == nullptr || !catalog_snapshot->has_consistent_values()) {
-    return make_manager_failure(ResultCode::ValidationFieldMissing,
-                                "provider catalog snapshot is unavailable",
-                                false,
-                                LLMFailureCategory::Routing,
-                                std::string(kManagerStage),
-                                "catalog",
-                                "provider_catalog");
+    return observe_failure(make_manager_failure(ResultCode::ValidationFieldMissing,
+                                                "provider catalog snapshot is unavailable",
+                                                false,
+                                                LLMFailureCategory::Routing,
+                                                std::string(kManagerStage),
+                                                "catalog",
+                                                "provider_catalog"));
   }
 
   const auto router_started_at = std::chrono::steady_clock::now();
@@ -1755,13 +2065,13 @@ LLMManagerResult LLMManager::generate(const LLMGenerateRequest& request) {
       make_selection_hint(request), *catalog_snapshot, adapter_registry_->health_snapshot());
   const auto route_latency_ms = elapsed_ms_since(router_started_at);
   if (!router_result.has_route()) {
-    return make_manager_failure(ResultCode::RuntimeRetryExhausted,
-                                "model router did not resolve a route",
-                                false,
-                                LLMFailureCategory::Routing,
-                                std::string(kManagerStage),
-                                "stage",
-                                request.stage);
+    return observe_failure(make_manager_failure(ResultCode::RuntimeRetryExhausted,
+                                                "model router did not resolve a route",
+                                                false,
+                                                LLMFailureCategory::Routing,
+                                                std::string(kManagerStage),
+                                                "stage",
+                                                request.stage));
   }
 
   const auto selection_hint = make_selection_hint(request);
@@ -1769,13 +2079,13 @@ LLMManagerResult LLMManager::generate(const LLMGenerateRequest& request) {
       normalized_selection_reasons(router_result.selection_reason_codes);
   const auto route_candidates = build_route_candidates(*router_result.resolved_route);
   if (route_candidates.empty()) {
-    return make_manager_failure(ResultCode::RuntimeRetryExhausted,
-                                "resolved route chain is empty",
-                                false,
-                                LLMFailureCategory::Routing,
-                                std::string(kManagerStage),
-                                "stage",
-                                request.stage);
+    return observe_failure(make_manager_failure(ResultCode::RuntimeRetryExhausted,
+                                                "resolved route chain is empty",
+                                                false,
+                                                LLMFailureCategory::Routing,
+                                                std::string(kManagerStage),
+                                                "stage",
+                                                request.stage));
   }
 
   std::vector<std::string> attempted_routes;
@@ -1903,15 +2213,16 @@ LLMManagerResult LLMManager::generate(const LLMGenerateRequest& request) {
         .fallback_used = attempted_routes.size() > 1U,
     };
     if (!result.has_consistent_values()) {
-      return make_manager_failure(ResultCode::RuntimeRetryExhausted,
-                                  "llm manager produced inconsistent success result",
-                                  false,
-                                  LLMFailureCategory::AdapterTransport,
-                                  std::string(kManagerStage),
-                                  "route",
-                                  route_key,
-                                  attempted_routes,
-                                  route_key);
+      return observe_failure(make_manager_failure(
+          ResultCode::RuntimeRetryExhausted,
+          "llm manager produced inconsistent success result",
+          false,
+          LLMFailureCategory::AdapterTransport,
+          std::string(kManagerStage),
+          "route",
+          route_key,
+          attempted_routes,
+          route_key));
     }
 
     record_success_observability(metrics_bridge_.get(),
@@ -1930,7 +2241,8 @@ LLMManagerResult LLMManager::generate(const LLMGenerateRequest& request) {
                                  route_latency_ms,
                                  adapter_latency_ms,
                                  normalize_latency_ms,
-                                 result.fallback_used);
+                                 result.fallback_used,
+                                 "unary");
     record_success_audit(audit_bridge_.get(),
                          *result.response,
                          selection_hint,
@@ -1949,46 +2261,63 @@ LLMManagerResult LLMManager::generate(const LLMGenerateRequest& request) {
     }
 
     if (!failure.has_consistent_values()) {
-      return make_manager_failure(ResultCode::RuntimeRetryExhausted,
-                                  "llm manager produced inconsistent failure result",
-                                  false,
-                                  attempted_routes.size() >= 2U
-                                      ? LLMFailureCategory::FallbackExhausted
-                                      : LLMFailureCategory::AdapterTransport,
-                                  std::string(kManagerStage),
-                                  "stage",
-                                  request.stage,
-                                  attempted_routes,
-                                  attempted_routes.empty() ? std::string{} : attempted_routes.back());
+      return observe_failure(make_manager_failure(
+        ResultCode::RuntimeRetryExhausted,
+        "llm manager produced inconsistent failure result",
+        false,
+        attempted_routes.size() >= 2U
+          ? LLMFailureCategory::FallbackExhausted
+          : LLMFailureCategory::AdapterTransport,
+        std::string(kManagerStage),
+        "stage",
+        request.stage,
+        attempted_routes,
+        attempted_routes.empty() ? std::string{} : attempted_routes.back()));
     }
 
-    return failure;
+    return observe_failure(failure);
   }
 
-  return make_manager_failure(ResultCode::RuntimeRetryExhausted,
-                              "llm manager exhausted route chain without result",
-                              false,
-                              attempted_routes.size() >= 2U
-                                  ? LLMFailureCategory::FallbackExhausted
-                                  : LLMFailureCategory::Routing,
-                              std::string(kManagerStage),
-                              "stage",
-                              request.stage,
-                              attempted_routes,
-                              attempted_routes.empty() ? std::string{} : attempted_routes.back());
+    return observe_failure(make_manager_failure(
+      ResultCode::RuntimeRetryExhausted,
+      "llm manager exhausted route chain without result",
+      false,
+      attempted_routes.size() >= 2U
+        ? LLMFailureCategory::FallbackExhausted
+        : LLMFailureCategory::Routing,
+      std::string(kManagerStage),
+      "stage",
+      request.stage,
+      attempted_routes,
+      attempted_routes.empty() ? std::string{} : attempted_routes.back()));
 }
 
 LLMManagerResult LLMManager::stream_generate(const LLMGenerateRequest& request,
                                              IStreamObserver* observer) {
   const auto request_started_at = std::chrono::steady_clock::now();
+  std::string observability_prompt_id;
+  std::string observability_prompt_version;
+  const auto observe_failure = [&](LLMManagerResult failure) {
+    record_failure_observability(metrics_bridge_.get(),
+                                 trace_bridge_.get(),
+                                 request,
+                                 config_.profile_id,
+                                 request_started_at,
+                                 failure,
+                                 "streaming",
+                                 observability_prompt_id,
+                                 observability_prompt_version);
+    return failure;
+  };
+
   if (!initialized_) {
-    return make_manager_failure(ResultCode::RuntimeRetryExhausted,
-                                "llm manager is not initialized",
-                                false,
-                                LLMFailureCategory::AdapterTransport,
-                                std::string(kManagerStreamStage),
-                                "manager",
-                                "uninitialized");
+    return observe_failure(make_manager_failure(ResultCode::RuntimeRetryExhausted,
+                                                "llm manager is not initialized",
+                                                false,
+                                                LLMFailureCategory::AdapterTransport,
+                                                std::string(kManagerStreamStage),
+                                                "manager",
+                                                "uninitialized"));
   }
 
   const auto stage_route = config_.stage_route_for(request.stage);
@@ -1996,7 +2325,7 @@ LLMManagerResult LLMManager::stream_generate(const LLMGenerateRequest& request,
                                                              stage_route,
                                                              kManagerStreamStage);
       invalid_request.has_value()) {
-    return *invalid_request;
+    return observe_failure(*invalid_request);
   }
 
   auto base_request = request.request;
@@ -2009,14 +2338,15 @@ LLMManagerResult LLMManager::stream_generate(const LLMGenerateRequest& request,
   const auto compose_validation =
       contracts::validate_prompt_compose_request_field_rules(compose_request);
   if (!compose_validation.ok) {
-    return make_manager_failure(ResultCode::ValidationFieldMissing,
-                                std::string("invalid prompt compose request: ") +
-                                    std::string(compose_validation.reason),
-                                false,
-                                LLMFailureCategory::PromptAsset,
-                                std::string(kManagerStreamStage),
-                                "stage",
-                                request.stage);
+    return observe_failure(make_manager_failure(
+      ResultCode::ValidationFieldMissing,
+      std::string("invalid prompt compose request: ") +
+        std::string(compose_validation.reason),
+      false,
+      LLMFailureCategory::PromptAsset,
+      std::string(kManagerStreamStage),
+      "stage",
+      request.stage));
   }
 
   auto policy_input = config_.make_prompt_policy_input(
@@ -2031,9 +2361,9 @@ LLMManagerResult LLMManager::stream_generate(const LLMGenerateRequest& request,
       !pipeline_result.compose_result.has_value() ||
       !pipeline_result.policy_decision.has_value() ||
       pipeline_result.policy_decision->governed_messages.empty()) {
-    return make_pipeline_failure(pipeline_result,
-                                 std::string(kManagerStreamStage),
-                                 request.stage);
+    return observe_failure(make_pipeline_failure(pipeline_result,
+                                                 std::string(kManagerStreamStage),
+                                                 request.stage));
   }
 
   auto call_request = base_request;
@@ -2041,28 +2371,31 @@ LLMManagerResult LLMManager::stream_generate(const LLMGenerateRequest& request,
   call_request.prompt_id = pipeline_result.compose_result->selected_prompt_id;
   call_request.prompt_version = pipeline_result.compose_result->selected_version;
   call_request.request_mode = dasall::contracts::LLMRequestMode::Streaming;
+  observability_prompt_id = call_request.prompt_id.value_or(std::string{});
+  observability_prompt_version = call_request.prompt_version.value_or(std::string{});
 
   const auto call_request_validation = contracts::validate_llm_request_field_rules(call_request);
   if (!call_request_validation.ok) {
-    return make_manager_failure(ResultCode::ValidationFieldMissing,
-                                std::string("invalid llm call request: ") +
-                                    std::string(call_request_validation.reason),
-                                false,
-                                LLMFailureCategory::PromptGovernance,
-                                std::string(kManagerStreamStage),
-                                "stage",
-                                request.stage);
+    return observe_failure(make_manager_failure(
+        ResultCode::ValidationFieldMissing,
+        std::string("invalid llm call request: ") +
+            std::string(call_request_validation.reason),
+        false,
+        LLMFailureCategory::PromptGovernance,
+        std::string(kManagerStreamStage),
+        "stage",
+        request.stage));
   }
 
   const auto catalog_snapshot = provider_catalog_snapshot_;
   if (catalog_snapshot == nullptr || !catalog_snapshot->has_consistent_values()) {
-    return make_manager_failure(ResultCode::ValidationFieldMissing,
-                                "provider catalog snapshot is unavailable",
-                                false,
-                                LLMFailureCategory::Routing,
-                                std::string(kManagerStreamStage),
-                                "catalog",
-                                "provider_catalog");
+    return observe_failure(make_manager_failure(ResultCode::ValidationFieldMissing,
+                                                "provider catalog snapshot is unavailable",
+                                                false,
+                                                LLMFailureCategory::Routing,
+                                                std::string(kManagerStreamStage),
+                                                "catalog",
+                                                "provider_catalog"));
   }
 
   const auto router_started_at = std::chrono::steady_clock::now();
@@ -2070,13 +2403,13 @@ LLMManagerResult LLMManager::stream_generate(const LLMGenerateRequest& request,
       make_selection_hint(request), *catalog_snapshot, adapter_registry_->health_snapshot());
   const auto route_latency_ms = elapsed_ms_since(router_started_at);
   if (!router_result.has_route()) {
-    return make_manager_failure(ResultCode::RuntimeRetryExhausted,
-                                "model router did not resolve a route",
-                                false,
-                                LLMFailureCategory::Routing,
-                                std::string(kManagerStreamStage),
-                                "stage",
-                                request.stage);
+    return observe_failure(make_manager_failure(ResultCode::RuntimeRetryExhausted,
+                                                "model router did not resolve a route",
+                                                false,
+                                                LLMFailureCategory::Routing,
+                                                std::string(kManagerStreamStage),
+                                                "stage",
+                                                request.stage));
   }
 
   const auto selection_hint = make_selection_hint(request);
@@ -2084,13 +2417,13 @@ LLMManagerResult LLMManager::stream_generate(const LLMGenerateRequest& request,
       normalized_selection_reasons(router_result.selection_reason_codes);
   const auto route_candidates = build_route_candidates(*router_result.resolved_route);
   if (route_candidates.empty()) {
-    return make_manager_failure(ResultCode::RuntimeRetryExhausted,
-                                "resolved route chain is empty",
-                                false,
-                                LLMFailureCategory::Routing,
-                                std::string(kManagerStreamStage),
-                                "stage",
-                                request.stage);
+    return observe_failure(make_manager_failure(ResultCode::RuntimeRetryExhausted,
+                                                "resolved route chain is empty",
+                                                false,
+                                                LLMFailureCategory::Routing,
+                                                std::string(kManagerStreamStage),
+                                                "stage",
+                                                request.stage));
   }
 
   std::vector<std::string> attempted_routes;
@@ -2221,15 +2554,16 @@ LLMManagerResult LLMManager::stream_generate(const LLMGenerateRequest& request,
         .fallback_used = attempted_routes.size() > 1U,
     };
     if (!result.has_consistent_values()) {
-      return make_manager_failure(ResultCode::RuntimeRetryExhausted,
-                                  "llm manager produced inconsistent streaming success result",
-                                  false,
-                                  LLMFailureCategory::AdapterTransport,
-                                  std::string(kManagerStreamStage),
-                                  "route",
-                                  route_key,
-                                  attempted_routes,
-                                  route_key);
+      return observe_failure(make_manager_failure(
+          ResultCode::RuntimeRetryExhausted,
+          "llm manager produced inconsistent streaming success result",
+          false,
+          LLMFailureCategory::AdapterTransport,
+          std::string(kManagerStreamStage),
+          "route",
+          route_key,
+          attempted_routes,
+          route_key));
     }
 
     record_success_observability(metrics_bridge_.get(),
@@ -2248,7 +2582,8 @@ LLMManagerResult LLMManager::stream_generate(const LLMGenerateRequest& request,
                                  route_latency_ms,
                                  adapter_latency_ms,
                                  normalize_latency_ms,
-                                 result.fallback_used);
+                                 result.fallback_used,
+                                 "streaming");
     record_success_audit(audit_bridge_.get(),
                          *result.response,
                          selection_hint,
@@ -2267,33 +2602,35 @@ LLMManagerResult LLMManager::stream_generate(const LLMGenerateRequest& request,
     }
 
     if (!failure.has_consistent_values()) {
-      return make_manager_failure(ResultCode::RuntimeRetryExhausted,
-                                  "llm manager produced inconsistent streaming failure result",
-                                  false,
-                                  attempted_routes.size() >= 2U
-                                      ? LLMFailureCategory::FallbackExhausted
-                                      : LLMFailureCategory::AdapterTransport,
-                                  std::string(kManagerStreamStage),
-                                  "stage",
-                                  request.stage,
-                                  attempted_routes,
-                                  attempted_routes.empty() ? std::string{} : attempted_routes.back());
+      return observe_failure(make_manager_failure(
+        ResultCode::RuntimeRetryExhausted,
+        "llm manager produced inconsistent streaming failure result",
+        false,
+        attempted_routes.size() >= 2U
+          ? LLMFailureCategory::FallbackExhausted
+          : LLMFailureCategory::AdapterTransport,
+        std::string(kManagerStreamStage),
+        "stage",
+        request.stage,
+        attempted_routes,
+        attempted_routes.empty() ? std::string{} : attempted_routes.back()));
     }
 
-    return failure;
+    return observe_failure(failure);
   }
 
-  return make_manager_failure(ResultCode::RuntimeRetryExhausted,
-                              "llm manager exhausted streaming route chain without result",
-                              false,
-                              attempted_routes.size() >= 2U
-                                  ? LLMFailureCategory::FallbackExhausted
-                                  : LLMFailureCategory::Routing,
-                              std::string(kManagerStreamStage),
-                              "stage",
-                              request.stage,
-                              attempted_routes,
-                              attempted_routes.empty() ? std::string{} : attempted_routes.back());
+    return observe_failure(make_manager_failure(
+      ResultCode::RuntimeRetryExhausted,
+      "llm manager exhausted streaming route chain without result",
+      false,
+      attempted_routes.size() >= 2U
+        ? LLMFailureCategory::FallbackExhausted
+        : LLMFailureCategory::Routing,
+      std::string(kManagerStreamStage),
+      "stage",
+      request.stage,
+      attempted_routes,
+      attempted_routes.empty() ? std::string{} : attempted_routes.back()));
 }
 
 HealthStatus LLMManager::health_check() const {

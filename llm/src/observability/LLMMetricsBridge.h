@@ -150,6 +150,17 @@ struct LLMCallSummary {
   std::string provider_id;
   std::string profile_id = "unknown";
   std::string outcome = "success";
+  std::string request_mode = "unary";
+  std::string result_code;
+  std::string result_code_category;
+  std::string error_stage;
+  std::string error_message;
+  std::string source_ref_type;
+  std::string source_ref_id;
+  std::vector<std::string> attempted_routes;
+  bool retryable = false;
+  bool safe_to_replan = false;
+  std::string governance_disposition;
   std::string from_route;
   std::string to_route;
   bool prompt_policy_denied = false;
