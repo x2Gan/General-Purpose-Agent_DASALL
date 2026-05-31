@@ -938,7 +938,8 @@ void append_usage_tags(dasall::contracts::LLMResponse& response,
 ResponseNormalizerContext make_normalizer_context(
     const dasall::contracts::LLMRequest& request,
     const dasall::llm::route::AdapterRouteState& route_state,
-    const ProviderModelMetadata* model_metadata) {
+  const ProviderModelMetadata* model_metadata,
+  const std::optional<dasall::contracts::PromptRelease>& selected_release = std::nullopt) {
   return ResponseNormalizerContext{
       .route_key = route_state.route_key(),
       .provider_id = route_state.provider_id,
@@ -947,6 +948,12 @@ ResponseNormalizerContext make_normalizer_context(
                                               : route_state.model_id,
       .prompt_id = request.prompt_id.value_or(std::string{}),
       .prompt_version = request.prompt_version.value_or(std::string{}),
+    .prompt_eval_status =
+      selected_release.has_value() ? selected_release->eval_status : std::nullopt,
+    .prompt_release_scope =
+      selected_release.has_value() && selected_release->release_scope.has_value()
+        ? *selected_release->release_scope
+        : std::string{},
       .request_id = request.request_id,
       .llm_call_id = request.llm_call_id,
       .completed_at_ms = current_time_ms(),
@@ -2159,7 +2166,12 @@ LLMManagerResult LLMManager::generate(const LLMGenerateRequest& request) {
     const auto normalization_started_at = std::chrono::steady_clock::now();
     const auto normalization_result = response_normalizer_->normalize(
         *execution_result.adapter_result,
-        make_normalizer_context(call_request, *route_state, model_metadata));
+      make_normalizer_context(call_request,
+                  *route_state,
+                  model_metadata,
+                  pipeline_result.registry_result.has_value()
+                    ? pipeline_result.registry_result->release
+                    : std::nullopt));
     const auto normalize_latency_ms = elapsed_ms_since(normalization_started_at);
     if (!normalization_result.has_consistent_values() ||
         !normalization_result.succeeded()) {
@@ -2500,7 +2512,12 @@ LLMManagerResult LLMManager::stream_generate(const LLMGenerateRequest& request,
     const auto normalization_started_at = std::chrono::steady_clock::now();
     const auto normalization_result = response_normalizer_->normalize(
         *execution_result.adapter_result,
-        make_normalizer_context(call_request, *route_state, model_metadata));
+      make_normalizer_context(call_request,
+                  *route_state,
+                  model_metadata,
+                  pipeline_result.registry_result.has_value()
+                    ? pipeline_result.registry_result->release
+                    : std::nullopt));
     const auto normalize_latency_ms = elapsed_ms_since(normalization_started_at);
     if (!normalization_result.has_consistent_values() ||
         !normalization_result.succeeded()) {

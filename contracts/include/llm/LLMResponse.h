@@ -5,6 +5,8 @@
 #include <string>
 #include <vector>
 
+#include "prompt/PromptRelease.h"
+
 namespace dasall::contracts {
 
 // LLMResponseKind freezes the stable semantic result kinds emitted by the llm
@@ -27,7 +29,7 @@ enum class LLMResponseKind {
 //     1. Call identity: request_id, llm_call_id
 //     2. Semantic outcome: response_kind, content_payload
 //     3. Audit metadata: completed_at, model_name, prompt_id, prompt_version,
-//        finish_reason
+//        eval_status, release_scope, finish_reason
 //     4. Usage metadata: input_tokens, output_tokens, total_tokens
 //     5. Refusal metadata: refusal_reason
 //     6. Tags: provider-neutral audit / routing tags
@@ -62,6 +64,12 @@ struct LLMResponse {
 
   // Audit version of the prompt asset used for the invocation.
   std::optional<std::string> prompt_version;
+
+  // Audit eval status of the prompt release selected for the invocation.
+  std::optional<PromptEvalStatus> eval_status;
+
+  // Audit release scope of the prompt release selected for the invocation.
+  std::optional<std::string> release_scope;
 
   // Provider-neutral completion summary such as stop/length/tool_call.
   std::optional<std::string> finish_reason;

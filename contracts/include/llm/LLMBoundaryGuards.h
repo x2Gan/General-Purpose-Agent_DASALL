@@ -480,10 +480,17 @@ inline LLMGuardResult validate_llm_response_field_rules(
 
   const bool prompt_id_present = response.prompt_id.has_value();
   const bool prompt_version_present = response.prompt_version.has_value();
-  if (prompt_id_present != prompt_version_present) {
+  const bool eval_status_present = response.eval_status.has_value();
+  const bool release_scope_present = response.release_scope.has_value();
+  const std::size_t prompt_metadata_present_count =
+      static_cast<std::size_t>(prompt_id_present) +
+      static_cast<std::size_t>(prompt_version_present) +
+      static_cast<std::size_t>(eval_status_present) +
+      static_cast<std::size_t>(release_scope_present);
+  if (prompt_metadata_present_count != 0U && prompt_metadata_present_count != 4U) {
     return LLMGuardResult{
         .ok = false,
-        .reason = "prompt_id and prompt_version must either both be present or both be absent",
+        .reason = "prompt_id, prompt_version, eval_status, and release_scope must either all be present or all be absent",
     };
   }
 
@@ -498,6 +505,20 @@ inline LLMGuardResult validate_llm_response_field_rules(
     return LLMGuardResult{
         .ok = false,
         .reason = "prompt_version must be non-empty when present",
+    };
+  }
+
+  if (eval_status_present && *response.eval_status == PromptEvalStatus::Unspecified) {
+    return LLMGuardResult{
+        .ok = false,
+        .reason = "eval_status must be a concrete PromptEvalStatus when present",
+    };
+  }
+
+  if (release_scope_present && response.release_scope->empty()) {
+    return LLMGuardResult{
+        .ok = false,
+        .reason = "release_scope must be non-empty when present",
     };
   }
 

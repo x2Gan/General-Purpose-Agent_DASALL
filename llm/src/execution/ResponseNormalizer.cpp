@@ -192,6 +192,15 @@ ResponseNormalizationResult ResponseNormalizer::normalize(
     response.prompt_version = context.prompt_version;
   }
 
+  if (!response.eval_status.has_value() && context.prompt_eval_status.has_value()) {
+    response.eval_status = context.prompt_eval_status;
+  }
+
+  if ((!response.release_scope.has_value() || response.release_scope->empty()) &&
+      !context.prompt_release_scope.empty()) {
+    response.release_scope = context.prompt_release_scope;
+  }
+
   auto usage_fragment = adapter_result.usage;
   if (!usage_fragment.has_value()) {
     usage_fragment = usage_fragment_from_response(response);

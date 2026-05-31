@@ -179,7 +179,21 @@
 - **验收命令**
   - `cmake --build build-ci --target dasall_cognition dasall_unit_tests`
   - `ctest --test-dir build-ci -R "CognitionLlmBridgePromptReleaseGuardTest|CognitionLlmBridgeErrorMappingTest" --output-on-failure`
-- **阻塞 / 解阻**：依赖 LLM 子系统冻结 release/eval 字段命名（若已冻结，可即刻启动）。
+- **阻塞 / 解阻**：已解阻。LLM 子系统的 `eval_status/release_scope` 命名已在 `PromptRelease` / `LLMResponse` 审计四元组中对齐，可直接实施。
+
+**Closeout（2026-05-31）**
+
+- 状态：代码切片与 focused regression 已闭合；聚合 `dasall_unit_tests` 验收仍受 repo 现有 infra baseline 阻断。
+- 设计回链：
+  - [docs/architecture/DASALL_llm子系统详细设计.md](../architecture/DASALL_llm子系统详细设计.md) 已冻结 `LLMResponse` 的 `prompt_id/prompt_version/eval_status/release_scope` 四元审计锚点。
+  - [docs/architecture/DASALL_cognition子系统详细设计.md](../architecture/DASALL_cognition子系统详细设计.md) 已补充 `CognitionLlmBridge` 对 `prompt_retired` / `eval_blocked` 的 `PolicyDenied` 映射与验收出口。
+- 代码结果：
+  - `contracts/include/llm/LLMResponse.h`、`contracts/include/llm/LLMBoundaryGuards.h`、`llm/src/LLMManager.cpp` 与 `llm/src/execution/ResponseNormalizer.*` 已把 prompt release 审计元字段从 llm 归一化链路带回共享响应。
+  - `cognition/src/llm/CognitionLlmBridge.cpp` 成功路径现在会把 `Deprecated` / `retired` / `blocked` 语义映射为 `ResultCode::PolicyDenied`，并保留 `prompt_retired` / `eval_blocked` diagnostics。
+  - 已新增 `tests/unit/cognition/CognitionLlmBridgePromptReleaseGuardTest.cpp`，并扩展 `CognitionLlmBridgeErrorMappingTest.cpp` / `CognitionLlmBridgeProjectionTest.cpp`，防止 `policy_denied` 与 `llm_unavailable` 互相吞错。
+- 验证结果：
+  - `RunCtest_CMakeTools(tests=["CognitionLlmBridgePromptReleaseGuardTest","CognitionLlmBridgeErrorMappingTest"])`：通过，`100% tests passed, 0 tests failed out of 2`。
+  - `cmake --build build-ci --target dasall_cognition dasall_unit_tests`：`dasall_cognition` 与本轮 touched bridge/llm test slice 构建通过，但聚合 `dasall_unit_tests` 在 repo 现有 infra baseline 处失败；复核显示 `MetricsConfigMergeTest` 在活动 build tree 同样失败，另有 `build-ci` 下 `SecretManagerLiveCompositionTest` 缺失 executable 的既有构建树问题。
 
 #### WP-COG-GAP-002 可重放 Golden Trace（GAP-P0-B）
 

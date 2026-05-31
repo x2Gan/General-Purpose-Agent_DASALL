@@ -10,6 +10,7 @@ namespace {
 
 using dasall::contracts::LLMResponse;
 using dasall::contracts::LLMResponseKind;
+using dasall::contracts::PromptEvalStatus;
 using dasall::llm::AdapterCallResult;
 using dasall::llm::execution::ResponseNormalizer;
 using dasall::llm::execution::ResponseNormalizerContext;
@@ -24,6 +25,8 @@ ResponseNormalizerContext make_context() {
       .model_name = "deepseek-chat",
       .prompt_id = "prompt.planner.default",
       .prompt_version = "2026-04-13.1",
+      .prompt_eval_status = PromptEvalStatus::Stable,
+      .prompt_release_scope = "desktop_full",
       .request_id = "req-normalizer-001",
       .llm_call_id = "call-normalizer-001",
       .completed_at_ms = 1710001001000,
@@ -66,6 +69,11 @@ void test_direct_response_mapping_preserves_content_and_enriches_metadata() {
                "ResponseNormalizer should enrich missing prompt_id from the manager context");
   assert_equal(std::string("2026-04-13.1"), *result.response->prompt_version,
                "ResponseNormalizer should enrich missing prompt_version from the manager context");
+  assert_true(result.response->eval_status.has_value() &&
+                  *result.response->eval_status == PromptEvalStatus::Stable,
+              "ResponseNormalizer should enrich missing eval_status from the manager context");
+  assert_equal(std::string("desktop_full"), *result.response->release_scope,
+               "ResponseNormalizer should enrich missing release_scope from the manager context");
   assert_equal(std::string("deepseek-chat"), *result.response->model_name,
                "ResponseNormalizer should enrich missing model_name from the resolved route context");
 }

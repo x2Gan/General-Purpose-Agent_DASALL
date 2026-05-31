@@ -18,6 +18,7 @@ using dasall::contracts::LLMRequestMode;
 using dasall::contracts::LLMResponse;
 using dasall::contracts::LLMResponseBoundaryDecision;
 using dasall::contracts::LLMResponseKind;
+using dasall::contracts::PromptEvalStatus;
 using dasall::contracts::RuntimeBudget;
 using dasall::contracts::evaluate_llm_request_field_boundary;
 using dasall::contracts::evaluate_llm_response_field_boundary;
@@ -79,6 +80,8 @@ LLMResponse make_full_response() {
   response.model_name = "gpt-5.4";
   response.prompt_id = "prompt.plan.default";
   response.prompt_version = "2026-03-20.1";
+  response.eval_status = PromptEvalStatus::Stable;
+  response.release_scope = "desktop_full";
   response.finish_reason = "stop";
   response.input_tokens = 120;
   response.output_tokens = 48;
@@ -141,6 +144,37 @@ void test_prompt_audit_fields_must_be_paired_in_request() {
       "prompt_id and prompt_version must either both be present or both be absent",
       std::string(result.reason),
       "unpaired prompt audit anchors should report the canonical reason");
+}
+
+// Verifies response prompt audit metadata remains a single consistent bundle.
+void test_prompt_audit_fields_must_be_paired_in_response() {
+  auto response = make_valid_response();
+  response.prompt_id = "prompt.plan.default";
+  response.prompt_version = "2026-03-20.1";
+  const LLMGuardResult result = validate_llm_response_field_rules(response);
+
+  assert_true(!result.ok,
+              "prompt audit metadata without eval/release details must be rejected");
+  assert_equal(
+      "prompt_id, prompt_version, eval_status, and release_scope must either all be present or all be absent",
+      std::string(result.reason),
+      "partial prompt audit metadata should report the canonical reason");
+}
+
+// Verifies eval_status does not accept the sentinel value on responses.
+void test_response_eval_status_must_be_concrete_when_present() {
+  auto response = make_valid_response();
+  response.prompt_id = "prompt.plan.default";
+  response.prompt_version = "2026-03-20.1";
+  response.eval_status = PromptEvalStatus::Unspecified;
+  response.release_scope = "desktop_full";
+  const LLMGuardResult result = validate_llm_response_field_rules(response);
+
+  assert_true(!result.ok,
+              "Unspecified eval_status must be rejected when prompt audit metadata is present");
+  assert_equal("eval_status must be a concrete PromptEvalStatus when present",
+               std::string(result.reason),
+               "sentinel eval_status should report the canonical reason");
 }
 
 // Verifies request tags remain non-duplicated audit labels.
@@ -300,6 +334,8 @@ int main() {
     test_valid_full_response_passes_field_rules();
     test_missing_model_route_is_rejected();
     test_prompt_audit_fields_must_be_paired_in_request();
+    test_prompt_audit_fields_must_be_paired_in_response();
+    test_response_eval_status_must_be_concrete_when_present();
     test_duplicate_request_tags_are_rejected();
     test_out_of_range_request_mode_is_rejected();
     test_request_provider_private_field_is_rejected();

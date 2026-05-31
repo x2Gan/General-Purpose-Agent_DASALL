@@ -129,12 +129,42 @@ void test_invoke_stage_prefers_streaming_and_projects_stream_failure() {
               "streaming bridge diagnostics should project the contract error type for failing llm calls");
 }
 
+void test_invoke_stage_preserves_policy_denied_failures_distinct_from_unavailable() {
+  auto llm_manager = std::make_shared<MockLLMManager>();
+  auto policy_denied_result = MockLLMManager::make_failure_result(
+      dasall::contracts::ResultCode::PolicyDenied,
+      "prompt governance denied selected release",
+      dasall::llm::LLMFailureCategory::PromptGovernance,
+      "llm.exec.primary",
+      std::string{"req-020-error"});
+  policy_denied_result.governance_disposition =
+      dasall::llm::prompt::PromptPolicyDisposition::Deny;
+  llm_manager->set_generate_result(std::move(policy_denied_result));
+
+  CognitionLlmBridge bridge(llm_manager);
+  const auto result = bridge.invoke_stage(make_call_request());
+
+  assert_true(!result.response.has_value(),
+              "policy denied llm failures must not materialize a normalized response payload");
+  assert_true(result.result_code.has_value() &&
+                  *result.result_code == dasall::contracts::ResultCode::PolicyDenied,
+              "prompt governance failures should remain PolicyDenied rather than collapsing into unavailable");
+  assert_true(result.error_info.has_value() && result.error_info->failure_type.has_value() &&
+                  *result.error_info->failure_type == dasall::contracts::ResultCodeCategory::Policy,
+              "policy denied llm failures should preserve the policy error category");
+  assert_true(contains_token(result.diagnostics, "llm_failure:prompt_governance"),
+              "bridge diagnostics should preserve prompt governance failure categories");
+  assert_true(contains_token(result.diagnostics, "error_type:policy"),
+              "bridge diagnostics should surface policy failures distinctly from provider unavailability");
+}
+
 }  // namespace
 
 int main() {
   try {
     test_invoke_stage_projects_llm_failure_to_cognition_error_surface();
     test_invoke_stage_prefers_streaming_and_projects_stream_failure();
+    test_invoke_stage_preserves_policy_denied_failures_distinct_from_unavailable();
   } catch (const std::exception& ex) {
     std::cerr << ex.what() << '\n';
     return 1;

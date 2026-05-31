@@ -46,6 +46,8 @@ class MockLLMManager : public dasall::llm::ILLMManager {
     response.model_name = std::string{"mock.model"};
     response.prompt_id = std::string{"mock.prompt"};
     response.prompt_version = std::string{"v1"};
+    response.eval_status = dasall::contracts::PromptEvalStatus::Stable;
+    response.release_scope = std::string{"stable"};
     response.finish_reason = std::string{"stop"};
     response.input_tokens = 16U;
     response.output_tokens = 8U;

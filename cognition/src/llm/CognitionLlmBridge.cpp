@@ -1,6 +1,7 @@
 #include "llm/CognitionLlmBridge.h"
 
 #include <algorithm>
+#include <cctype>
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
@@ -183,6 +184,66 @@ bool replace_plain_assignment(std::string& text,
   }
 
   return payload;
+}
+
+[[nodiscard]] std::string to_lower_copy(std::string value) {
+  std::transform(value.begin(),
+                 value.end(),
+                 value.begin(),
+                 [](const unsigned char character) {
+                   return static_cast<char>(std::tolower(character));
+                 });
+  return value;
+}
+
+[[nodiscard]] bool release_scope_matches(const std::optional<std::string>& release_scope,
+                                         const std::string_view expected) {
+  return release_scope.has_value() && to_lower_copy(*release_scope) == expected;
+}
+
+[[nodiscard]] std::string prompt_eval_status_name(const contracts::PromptEvalStatus status) {
+  switch (status) {
+    case contracts::PromptEvalStatus::Draft:
+      return "draft";
+    case contracts::PromptEvalStatus::Experiment:
+      return "experiment";
+    case contracts::PromptEvalStatus::Canary:
+      return "canary";
+    case contracts::PromptEvalStatus::Stable:
+      return "stable";
+    case contracts::PromptEvalStatus::Deprecated:
+      return "deprecated";
+    case contracts::PromptEvalStatus::Unspecified:
+      return "unspecified";
+  }
+
+  return "unspecified";
+}
+
+[[nodiscard]] std::optional<std::string> prompt_release_diagnostic(
+    const contracts::LLMResponse& response) {
+  if ((response.eval_status.has_value() &&
+       *response.eval_status == contracts::PromptEvalStatus::Deprecated) ||
+      release_scope_matches(response.release_scope, "retired") ||
+      release_scope_matches(response.release_scope, "prompt_retired")) {
+    return std::string{"prompt_retired"};
+  }
+
+  if (release_scope_matches(response.release_scope, "blocked") ||
+      release_scope_matches(response.release_scope, "eval_blocked")) {
+    return std::string{"eval_blocked"};
+  }
+
+  return std::nullopt;
+}
+
+[[nodiscard]] std::string prompt_release_error_message(
+    const std::string_view diagnostic) {
+  if (diagnostic == "prompt_retired") {
+    return "llm response metadata indicates the selected prompt release is retired";
+  }
+
+  return "llm response metadata indicates the selected prompt evaluation is blocked";
 }
 
 [[nodiscard]] contracts::ResultCode fallback_result_code(
@@ -439,6 +500,26 @@ StageLlmCallResult CognitionLlmBridge::normalize_llm_response(
   if (response.content_payload.has_value()) {
     response.content_payload = sanitize_payload(*response.content_payload, result.warnings);
   }
+
+  if (const auto release_diagnostic = prompt_release_diagnostic(response);
+      release_diagnostic.has_value()) {
+    result.result_code = contracts::ResultCode::PolicyDenied;
+    result.error_info = make_error_info(contracts::ResultCode::PolicyDenied,
+                                        resolve_stage_name(request),
+                                        prompt_release_error_message(*release_diagnostic));
+    result.diagnostics.push_back("llm_failure:prompt_governance");
+    result.diagnostics.push_back(*release_diagnostic);
+    if (response.eval_status.has_value()) {
+      result.diagnostics.push_back("prompt_eval_status:" +
+                                   prompt_eval_status_name(*response.eval_status));
+    }
+    if (response.release_scope.has_value() && !response.release_scope->empty()) {
+      result.diagnostics.push_back("prompt_release_scope:" + *response.release_scope);
+    }
+    append_error_type_diagnostic(result, result.error_info);
+    return result;
+  }
+
   result.response = std::move(response);
   return result;
 }

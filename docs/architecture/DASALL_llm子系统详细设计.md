@@ -400,7 +400,7 @@ flowchart LR
 | 对象 | 来源 | 在 llm 中的角色 | 不允许承担 |
 |---|---|---|---|
 | LLMRequest | contracts/include/llm/LLMRequest.h | provider-neutral 调用对象；下发 adapter 的统一 handoff | provider raw payload、ContextPacket ownership、重试状态 |
-| LLMResponse | contracts/include/llm/LLMResponse.h | provider-neutral 语义结果；回传 runtime/cognition | ErrorInfo ownership、执行控制字段 |
+| LLMResponse | contracts/include/llm/LLMResponse.h | provider-neutral 语义结果；回传 runtime/cognition，并保留 `prompt_id/prompt_version/eval_status/release_scope` 四元审计锚点 | ErrorInfo ownership、执行控制字段 |
 | PromptSpec | contracts/include/prompt/PromptSpec.h | PromptRegistry 选择面 | 发布状态、运行态请求控制 |
 | PromptRelease | contracts/include/prompt/PromptRelease.h | Prompt 正式发布实例 | Context ownership、messages、write-back |
 | PromptComposeRequest | contracts/include/prompt/PromptComposeRequest.h | PromptComposer 装配输入 | 第二份上下文 ownership |

@@ -1,3 +1,40 @@
+## 记录 #856
+
+- 日期：2026-05-31
+- 阶段：cognition / prompt governance gap closure
+- 任务：完成 WP-COG-GAP-001 Prompt release 状态回流
+- 状态：已完成（任务切片实现与 focused regression 已闭合；聚合 `dasall_unit_tests` 验收仍受 repo 现有 infra baseline 阻断）
+
+### 执行前提
+
+1. [docs/deliverables/COG-EVAL-2026-05-31-cognition子系统落地评估与生产级缺口治理任务规划.md](../deliverables/COG-EVAL-2026-05-31-cognition子系统落地评估与生产级缺口治理任务规划.md) 将 `WP-COG-GAP-001` 定义为 GA 前 P0 缺口：cognition 必须把 prompt retired / eval blocked 与 provider unavailable 分流，而不是统一塌缩为 `llm_unavailable`。
+2. [docs/architecture/DASALL_cognition子系统详细设计.md](../architecture/DASALL_cognition子系统详细设计.md) 与 [docs/architecture/DASALL_llm子系统详细设计.md](../architecture/DASALL_llm子系统详细设计.md) 的 owner 边界要求 prompt 选择/治理权继续留在 llm；cognition 只能消费归一化 `LLMResponse` 审计元字段，不能回退成自行持有 PromptRegistry / PromptComposer。
+3. 外部 prompt eval / CI 实践同样把 prompt governance/eval 结果与 provider transport 失败分层处理；本轮只把这种分层落实到 DASALL 的 llm->cognition 共享响应与 bridge 归一化语义，不引入新的 prompt owner。
+
+### 改动
+
+1. 更新 [contracts/include/llm/LLMResponse.h](../contracts/include/llm/LLMResponse.h) 与 [contracts/include/llm/LLMBoundaryGuards.h](../contracts/include/llm/LLMBoundaryGuards.h)，为共享 `LLMResponse` 增加 `eval_status` / `release_scope`，并把 `prompt_id/prompt_version/eval_status/release_scope` 固定为 all-or-none 审计四元组。
+2. 更新 [llm/src/execution/ResponseNormalizer.h](../llm/src/execution/ResponseNormalizer.h)、[llm/src/execution/ResponseNormalizer.cpp](../llm/src/execution/ResponseNormalizer.cpp) 与 [llm/src/LLMManager.cpp](../llm/src/LLMManager.cpp)，把 selected release 的 eval/release metadata 从 prompt pipeline 贯通到归一化共享响应。
+3. 更新 [tests/contract/llm/LLMRequestResponseContractTest.cpp](../tests/contract/llm/LLMRequestResponseContractTest.cpp)、[tests/unit/llm/ResponseNormalizerSemanticMappingTest.cpp](../tests/unit/llm/ResponseNormalizerSemanticMappingTest.cpp)、[tests/unit/llm/ResponseNormalizerReasoningContentStripTest.cpp](../tests/unit/llm/ResponseNormalizerReasoningContentStripTest.cpp)、[tests/unit/llm/ResponseNormalizerUsageTest.cpp](../tests/unit/llm/ResponseNormalizerUsageTest.cpp) 与 [tests/mocks/include/MockLLMManager.h](../tests/mocks/include/MockLLMManager.h)，让 contracts / llm / mock 口径统一消费新审计字段。
+4. 更新 [cognition/src/llm/CognitionLlmBridge.cpp](../cognition/src/llm/CognitionLlmBridge.cpp)，在成功路径识别 `Deprecated`、`retired`、`prompt_retired`、`blocked`、`eval_blocked` 等治理语义，并稳定映射到 `ResultCode::PolicyDenied` 与 `llm_failure:prompt_governance` diagnostics，而不是继续归类为 `llm_unavailable`。
+5. 新增 [tests/unit/cognition/CognitionLlmBridgePromptReleaseGuardTest.cpp](../tests/unit/cognition/CognitionLlmBridgePromptReleaseGuardTest.cpp)，并更新 [tests/unit/cognition/CognitionLlmBridgeErrorMappingTest.cpp](../tests/unit/cognition/CognitionLlmBridgeErrorMappingTest.cpp)、[tests/unit/cognition/CognitionLlmBridgeProjectionTest.cpp](../tests/unit/cognition/CognitionLlmBridgeProjectionTest.cpp) 与 [tests/unit/cognition/CMakeLists.txt](../tests/unit/cognition/CMakeLists.txt)，补齐 retired / eval blocked 分流、policy_denied vs unavailable 区分和新 target 接线。
+6. 更新 [docs/architecture/DASALL_llm子系统详细设计.md](../architecture/DASALL_llm子系统详细设计.md)、[docs/architecture/DASALL_cognition子系统详细设计.md](../architecture/DASALL_cognition子系统详细设计.md) 与 [docs/deliverables/COG-EVAL-2026-05-31-cognition子系统落地评估与生产级缺口治理任务规划.md](../deliverables/COG-EVAL-2026-05-31-cognition子系统落地评估与生产级缺口治理任务规划.md)，把新的共享响应审计口径、bridge policy deny 映射和 closeout 证据回写到设计/任务文档。
+
+### 验证
+
+1. `gmake -C build-ci/tests/unit/cognition dasall_cognition_llm_bridge_prompt_release_guard_unit_test && ./build-ci/tests/unit/cognition/dasall_cognition_llm_bridge_projection_unit_test && ./build-ci/tests/unit/cognition/dasall_cognition_llm_bridge_prompt_release_guard_unit_test && ./build-ci/tests/unit/cognition/dasall_cognition_llm_bridge_error_mapping_unit_test`
+   - 结果：通过；bridge projection / prompt release guard / error mapping 三条 focused binary 零输出通过。
+2. `RunCtest_CMakeTools(tests=["CognitionLlmBridgePromptReleaseGuardTest","CognitionLlmBridgeErrorMappingTest"])`
+   - 结果：通过；`100% tests passed, 0 tests failed out of 2`。
+3. `cmake --build build-ci --target dasall_cognition dasall_unit_tests`
+   - 结果：与本轮改动直接相关的 `dasall_cognition` / bridge-llm 切片构建通过，但聚合 `dasall_unit_tests` 在 repo 现有 infra baseline 处失败：`MetricsConfigMergeTest` 断言失败；同轮 `build-ci` 还报告 `SecretManagerLiveCompositionTest` 缺失 executable。随后用 `RunCtest_CMakeTools(tests=["MetricsConfigMergeTest","SecretManagerLiveCompositionTest"])` 复核，`MetricsConfigMergeTest` 在活动 build tree 同样失败，而 `SecretManagerLiveCompositionTest` 可执行，说明聚合红灯不由本轮 cognition/llm 改动引入。
+
+### 结果
+
+1. cognition 现在可以稳定把 prompt retired / eval blocked 从 llm success-path metadata 回流为 `PolicyDenied`，不再把治理拒绝塌缩成 provider unavailable。
+2. llm->cognition 共享响应已经具备 `prompt_id/prompt_version/eval_status/release_scope` 四元审计锚点，后续 policy-aware degrade / audit 诊断不再依赖 prompt owner 内部状态泄漏。
+3. `WP-COG-GAP-001` 的代码与 focused regression 已闭合；若后续需要把该任务升级为 repo-wide aggregate green gate，需先独立修复 infra 侧 `MetricsConfigMergeTest` baseline 和 `build-ci` 的 `SecretManagerLiveCompositionTest` discoverability 问题。
+
 ## 记录 #855
 
 - 日期：2026-05-29

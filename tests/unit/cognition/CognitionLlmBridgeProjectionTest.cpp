@@ -17,6 +17,7 @@ using dasall::cognition::llm_bridge::CognitionLlmBridge;
 using dasall::cognition::llm_bridge::StageLlmCallRequest;
 using dasall::cognition::llm_bridge::StageSchemaKind;
 using dasall::cognition::llm_bridge::StageSchemaSpec;
+using dasall::contracts::PromptEvalStatus;
 using dasall::tests::mocks::MockLLMManager;
 using dasall::tests::support::assert_equal;
 using dasall::tests::support::assert_true;
@@ -95,6 +96,11 @@ void test_invoke_stage_projects_stage_hint_and_redacts_provider_private_fields()
   assert_true(result.response->content_payload.has_value() &&
                   result.response->content_payload->find("[REDACTED]") != std::string::npos,
               "redacted payload should retain an explicit redaction marker");
+  assert_true(result.response->eval_status.has_value() &&
+                  *result.response->eval_status == PromptEvalStatus::Stable,
+              "bridge should preserve normalized prompt eval metadata on successful responses");
+  assert_equal(std::string("stable"), *result.response->release_scope,
+               "bridge should preserve normalized prompt release scope metadata on successful responses");
 
   assert_equal(1, llm_manager->generate_call_count(),
                "bridge should issue exactly one unary llm request");

@@ -11,6 +11,7 @@ namespace {
 
 using dasall::contracts::LLMResponse;
 using dasall::contracts::LLMResponseKind;
+using dasall::contracts::PromptEvalStatus;
 using dasall::contracts::ResultCode;
 using dasall::llm::AdapterCallResult;
 using dasall::llm::execution::ResponseNormalizer;
@@ -26,6 +27,8 @@ ResponseNormalizerContext make_context() {
       .model_name = "deepseek-reasoner",
       .prompt_id = "prompt.planner.reasoning",
       .prompt_version = "2026-04-13.1",
+      .prompt_eval_status = PromptEvalStatus::Stable,
+      .prompt_release_scope = "desktop_full",
       .request_id = "req-normalizer-002",
       .llm_call_id = "call-normalizer-002",
       .completed_at_ms = 1710001002000,

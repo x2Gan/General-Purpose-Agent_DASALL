@@ -14,6 +14,7 @@ namespace {
 
 using dasall::contracts::LLMResponse;
 using dasall::contracts::LLMResponseKind;
+using dasall::contracts::PromptEvalStatus;
 using dasall::llm::AdapterCallResult;
 using dasall::llm::AdapterUsageFragment;
 using dasall::llm::UsageAggregator;
@@ -31,6 +32,8 @@ ResponseNormalizerContext make_context() {
       .model_name = "deepseek-chat",
       .prompt_id = "prompt.planner.default",
       .prompt_version = "2026-04-13.1",
+      .prompt_eval_status = PromptEvalStatus::Stable,
+      .prompt_release_scope = "desktop_full",
       .request_id = "req-normalizer-003",
       .llm_call_id = "call-normalizer-003",
       .completed_at_ms = 1710001003000,

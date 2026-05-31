@@ -7,6 +7,7 @@
 
 #include "error/ErrorInfo.h"
 #include "error/ResultCode.h"
+#include "prompt/PromptRelease.h"
 
 #include "../adapters/AdapterCallResult.h"
 
@@ -19,6 +20,8 @@ struct ResponseNormalizerContext {
   std::string model_name;
   std::string prompt_id;
   std::string prompt_version;
+  std::optional<dasall::contracts::PromptEvalStatus> prompt_eval_status;
+  std::string prompt_release_scope;
   std::optional<std::string> request_id;
   std::optional<std::string> llm_call_id;
   std::int64_t completed_at_ms = 0;
