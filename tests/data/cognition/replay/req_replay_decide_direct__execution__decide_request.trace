@@ -1,0 +1,17 @@
+surface=decide.request
+caller_domain=runtime.agent_orchestrator
+request_id=req-replay-decide-direct
+trace_id=trace-replay-decide-direct
+profile_id=build-ci/replay
+goal_id=goal-cognition-fixture
+goal_description=stabilize cognition-facing runtime fixtures
+user_turn=inspect the current cognition request
+current_goal_summary=produce a valid cognition-facing request shape
+belief_confidence=0.820000
+latest_observation_present=true
+latest_observation_success=true
+latest_observation_payload={"status":"ok"}
+remaining_tokens=1792
+degraded_path_allowed=true
+low_latency_preferred=false
+risk_tolerance=0.000000

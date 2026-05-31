@@ -281,6 +281,12 @@ dasall_add_cognition_unit_test(
 	CognitionTelemetryFailureIsolationTest
 )
 
+dasall_add_cognition_unit_test(
+	dasall_cognition_replay_regression_unit_test
+	CognitionReplayRegressionTest.cpp
+	CognitionReplayRegressionTest
+)
+
 target_link_libraries(dasall_cognition_config_projection_unit_test
 	PRIVATE
 		dasall_profiles
@@ -411,6 +417,17 @@ target_include_directories(dasall_cognition_telemetry_failure_isolation_unit_tes
 		${CMAKE_SOURCE_DIR}/cognition/src
 )
 
+target_include_directories(dasall_cognition_replay_regression_unit_test
+	PRIVATE
+		${CMAKE_SOURCE_DIR}
+		${CMAKE_SOURCE_DIR}/cognition/src
+)
+
+target_compile_definitions(dasall_cognition_replay_regression_unit_test
+	PRIVATE
+		DASALL_COGNITION_REPLAY_DATA_DIR="${CMAKE_SOURCE_DIR}/tests/data/cognition/replay"
+)
+
 target_link_libraries(dasall_cognition_llm_bridge_projection_unit_test
 	PRIVATE
 		dasall_llm
@@ -457,6 +474,11 @@ target_link_libraries(dasall_cognition_facade_degraded_mode_unit_test
 )
 
 target_link_libraries(dasall_response_builder_template_fallback_unit_test
+	PRIVATE
+		dasall_llm
+)
+
+target_link_libraries(dasall_cognition_replay_regression_unit_test
 	PRIVATE
 		dasall_llm
 )

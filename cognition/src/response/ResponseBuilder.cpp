@@ -110,6 +110,203 @@ void emit_response_checkpoint(CognitionTelemetry& telemetry,
       telemetry.emit_detail_event("pipeline.checkpoint", context, std::move(fields)));
 }
 
+[[nodiscard]] std::string replay_bool_value(const bool value) {
+  return value ? "true" : "false";
+}
+
+[[nodiscard]] std::string escape_replay_value(std::string_view value) {
+  std::string escaped;
+  escaped.reserve(value.size());
+  for (const char ch : value) {
+    switch (ch) {
+      case '\\':
+        escaped += "\\\\";
+        break;
+      case '\n':
+        escaped += "\\n";
+        break;
+      case '\r':
+        escaped += "\\r";
+        break;
+      default:
+        escaped.push_back(ch);
+        break;
+    }
+  }
+  return escaped;
+}
+
+void append_replay_line(std::string& serialized,
+                        std::string_view key,
+                        std::string_view value) {
+  serialized += key;
+  serialized += '=';
+  serialized += escape_replay_value(value);
+  serialized += '\n';
+}
+
+template <typename Number>
+void append_replay_number_line(std::string& serialized,
+                               std::string_view key,
+                               Number value) {
+  append_replay_line(serialized, key, std::to_string(value));
+}
+
+void append_replay_optional_line(std::string& serialized,
+                                 std::string_view key,
+                                 const std::optional<std::string>& value) {
+  if (value.has_value()) {
+    append_replay_line(serialized, key, *value);
+  }
+}
+
+void append_replay_sorted_values(std::string& serialized,
+                                 std::string_view prefix,
+                                 const std::vector<std::string>& values) {
+  auto sorted_values = values;
+  std::sort(sorted_values.begin(), sorted_values.end());
+  append_replay_number_line(serialized,
+                            std::string(prefix) + "_count",
+                            sorted_values.size());
+  for (std::size_t index = 0; index < sorted_values.size(); ++index) {
+    append_replay_line(serialized,
+                       std::string(prefix) + "." + std::to_string(index),
+                       sorted_values[index]);
+  }
+}
+
+[[nodiscard]] std::string replay_action_decision_kind_name(
+    const decision::ActionDecisionKind kind) {
+  switch (kind) {
+    case decision::ActionDecisionKind::NoDecision:
+      return "NoDecision";
+    case decision::ActionDecisionKind::AskClarification:
+      return "AskClarification";
+    case decision::ActionDecisionKind::ExecuteAction:
+      return "ExecuteAction";
+    case decision::ActionDecisionKind::DirectResponse:
+      return "DirectResponse";
+    case decision::ActionDecisionKind::ConvergeSafe:
+      return "ConvergeSafe";
+  }
+
+  return "Unknown";
+}
+
+[[nodiscard]] std::string replay_agent_status_name(
+    const contracts::AgentResultStatus status) {
+  switch (status) {
+    case contracts::AgentResultStatus::Unspecified:
+      return "Unspecified";
+    case contracts::AgentResultStatus::Completed:
+      return "Completed";
+    case contracts::AgentResultStatus::Failed:
+      return "Failed";
+    case contracts::AgentResultStatus::PartiallyCompleted:
+      return "PartiallyCompleted";
+    case contracts::AgentResultStatus::Cancelled:
+      return "Cancelled";
+    case contracts::AgentResultStatus::Timeout:
+      return "Timeout";
+  }
+
+  return "Unknown";
+}
+
+[[nodiscard]] std::string serialize_build_request(const ResponseBuildRequest& request) {
+  std::string serialized;
+  append_replay_line(serialized, "surface", "build.request");
+  append_replay_line(serialized, "caller_domain", request.caller_domain);
+  append_replay_line(serialized, "request_id", request.request_id);
+  append_replay_line(serialized, "trace_id", request.trace_id);
+  append_replay_line(serialized, "profile_id", request.profile_id);
+  append_replay_optional_line(serialized, "goal_id", request.goal_contract.goal_id);
+  append_replay_optional_line(serialized,
+                              "goal_description",
+                              request.goal_contract.goal_description);
+  append_replay_optional_line(serialized, "user_turn", request.context_packet.user_turn);
+  append_replay_line(serialized,
+                     "latest_observation_present",
+                     replay_bool_value(request.latest_observation.has_value()));
+  if (request.latest_observation.has_value()) {
+    append_replay_optional_line(serialized,
+                                "latest_observation_payload",
+                                request.latest_observation->payload);
+  }
+  if (request.terminal_decision.has_value()) {
+    append_replay_line(serialized,
+                       "terminal_decision_kind",
+                       replay_action_decision_kind_name(
+                           request.terminal_decision->decision_kind));
+  }
+  append_replay_line(serialized,
+                     "prefer_template",
+                     replay_bool_value(request.build_hints.prefer_template));
+  append_replay_line(serialized,
+                     "prefer_observation_projection",
+                     replay_bool_value(
+                         request.build_hints.prefer_observation_projection));
+  append_replay_line(serialized,
+                     "allow_template_fallback",
+                     replay_bool_value(
+                         request.build_hints.allow_template_fallback));
+  append_replay_number_line(serialized,
+                            "required_section_count",
+                            request.build_hints.required_sections.size());
+  append_replay_number_line(serialized,
+                            "max_summary_chars",
+                            request.build_hints.max_summary_chars);
+  return serialized;
+}
+
+[[nodiscard]] std::string serialize_build_result(const ResponseBuildResult& result) {
+  std::string serialized;
+  append_replay_line(serialized, "surface", "build.result");
+  if (result.result_code.has_value()) {
+    append_replay_number_line(serialized,
+                              "result_code",
+                              static_cast<int>(*result.result_code));
+  }
+  append_replay_line(serialized,
+                     "fallback_used",
+                     replay_bool_value(result.fallback_used));
+  if (result.agent_result.has_value()) {
+    append_replay_line(serialized,
+                       "agent_status",
+                       replay_agent_status_name(
+                           result.agent_result->status.value_or(
+                               contracts::AgentResultStatus::Unspecified)));
+    if (result.agent_result->result_code.has_value()) {
+      append_replay_number_line(serialized,
+                                "agent_result_code",
+                                *result.agent_result->result_code);
+    }
+    append_replay_line(serialized,
+                       "task_completed",
+                       replay_bool_value(
+                           result.agent_result->task_completed.value_or(false)));
+    append_replay_line(serialized,
+                       "has_structured_payload",
+                       replay_bool_value(
+                           result.agent_result->structured_payload.has_value()));
+  }
+  append_replay_sorted_values(serialized, "diagnostic", result.diagnostics);
+  return serialized;
+}
+
+void emit_replay_trace(CognitionTelemetry& telemetry,
+                       const StageTelemetryContext& context,
+                       std::string event_name,
+                       std::string serialized_value) {
+  std::vector<TelemetryField> fields;
+  fields.push_back(TelemetryField{
+      .key = "serialized_value",
+      .value = std::move(serialized_value),
+  });
+  ignore_emit_result(
+      telemetry.emit_detail_event(std::move(event_name), context, std::move(fields)));
+}
+
 [[nodiscard]] std::string response_mode_name(const ResponseMode mode) {
   switch (mode) {
     case ResponseMode::LlmBridge:
@@ -862,6 +1059,9 @@ class ResponseBuilder final : public IResponseBuilder {
       return result;
     }
 
+    emit_replay_trace(
+      telemetry_, telemetry_context, "replay.trace.build.request", serialize_build_request(request));
+
     const auto response_plan = policy_snapshot_ != nullptr
                                    ? policy::StagePolicyResolver::resolve_response_plan(
                                          *policy_snapshot_, request)
@@ -930,6 +1130,8 @@ class ResponseBuilder final : public IResponseBuilder {
     }
 
     telemetry_context = make_response_stage_context(request, result.fallback_used, result.result_code);
+    emit_replay_trace(
+      telemetry_, telemetry_context, "replay.trace.build.result", serialize_build_result(result));
     const auto checkpoint_mode = resolved_response_mode(result, selected_mode);
     std::vector<TelemetryField> build_checkpoint_fields;
     build_checkpoint_fields.reserve(8U);

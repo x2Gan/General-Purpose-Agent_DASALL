@@ -319,6 +319,293 @@ void append_structured_projection_value(std::vector<std::string>& diagnostics,
 
 void ignore_emit_result(TelemetryEmitResult) {}
 
+[[nodiscard]] std::string replay_bool_value(const bool value) {
+  return value ? "true" : "false";
+}
+
+[[nodiscard]] std::string escape_replay_value(std::string_view value) {
+  std::string escaped;
+  escaped.reserve(value.size());
+  for (const char ch : value) {
+    switch (ch) {
+      case '\\':
+        escaped += "\\\\";
+        break;
+      case '\n':
+        escaped += "\\n";
+        break;
+      case '\r':
+        escaped += "\\r";
+        break;
+      default:
+        escaped.push_back(ch);
+        break;
+    }
+  }
+  return escaped;
+}
+
+void append_replay_line(std::string& serialized,
+                        std::string_view key,
+                        std::string_view value) {
+  serialized += key;
+  serialized += '=';
+  serialized += escape_replay_value(value);
+  serialized += '\n';
+}
+
+template <typename Number>
+void append_replay_number_line(std::string& serialized,
+                               std::string_view key,
+                               Number value) {
+  append_replay_line(serialized, key, std::to_string(value));
+}
+
+void append_replay_optional_line(std::string& serialized,
+                                 std::string_view key,
+                                 const std::optional<std::string>& value) {
+  if (value.has_value()) {
+    append_replay_line(serialized, key, *value);
+  }
+}
+
+void append_replay_sorted_values(std::string& serialized,
+                                 std::string_view prefix,
+                                 const std::vector<std::string>& values) {
+  auto sorted_values = values;
+  std::sort(sorted_values.begin(), sorted_values.end());
+  append_replay_number_line(serialized,
+                            std::string(prefix) + "_count",
+                            sorted_values.size());
+  for (std::size_t index = 0; index < sorted_values.size(); ++index) {
+    append_replay_line(serialized,
+                       std::string(prefix) + "." + std::to_string(index),
+                       sorted_values[index]);
+  }
+}
+
+[[nodiscard]] std::string replay_action_decision_kind_name(
+    const ActionDecisionKind kind) {
+  switch (kind) {
+    case ActionDecisionKind::NoDecision:
+      return "NoDecision";
+    case ActionDecisionKind::AskClarification:
+      return "AskClarification";
+    case ActionDecisionKind::ExecuteAction:
+      return "ExecuteAction";
+    case ActionDecisionKind::DirectResponse:
+      return "DirectResponse";
+    case ActionDecisionKind::ConvergeSafe:
+      return "ConvergeSafe";
+  }
+
+  return "Unknown";
+}
+
+[[nodiscard]] std::string replay_reflection_decision_kind_name(
+    const contracts::ReflectionDecisionKind kind) {
+  switch (kind) {
+    case contracts::ReflectionDecisionKind::Unspecified:
+      return "Unspecified";
+    case contracts::ReflectionDecisionKind::Continue:
+      return "Continue";
+    case contracts::ReflectionDecisionKind::RetryStep:
+      return "RetryStep";
+    case contracts::ReflectionDecisionKind::Replan:
+      return "Replan";
+    case contracts::ReflectionDecisionKind::AbortSafe:
+      return "AbortSafe";
+  }
+
+  return "Unknown";
+}
+
+[[nodiscard]] std::string serialize_decide_request(
+    const CognitionStepRequest& request) {
+  std::string serialized;
+  append_replay_line(serialized, "surface", "decide.request");
+  append_replay_line(serialized, "caller_domain", request.caller_domain);
+  append_replay_line(serialized, "request_id", request.request_id);
+  append_replay_line(serialized, "trace_id", request.trace_id);
+  append_replay_line(serialized, "profile_id", request.profile_id);
+  append_replay_optional_line(serialized, "goal_id", request.goal_contract.goal_id);
+  append_replay_optional_line(serialized,
+                              "goal_description",
+                              request.goal_contract.goal_description);
+  append_replay_optional_line(serialized, "user_turn", request.context_packet.user_turn);
+  append_replay_optional_line(serialized,
+                              "current_goal_summary",
+                              request.context_packet.current_goal_summary);
+  append_replay_number_line(serialized,
+                            "belief_confidence",
+                            request.belief_state.confidence.value_or(0.0F));
+  append_replay_line(serialized,
+                     "latest_observation_present",
+                     replay_bool_value(request.latest_observation.has_value()));
+  if (request.latest_observation.has_value()) {
+    append_replay_line(serialized,
+                       "latest_observation_success",
+               replay_bool_value(
+                 request.latest_observation->success.value_or(false)));
+    append_replay_optional_line(serialized,
+                                "latest_observation_payload",
+                                request.latest_observation->payload);
+  }
+  if (request.budget_context.has_value()) {
+    append_replay_number_line(serialized,
+                              "remaining_tokens",
+                              request.budget_context->remaining_tokens);
+  }
+  append_replay_line(serialized,
+                     "degraded_path_allowed",
+                     replay_bool_value(request.execution_hints.degraded_path_allowed));
+  append_replay_line(serialized,
+                     "low_latency_preferred",
+                     replay_bool_value(request.execution_hints.low_latency_preferred));
+  append_replay_number_line(serialized,
+                            "risk_tolerance",
+                            request.execution_hints.risk_tolerance);
+  return serialized;
+}
+
+[[nodiscard]] std::string serialize_decision_result(
+    const CognitionDecisionResult& result) {
+  std::string serialized;
+  append_replay_line(serialized, "surface", "decide.result");
+  if (result.result_code.has_value()) {
+    append_replay_number_line(serialized,
+                              "result_code",
+                              static_cast<int>(*result.result_code));
+  }
+  if (result.action_decision.has_value()) {
+    append_replay_line(serialized,
+                       "decision_kind",
+                       replay_action_decision_kind_name(
+                           result.action_decision->decision_kind));
+    append_replay_optional_line(serialized,
+                                "selected_node_id",
+                                result.action_decision->selected_node_id);
+    append_replay_line(serialized,
+                       "clarification_needed",
+                       replay_bool_value(result.action_decision->clarification_needed));
+    append_replay_number_line(serialized,
+                              "candidate_score_count",
+                              result.action_decision->candidate_scores.size());
+    append_replay_line(serialized,
+                       "has_tool_intent_hint",
+                       replay_bool_value(
+                           result.action_decision->tool_intent_hint.has_value()));
+    append_replay_line(serialized,
+                       "has_response_outline",
+                       replay_bool_value(
+                           result.action_decision->response_outline.has_value()));
+  }
+  append_replay_line(serialized,
+                     "context_sufficient",
+                     replay_bool_value(result.context_sufficiency.context_sufficient));
+  append_replay_number_line(serialized,
+                            "context_confidence",
+                            result.context_sufficiency.context_confidence);
+  append_replay_line(serialized,
+                     "recommend_context_reload",
+                     replay_bool_value(
+                         result.context_sufficiency.recommend_context_reload));
+  append_replay_sorted_values(serialized, "diagnostic", result.diagnostics);
+  return serialized;
+}
+
+[[nodiscard]] std::string serialize_reflection_request(
+    const ReflectionRequest& request) {
+  std::string serialized;
+  append_replay_line(serialized, "surface", "reflect.request");
+  append_replay_line(serialized, "caller_domain", request.caller_domain);
+  append_replay_line(serialized, "request_id", request.request_id);
+  append_replay_line(serialized, "trace_id", request.trace_id);
+  append_replay_line(serialized, "profile_id", request.profile_id);
+  append_replay_optional_line(serialized, "goal_id", request.goal_contract.goal_id);
+  append_replay_optional_line(serialized,
+                              "goal_description",
+                              request.goal_contract.goal_description);
+  append_replay_optional_line(serialized, "user_turn", request.context_packet.user_turn);
+  append_replay_line(serialized,
+                     "latest_observation_success",
+             replay_bool_value(
+               request.latest_observation.success.value_or(false)));
+  append_replay_optional_line(serialized,
+                              "latest_observation_payload",
+                              request.latest_observation.payload);
+  append_replay_optional_line(serialized, "active_plan_ref", request.active_plan_ref);
+  append_replay_line(serialized,
+                     "degraded_path_allowed",
+                     replay_bool_value(request.execution_hints.degraded_path_allowed));
+  append_replay_line(serialized,
+                     "low_latency_preferred",
+                     replay_bool_value(request.execution_hints.low_latency_preferred));
+  return serialized;
+}
+
+[[nodiscard]] std::string serialize_reflection_result(
+    const CognitionReflectionResult& result) {
+  std::string serialized;
+  append_replay_line(serialized, "surface", "reflect.result");
+  if (result.result_code.has_value()) {
+    append_replay_number_line(serialized,
+                              "result_code",
+                              static_cast<int>(*result.result_code));
+  }
+  if (result.reflection_decision.has_value()) {
+    append_replay_line(serialized,
+                       "decision_kind",
+                       replay_reflection_decision_kind_name(
+                           result.reflection_decision->decision_kind.value_or(
+                               contracts::ReflectionDecisionKind::Unspecified)));
+    append_replay_line(serialized,
+                       "has_rationale",
+                       replay_bool_value(
+                           result.reflection_decision->rationale.has_value()));
+    append_replay_number_line(
+        serialized,
+        "observation_ref_count",
+        result.reflection_decision->relevant_observation_refs.has_value()
+            ? result.reflection_decision->relevant_observation_refs->size()
+            : 0U);
+  }
+  append_replay_sorted_values(serialized, "diagnostic", result.diagnostics);
+  return serialized;
+}
+
+[[nodiscard]] std::string serialize_bridge_payload(
+    std::string_view surface,
+    std::string_view stage,
+    const StageLlmCallResult& bridge_result) {
+  std::string serialized;
+  append_replay_line(serialized, "surface", surface);
+  append_replay_line(serialized, "stage", stage);
+  append_replay_line(serialized, "resolved_route", bridge_result.resolved_route);
+  append_replay_sorted_values(serialized, "warning", bridge_result.warnings);
+  append_replay_sorted_values(serialized, "diagnostic", bridge_result.diagnostics);
+  if (bridge_result.response.has_value() &&
+      bridge_result.response->content_payload.has_value()) {
+    append_replay_line(serialized,
+                       "payload",
+                       *bridge_result.response->content_payload);
+  }
+  return serialized;
+}
+
+void emit_replay_trace(const observability::CognitionTelemetry& telemetry,
+                       std::string event_name,
+                       const StageTelemetryContext& context,
+                       std::string serialized_value) {
+  std::vector<TelemetryField> fields;
+  fields.push_back(TelemetryField{
+      .key = "serialized_value",
+      .value = std::move(serialized_value),
+  });
+  ignore_emit_result(
+      telemetry.emit_detail_event(std::move(event_name), context, std::move(fields)));
+}
+
 [[nodiscard]] bool has_diagnostic(const std::vector<std::string>& diagnostics,
                                   const std::string_view diagnostic) {
   return std::find(diagnostics.begin(), diagnostics.end(), diagnostic) != diagnostics.end();
@@ -831,6 +1118,11 @@ class CognitionFacade final : public ICognitionEngine {
       return result;
     }
 
+    emit_replay_trace(telemetry_,
+                      "replay.trace.decide.request",
+                      telemetry_context,
+                      serialize_decide_request(request));
+
     auto result = run_decision_pipeline(request);
     const auto fallback_used = std::find(result.diagnostics.begin(), result.diagnostics.end(),
                                          "decision_pipeline.degraded") !=
@@ -841,6 +1133,11 @@ class CognitionFacade final : public ICognitionEngine {
                          result.result_code,
                          summarize_structured_projection_telemetry(
                            result.diagnostics));
+
+    emit_replay_trace(telemetry_,
+                      "replay.trace.decide.result",
+                      telemetry_context,
+                      serialize_decision_result(result));
 
     if (result.error_info.has_value()) {
       ignore_emit_result(telemetry_.emit_stage_failed(telemetry_context, *result.error_info));
@@ -875,8 +1172,18 @@ class CognitionFacade final : public ICognitionEngine {
       return result;
     }
 
+    emit_replay_trace(telemetry_,
+                      "replay.trace.reflect.request",
+                      telemetry_context,
+                      serialize_reflection_request(request));
+
     auto result = run_reflection_pipeline(request);
     telemetry_context = make_stage_context(request, "reflection", false, result.result_code);
+
+    emit_replay_trace(telemetry_,
+                      "replay.trace.reflect.result",
+                      telemetry_context,
+                      serialize_reflection_result(result));
 
     if (result.error_info.has_value()) {
       ignore_emit_result(telemetry_.emit_stage_failed(telemetry_context, *result.error_info));
@@ -1864,6 +2171,11 @@ class CognitionFacade final : public ICognitionEngine {
 
     append_bridge_diagnostics(result.diagnostics, *bridge_result.value, stage);
     if (!bridge_result.value->error_info.has_value()) {
+      emit_replay_trace(telemetry_,
+                        "replay.trace.decide.bridge_payload",
+                        make_stage_context(request, stage, false),
+                        serialize_bridge_payload(
+                            "decide.bridge_payload", stage, *bridge_result.value));
       return std::move(*bridge_result.value);
     }
 
@@ -1991,6 +2303,12 @@ class CognitionFacade final : public ICognitionEngine {
 
     append_bridge_diagnostics(result.diagnostics, *bridge_result.value, "reflection");
     if (!bridge_result.value->error_info.has_value()) {
+      emit_replay_trace(telemetry_,
+                        "replay.trace.reflect.bridge_payload",
+                        make_stage_context(request, "reflection", false),
+                        serialize_bridge_payload("reflect.bridge_payload",
+                                                 "reflection",
+                                                 *bridge_result.value));
       return;
     }
 

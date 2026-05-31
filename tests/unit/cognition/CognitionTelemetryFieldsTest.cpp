@@ -16,6 +16,7 @@ using dasall::cognition::decision::ActionDecision;
 using dasall::cognition::decision::ActionDecisionKind;
 using dasall::cognition::decision::CandidateDecisionScore;
 using dasall::cognition::observability::CognitionTelemetry;
+using dasall::cognition::observability::make_live_telemetry_sink;
 using dasall::cognition::observability::StageTelemetryContext;
 using dasall::cognition::observability::StructuredProjectionTelemetry;
 using dasall::cognition::observability::TelemetryField;
@@ -212,6 +213,36 @@ void test_emit_detail_event_propagates_pipeline_checkpoint_fields() {
               "detail event should carry elapsed time");
 }
 
+  void test_runtime_dependencies_can_inject_custom_telemetry_sink() {
+    auto sink = std::make_shared<MockCognitionTelemetrySink>();
+    CognitionTelemetry telemetry(
+      dasall::cognition::CognitionConfig{},
+      make_live_telemetry_sink(dasall::cognition::CognitionRuntimeDependencies{
+        .telemetry_sink = sink,
+      }));
+
+    const auto result = telemetry.emit_detail_event(
+      "replay.trace",
+      make_context(),
+      {
+        TelemetryField{.key = "pipeline", .value = "decision"},
+          TelemetryField{
+            .key = "serialized_value",
+            .value = "raw_prompt=token=topsecret"},
+      });
+
+    assert_true(result.emitted,
+          "dependency-injected telemetry sink should receive detail events");
+    assert_equal(1, static_cast<int>(sink->log_events.size()),
+           "custom dependency sink should capture replay detail events");
+    assert_true(has_field(sink->log_events.back().fields, "pipeline", "decision"),
+          "dependency sink should preserve custom fields");
+    assert_true(has_field(sink->log_events.back().fields,
+                          "serialized_value",
+                          "raw_prompt=[REDACTED]"),
+          "dependency sink should still observe redacted payloads");
+  }
+
 void test_emit_response_degraded_propagates_route_failure_and_metric_fields() {
   auto sink = std::make_shared<MockCognitionTelemetrySink>();
   CognitionTelemetry telemetry(dasall::cognition::CognitionConfig{}, sink);
@@ -269,6 +300,7 @@ int main() {
     test_emit_stage_started_and_completed_propagates_required_fields();
     test_emit_stage_failed_propagates_structured_projection_failure_fields();
     test_emit_detail_event_propagates_pipeline_checkpoint_fields();
+    test_runtime_dependencies_can_inject_custom_telemetry_sink();
     test_emit_response_degraded_propagates_route_failure_and_metric_fields();
   } catch (const std::exception& ex) {
     std::cerr << ex.what() << '\n';

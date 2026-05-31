@@ -1,3 +1,43 @@
+## 记录 #857
+
+- 日期：2026-05-31
+- 阶段：cognition / replay golden trace closure
+- 任务：完成 WP-COG-GAP-002 可重放 Golden Trace
+- 状态：已完成（focused replay regression 已闭合；聚合 `dasall_unit_tests` 验收仍受 repo 既有 baseline 阻断）
+
+### 执行前提
+
+1. [docs/deliverables/COG-EVAL-2026-05-31-cognition子系统落地评估与生产级缺口治理任务规划.md](../deliverables/COG-EVAL-2026-05-31-cognition子系统落地评估与生产级缺口治理任务规划.md) 将 `WP-COG-GAP-002` 定义为 GA 前 P0 缺口：必须把 `CognitionStepRequest`、桥后投影 payload 与 `CognitionDecisionResult` 固化为可重放 golden 数据集，并通过 `CognitionReplayRegressionTest` 收口回归。
+2. [docs/architecture/DASALL_cognition子系统详细设计.md](../architecture/DASALL_cognition子系统详细设计.md) 的观测分层约束要求 cognition 只能输出语义级字段，不能把 raw prompt、provider-private payload 或 runtime 恢复审计事实混入 replay 产物；因此 recorder 必须复用既有 telemetry redaction，而不是新增旁路序列化通道。
+3. 本轮只在 cognition owner 边界内补 replay recorder、golden 数据集与 focused 回归，不外推 qemu/installed/package 证据，也不改变 ADR-006 / ADR-007 / ADR-008 的 owner 分工。
+
+### 改动
+
+1. 更新 [cognition/include/CognitionDependencies.h](../cognition/include/CognitionDependencies.h) 与 [cognition/src/observability/CognitionTelemetry.cpp](../cognition/src/observability/CognitionTelemetry.cpp)，为 `CognitionRuntimeDependencies` 增加可选 `telemetry_sink` seam，并把 live sink 与自定义 sink 组合为 redaction 后的 fail-open fan-out。
+2. 新增 [cognition/src/observability/CognitionReplayTraceRecorder.h](../cognition/src/observability/CognitionReplayTraceRecorder.h)，实现只在 `profile_id == build-ci/replay` 启用的 header-only recorder，统一复用 replay 文件命名、component sanitize 与 trace 落盘逻辑。
+3. 更新 [cognition/src/CognitionFacade.cpp](../cognition/src/CognitionFacade.cpp) 与 [cognition/src/response/ResponseBuilder.cpp](../cognition/src/response/ResponseBuilder.cpp)，为 decide / reflect / build 三条入口补 `replay.trace.*` request/result 事件，并在 planning/execution bridge 投影成功时落 `bridge_payload` trace。
+4. 更新 [tests/unit/cognition/CognitionTelemetryFieldsTest.cpp](../tests/unit/cognition/CognitionTelemetryFieldsTest.cpp)、新增 [tests/unit/cognition/CognitionReplayRegressionTest.cpp](../tests/unit/cognition/CognitionReplayRegressionTest.cpp) 并更新 [tests/unit/cognition/CMakeLists.txt](../tests/unit/cognition/CMakeLists.txt)，固定 replay sink 注入 contract、测试注册与 `DASALL_COGNITION_REPLAY_DATA_DIR` 编译定义。
+5. 在 [tests/data/cognition/replay](../tests/data/cognition/replay) 固定 11 个 golden trace 文件，覆盖 decide direct、decide planning fallback、reflect continue、build observation projection 四类场景；并回写 [docs/architecture/DASALL_cognition子系统详细设计.md](../architecture/DASALL_cognition子系统详细设计.md) 与 [docs/deliverables/COG-EVAL-2026-05-31-cognition子系统落地评估与生产级缺口治理任务规划.md](../deliverables/COG-EVAL-2026-05-31-cognition子系统落地评估与生产级缺口治理任务规划.md) 的设计/closeout 证据。
+
+### 验证
+
+1. `Build_CMakeTools(buildTargets=["dasall_cognition_replay_regression_unit_test"])`
+   - 结果：通过。
+2. `RunCtest_CMakeTools(tests=["CognitionReplayRegressionTest"])`
+   - 结果：通过；`100% tests passed, 0 tests failed out of 1`。
+3. `ctest --test-dir build-ci -R "CognitionReplayRegressionTest|CognitionTelemetryFieldsTest" --output-on-failure`
+   - 结果：通过；`100% tests passed, 0 tests failed out of 2`。
+4. `cmake --build build-ci --target dasall_unit_tests`
+   - 结果：聚合命令仍受 repo 既有 baseline 阻断：runtime 侧 `RuntimeOwnerLoggingTest` / `RuntimeLoggingBridgeTest` 缺失 executable，`RuntimeCognitionLoopSmokeTest` 失败，memory 侧仍有 discoverability 缺口；本轮 touched cognition replay slice 已完成重编译，不是新增 blocker。
+5. VS Code diagnostics。
+   - 结果：`CognitionDependencies.h`、`CognitionTelemetry.cpp`、`CognitionReplayTraceRecorder.h`、`CognitionFacade.cpp`、`ResponseBuilder.cpp`、`CognitionTelemetryFieldsTest.cpp`、`CognitionReplayRegressionTest.cpp` 与 cognition unit CMake 均无错误。
+
+### 结果
+
+1. cognition 现在具备可重放 golden trace 回归：decide / reflect / build 的 request、bridge payload、result 序列都能在 build-ci/replay profile 下稳定落盘并与仓库 golden 数据集逐文件比对。
+2. replay recorder 复用既有 telemetry redaction 与 DI seam，不会把 raw prompt、provider-private payload 或 runtime 恢复事实绕过 owner 边界写入 trace。
+3. `WP-COG-GAP-002` 的代码与 focused regression 已闭合；若后续需要升格为 repo-wide aggregate green gate，需先独立修复 runtime / memory 的既有 baseline 与 discoverability 问题。
+
 ## 记录 #856
 
 - 日期：2026-05-31

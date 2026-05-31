@@ -1,0 +1,9 @@
+surface=decide.bridge_payload
+stage=execution
+resolved_route=mock.route.execution
+warning_count=0
+diagnostic_count=3
+diagnostic.0=route:mock.route.execution
+diagnostic.1=stage:execution
+diagnostic.2=task:action_decision
+payload={"schema_version":"cognition.reasoning.v1","decision_kind":"DirectResponse","confidence":0.79,"rationale":"bridge execution payload should become the authoritative decision","selected_node_id":null,"tool_intent_hint":null,"clarification_needed":false,"clarification_question":null,"response_outline":{"summary":"bridge-authored direct response summary","key_points":["respond from the bridge payload","skip local execute_action routing"]},"candidate_scores":[{"candidate_name":"direct_response","score":0.79,"rationale":"bridge payload selected direct response"},{"candidate_name":"execute_action","score":0.21,"rationale":"local execution should not win once projection succeeds"}]}

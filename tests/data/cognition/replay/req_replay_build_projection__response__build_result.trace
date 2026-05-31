@@ -1,0 +1,9 @@
+surface=build.result
+fallback_used=false
+agent_status=Completed
+agent_result_code=0
+task_completed=true
+has_structured_payload=true
+diagnostic_count=2
+diagnostic.0=llm_bridge.unavailable:response
+diagnostic.1=response_mode:observation_projection

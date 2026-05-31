@@ -1,0 +1,16 @@
+surface=build.request
+caller_domain=runtime.agent_orchestrator
+request_id=req-replay-build-projection
+trace_id=trace-replay-build-projection
+profile_id=build-ci/replay
+goal_id=goal-cognition-fixture
+goal_description=stabilize cognition-facing runtime fixtures
+user_turn=inspect the current cognition request
+latest_observation_present=true
+latest_observation_payload={"dataset":"agent.dataset","status":"ok"}
+terminal_decision_kind=DirectResponse
+prefer_template=false
+prefer_observation_projection=false
+allow_template_fallback=true
+required_section_count=1
+max_summary_chars=512

@@ -1,0 +1,7 @@
+surface=reflect.result
+decision_kind=Continue
+has_rationale=true
+observation_ref_count=1
+diagnostic_count=2
+diagnostic.0=llm_bridge.unavailable:reflection
+diagnostic.1=reflection_pipeline.completed

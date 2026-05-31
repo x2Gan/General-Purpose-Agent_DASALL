@@ -430,6 +430,48 @@ class InfraTelemetrySink final : public ICognitionTelemetrySink {
   std::map<std::string, infra::metrics::InstrumentHandle> counters_;
 };
 
+class CompositeTelemetrySink final : public ICognitionTelemetrySink {
+ public:
+  explicit CompositeTelemetrySink(
+      std::vector<std::shared_ptr<ICognitionTelemetrySink>> sinks)
+      : sinks_(std::move(sinks)) {}
+
+  void emit_log(const TelemetryEvent& event) override {
+    for (const auto& sink : sinks_) {
+      if (sink != nullptr) {
+        sink->emit_log(event);
+      }
+    }
+  }
+
+  void emit_metric(const TelemetryMetric& metric) override {
+    for (const auto& sink : sinks_) {
+      if (sink != nullptr) {
+        sink->emit_metric(metric);
+      }
+    }
+  }
+
+  void emit_trace(const TelemetryEvent& event) override {
+    for (const auto& sink : sinks_) {
+      if (sink != nullptr) {
+        sink->emit_trace(event);
+      }
+    }
+  }
+
+  void emit_audit(const TelemetryEvent& event) override {
+    for (const auto& sink : sinks_) {
+      if (sink != nullptr) {
+        sink->emit_audit(event);
+      }
+    }
+  }
+
+ private:
+  std::vector<std::shared_ptr<ICognitionTelemetrySink>> sinks_;
+};
+
 [[nodiscard]] std::string bool_to_string(const bool value) {
   return value ? "true" : "false";
 }
@@ -895,16 +937,30 @@ TelemetryEmitResult CognitionTelemetry::emit_event(TelemetryEvent event,
 
 std::shared_ptr<ICognitionTelemetrySink> make_live_telemetry_sink(
     const CognitionRuntimeDependencies& dependencies) {
-  if (dependencies.logger == nullptr && dependencies.audit_logger == nullptr &&
-      dependencies.metrics_provider == nullptr &&
-      dependencies.tracer_provider == nullptr) {
+  std::vector<std::shared_ptr<ICognitionTelemetrySink>> sinks;
+
+  if (dependencies.logger != nullptr || dependencies.audit_logger != nullptr ||
+      dependencies.metrics_provider != nullptr ||
+      dependencies.tracer_provider != nullptr) {
+    sinks.push_back(std::make_shared<InfraTelemetrySink>(dependencies.logger,
+                                                         dependencies.audit_logger,
+                                                         dependencies.metrics_provider,
+                                                         dependencies.tracer_provider));
+  }
+
+  if (dependencies.telemetry_sink != nullptr) {
+    sinks.push_back(dependencies.telemetry_sink);
+  }
+
+  if (sinks.empty()) {
     return nullptr;
   }
 
-  return std::make_shared<InfraTelemetrySink>(dependencies.logger,
-                                              dependencies.audit_logger,
-                                              dependencies.metrics_provider,
-                                              dependencies.tracer_provider);
+  if (sinks.size() == 1U) {
+    return sinks.front();
+  }
+
+  return std::make_shared<CompositeTelemetrySink>(std::move(sinks));
 }
 
 }  // namespace dasall::cognition::observability

@@ -38,15 +38,23 @@ class ITracerProvider;
 
 }  // namespace dasall::infra::tracing
 
+namespace dasall::cognition::observability {
+
+class ICognitionTelemetrySink;
+
+}  // namespace dasall::cognition::observability
+
 namespace dasall::cognition {
 
 struct CognitionRuntimeDependencies {
-  std::shared_ptr<dasall::llm::ILLMManager> llm_manager;
-  std::shared_ptr<const dasall::profiles::RuntimePolicySnapshot> policy_snapshot;
-  std::shared_ptr<dasall::infra::logging::ILogger> logger;
-  std::shared_ptr<dasall::infra::audit::IAuditLogger> audit_logger;
-  std::shared_ptr<dasall::infra::metrics::IMetricsProvider> metrics_provider;
-  std::shared_ptr<dasall::infra::tracing::ITracerProvider> tracer_provider;
+  std::shared_ptr<dasall::llm::ILLMManager> llm_manager = nullptr;
+  std::shared_ptr<const dasall::profiles::RuntimePolicySnapshot> policy_snapshot = nullptr;
+  std::shared_ptr<dasall::infra::logging::ILogger> logger = nullptr;
+  std::shared_ptr<dasall::infra::audit::IAuditLogger> audit_logger = nullptr;
+  std::shared_ptr<dasall::infra::metrics::IMetricsProvider> metrics_provider = nullptr;
+  std::shared_ptr<dasall::infra::tracing::ITracerProvider> tracer_provider = nullptr;
+  std::shared_ptr<dasall::cognition::observability::ICognitionTelemetrySink>
+      telemetry_sink = nullptr;
 };
 
 }  // namespace dasall::cognition

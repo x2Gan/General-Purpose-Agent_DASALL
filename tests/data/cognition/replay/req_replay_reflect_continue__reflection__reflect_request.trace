@@ -1,0 +1,13 @@
+surface=reflect.request
+caller_domain=runtime.agent_orchestrator
+request_id=req-replay-reflect-continue
+trace_id=trace-replay-reflect-continue
+profile_id=build-ci/replay
+goal_id=goal-cognition-fixture
+goal_description=stabilize cognition-facing runtime fixtures
+user_turn=inspect the current cognition request
+latest_observation_success=true
+latest_observation_payload={"status":"ok","summary":"verified evidence returned"}
+active_plan_ref=plan-node:fixture
+degraded_path_allowed=true
+low_latency_preferred=false

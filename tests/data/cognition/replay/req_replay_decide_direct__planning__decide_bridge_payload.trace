@@ -1,0 +1,9 @@
+surface=decide.bridge_payload
+stage=planning
+resolved_route=mock.route.planning
+warning_count=0
+diagnostic_count=3
+diagnostic.0=route:mock.route.planning
+diagnostic.1=stage:planning
+diagnostic.2=task:plan
+payload={"schema_version":"cognition.plan.v1","plan_id":"plan-structured-bridge","revision":1,"nodes":[{"node_id":"bridge-plan-node","objective":"collect governed evidence from the dataset tool","success_signal":"evidence_collected","action_kind_hint":"tool_action","depends_on":[],"evidence_refs":["belief:evidence:structured-plan"]}],"edges":[],"open_questions":[],"plan_rationale":"bridge payload should become the active plan graph","estimated_complexity":1}

@@ -207,6 +207,28 @@
   - `ctest --test-dir build-ci -R "CognitionReplayRegressionTest" --output-on-failure`
 - **阻塞 / 解阻**：需先固定 redaction 输出格式（已就绪）；与 GAP-P1-B 字段共享。
 
+**Closeout（2026-05-31）**
+
+- 状态：已完成（replay recorder、golden 数据集与 build-tree/build-ci focused regression 已闭合；聚合 `dasall_unit_tests` 验收仍受 repo 既有 runtime/memory baseline 阻断）。
+- 设计回链：
+  - [docs/architecture/DASALL_cognition子系统详细设计.md](../architecture/DASALL_cognition子系统详细设计.md) 已在 `CognitionTelemetry` 组件卡片补充 redaction-before-dispatch 与 owner 内部 sink seam 约束，明确 replay recorder 只能消费 request / bridge payload / result 的结构化语义字段。
+  - replay golden 继续遵守 cognition 与 llm 的观测分层：不复制 raw prompt、provider-private payload 或 runtime 恢复审计事实。
+- 代码结果：
+  - `cognition/include/CognitionDependencies.h` 与 `cognition/src/observability/CognitionTelemetry.cpp` 已支持可选 `ICognitionTelemetrySink` 注入，并把 live sink 与自定义 sink 组合为 redaction 后的 fan-out 路径。
+  - 新增 `cognition/src/observability/CognitionReplayTraceRecorder.h`，以 header-only recorder 形式在 `profile_id == build-ci/replay` 时落盘 replay trace。
+  - `cognition/src/CognitionFacade.cpp` 与 `cognition/src/response/ResponseBuilder.cpp` 已发射 `replay.trace.decide.*`、`replay.trace.reflect.*`、`replay.trace.build.*` 事件，并在 bridge 成功时补齐 planning / execution payload trace。
+  - 新增 `tests/unit/cognition/CognitionReplayRegressionTest.cpp`，更新 `tests/unit/cognition/CMakeLists.txt`，并在 `tests/data/cognition/replay/` 固定 11 个 golden trace 文件，覆盖 decide direct、decide planning fallback、reflect continue、build observation projection 四个场景。
+  - `tests/unit/cognition/CognitionTelemetryFieldsTest.cpp` 已补 replay sink 注入回归，防止 redaction 与 fan-out 顺序回退。
+- 验证结果：
+  - `Build_CMakeTools(buildTargets=["dasall_cognition_replay_regression_unit_test"])`：通过。
+  - `RunCtest_CMakeTools(tests=["CognitionReplayRegressionTest"])`：通过，`100% tests passed, 0 tests failed out of 1`。
+  - `ctest --test-dir build-ci -R "CognitionReplayRegressionTest|CognitionTelemetryFieldsTest" --output-on-failure`：通过，`100% tests passed, 0 tests failed out of 2`。
+  - `cmake --build build-ci --target dasall_unit_tests`：本轮 touched cognition slice 已完成重编译，但聚合命令仍命中 repo 既有 baseline：`RuntimeOwnerLoggingTest` / `RuntimeLoggingBridgeTest` 缺失 executable，`RuntimeCognitionLoopSmokeTest` 失败，且 memory 侧仍有 discoverability 缺口；这些红灯不由本轮 replay/golden 变更引入。
+- 结果：
+  - cognition 现在具备可重放 golden trace 回归，能够稳定锁定 decide / reflect / build 主链的 request、bridge payload、result 序列，不再依赖人工比对临时输出。
+  - replay recorder 复用既有 telemetry redaction 与 DI seam，没有在主链引入新的 owner 越界依赖或旁路落盘逻辑。
+  - `WP-COG-GAP-002` 的代码与 focused regression 已闭合；若后续需要把该任务升级为 repo-wide aggregate green gate，需先独立清理 runtime / memory 既有 baseline。
+
 #### WP-COG-GAP-003 生产 metric live 验证 + SLO 表（GAP-P0-C）
 
 - **代码目标**
