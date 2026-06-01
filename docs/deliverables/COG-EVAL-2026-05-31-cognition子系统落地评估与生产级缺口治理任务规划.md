@@ -240,6 +240,24 @@
   - `ctest --test-dir build-ci -R "CognitionProductionTelemetryIntegrationTest" --output-on-failure`
 - **阻塞 / 解阻**：依赖 infra metrics provider 已就位（已就绪）。
 
+**Closeout（2026-06-01）**
+
+- 状态：已完成（semantic metric live registration、focused telemetry integration regression 与 §6.11 SLO 文档已闭合）。
+- 设计回链：
+  - [docs/architecture/DASALL_cognition子系统详细设计.md](../architecture/DASALL_cognition子系统详细设计.md) §6.11 现已明确 `cognition_stage_latency_ms`、`cognition_stage_total`、`cognition_action_decision_total` 的 live metric 口径，并补齐 desktop_full / edge_balanced / edge_minimal 三档 stage_latency SLO。
+  - 为保持 infra metrics schema 单一事实源，任务文案里的 `result` 维度在 provider 内继续沿用 canonical `outcome` 标签名，不再分叉出第二套 label key。
+- 代码结果：
+  - 更新 [infra/include/metrics/MetricTypes.h](../../infra/include/metrics/MetricTypes.h)、[infra/src/metrics/CardinalityGuard.cpp](../../infra/src/metrics/CardinalityGuard.cpp) 与 [infra/src/metrics/MetricsConfigPolicy.cpp](../../infra/src/metrics/MetricsConfigPolicy.cpp)，把 `decision_kind` 纳入 metrics allowlist、归一化与 series signature，保证 semantic metric 标签不会被 provider 丢弃。
+  - 更新 [cognition/src/observability/CognitionTelemetry.h](../../cognition/src/observability/CognitionTelemetry.h) 与 [cognition/src/observability/CognitionTelemetry.cpp](../../cognition/src/observability/CognitionTelemetry.cpp)，让 telemetry sink 按 counter / histogram 注册真实 instrument，并发射 `cognition_stage_latency_ms`、`cognition_stage_total`、`cognition_action_decision_total` 三个 semantic metric。
+  - 更新 [cognition/src/CognitionFacade.cpp](../../cognition/src/CognitionFacade.cpp) 与 [cognition/src/response/ResponseBuilder.cpp](../../cognition/src/response/ResponseBuilder.cpp)，在 completed / failed / degraded 发射前捕获 `latency_ms`，使 stage latency histogram 不再只有声明没有 live 样本。
+  - 更新 [tests/integration/cognition/CognitionProductionTelemetryIntegrationTest.cpp](../../tests/integration/cognition/CognitionProductionTelemetryIntegrationTest.cpp)，断言 metrics registry 真实注册三个 metric name，并验证 `stage/profile/result(outcome)/decision_kind` 标签在 success、failure、degraded 三条路径上可见。
+- 验证结果：
+  - `Build_CMakeTools(buildTargets=["dasall_cognition_production_telemetry_integration_test"])`：通过。
+  - `RunCtest_CMakeTools(tests=["CognitionProductionTelemetryIntegrationTest"])`：通过；`100% tests passed, 0 tests failed out of 1`。
+- 结果：
+  - cognition 的 live metrics provider 现在会真实持有 `cognition_stage_latency_ms`、`cognition_stage_total`、`cognition_action_decision_total`，不再只停留在详细设计表格和 generic event counter。
+  - `WP-COG-GAP-003` 已为后续 token / cost / finish_reason 归因提供稳定指标底座；新增 SLO 阈值也与现有 profile timeout/degrade 预算保持一致，没有引入第二套 owner 口径。
+
 #### WP-COG-GAP-004 cognition 嵌入式 / qemu gate（GAP-P0-D）
 
 - **代码目标**

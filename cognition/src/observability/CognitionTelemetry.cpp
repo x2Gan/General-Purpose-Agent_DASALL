@@ -69,14 +69,17 @@ class InfraTelemetrySink final : public ICognitionTelemetrySink {
       return;
     }
 
-    ensure_counter(metric.name);
+    if (!ensure_instrument(metric)) {
+      return;
+    }
 
     infra::metrics::MetricSample sample{
         .identity_ref = infra::metrics::MetricIdentity{
             .name = metric.name,
-            .type = infra::metrics::MetricType::Counter,
-            .unit = "1",
-            .description = "cognition telemetry event count",
+            .type = metric.type,
+            .unit = metric.unit,
+            .description = metric.description.empty() ? "cognition telemetry metric"
+                                                      : metric.description,
         },
         .value = metric.value,
         .ts_unix_ms = current_time_ms(),
@@ -334,6 +337,7 @@ class InfraTelemetrySink final : public ICognitionTelemetrySink {
     std::string stage = "unknown";
     std::string profile = "unknown";
     std::string error_code;
+    std::string decision_kind;
     std::string outcome = make_metric_outcome(metric.name);
     std::string resolved_route;
     std::string failure_category;
@@ -345,6 +349,8 @@ class InfraTelemetrySink final : public ICognitionTelemetrySink {
         profile = label.value;
       } else if (label.key == "error_code") {
         error_code = label.value;
+      } else if (label.key == "decision_kind") {
+        decision_kind = label.value;
       } else if (label.key == "outcome" && !label.value.empty()) {
         outcome = label.value;
       } else if (label.key == "resolved_route") {
@@ -356,29 +362,21 @@ class InfraTelemetrySink final : public ICognitionTelemetrySink {
       }
     }
 
+    if (decision_kind.empty()) {
+      decision_kind = "none";
+    }
+
     return infra::metrics::MetricLabels{
         .module = "cognition",
         .stage = std::move(stage),
         .profile = std::move(profile),
         .outcome = std::move(outcome),
         .error_code = std::move(error_code),
+        .decision_kind = std::move(decision_kind),
         .resolved_route = std::move(resolved_route),
         .failure_category = std::move(failure_category),
         .error_type = std::move(error_type),
     };
-  }
-
-  [[nodiscard]] static infra::tracing::TraceAttributeMap make_trace_attributes(
-      const TelemetryEvent& event) {
-    infra::tracing::TraceAttributeMap attrs;
-    for (const auto& field : event.fields) {
-      if (infra::tracing::is_valid_trace_attr_key(field.key) &&
-          infra::tracing::is_printable_ascii(field.value)) {
-        attrs.emplace(field.key, field.value);
-      }
-    }
-    attrs.emplace("event_name", std::string{"cognition."} + event.name);
-    return attrs;
   }
 
   void ensure_meter() {
@@ -393,22 +391,6 @@ class InfraTelemetrySink final : public ICognitionTelemetrySink {
     });
   }
 
-  void ensure_counter(const std::string& metric_name) {
-    if (meter_ == nullptr || counters_.find(metric_name) != counters_.end()) {
-      return;
-    }
-
-    const auto handle = meter_->create_counter(infra::metrics::MetricIdentity{
-        .name = metric_name,
-        .type = infra::metrics::MetricType::Counter,
-        .unit = "1",
-        .description = "cognition telemetry event count",
-    });
-    if (handle.has_value()) {
-      counters_.emplace(metric_name, *handle);
-    }
-  }
-
   void ensure_tracer() {
     if (tracer_ != nullptr || tracer_provider_ == nullptr) {
       return;
@@ -421,13 +403,75 @@ class InfraTelemetrySink final : public ICognitionTelemetrySink {
     });
   }
 
+  [[nodiscard]] static infra::tracing::TraceAttributeMap make_trace_attributes(
+      const TelemetryEvent& event) {
+    infra::tracing::TraceAttributeMap attrs;
+    attrs.emplace("event_name", std::string("cognition.") + event.name);
+    attrs.emplace("request_id", fallback_unknown(event.context.request_id, "unknown"));
+    attrs.emplace("stage", fallback_unknown(event.context.stage, "unknown"));
+    attrs.emplace("profile_id", fallback_unknown(event.context.profile_id, "unknown"));
+    if (!event.context.goal_id.empty()) {
+      attrs.emplace("goal_id", event.context.goal_id);
+    }
+    if (!event.context.trace_id.empty()) {
+      attrs.emplace("trace_id", event.context.trace_id);
+    }
+    for (const auto& field : event.fields) {
+      if (!infra::tracing::is_valid_trace_attr_key(field.key) ||
+          !infra::tracing::is_printable_ascii(field.value)) {
+        continue;
+      }
+      attrs.emplace(field.key, field.value);
+    }
+    return attrs;
+  }
+
+  [[nodiscard]] bool ensure_instrument(const TelemetryMetric& metric) {
+    if (meter_ == nullptr) {
+      return false;
+    }
+
+    if (instruments_.find(metric.name) != instruments_.end()) {
+      return true;
+    }
+
+    const infra::metrics::MetricIdentity identity{
+        .name = metric.name,
+        .type = metric.type,
+        .unit = metric.unit,
+        .description = metric.description.empty() ? "cognition telemetry metric"
+                                                  : metric.description,
+    };
+
+    std::optional<infra::metrics::InstrumentHandle> handle;
+    switch (metric.type) {
+      case infra::metrics::MetricType::Counter:
+        handle = meter_->create_counter(identity);
+        break;
+      case infra::metrics::MetricType::Gauge:
+      case infra::metrics::MetricType::UpDownCounter:
+        handle = meter_->create_gauge(identity);
+        break;
+      case infra::metrics::MetricType::Histogram:
+        handle = meter_->create_histogram(identity);
+        break;
+    }
+
+    if (!handle.has_value()) {
+      return false;
+    }
+
+    instruments_.emplace(metric.name, *handle);
+    return true;
+  }
+
   std::shared_ptr<infra::logging::ILogger> logger_;
   std::shared_ptr<infra::audit::IAuditLogger> audit_logger_;
   std::shared_ptr<infra::metrics::IMetricsProvider> metrics_provider_;
   std::shared_ptr<infra::tracing::ITracerProvider> tracer_provider_;
   std::shared_ptr<infra::metrics::IMeter> meter_;
   std::shared_ptr<infra::tracing::ITracer> tracer_;
-  std::map<std::string, infra::metrics::InstrumentHandle> counters_;
+  std::map<std::string, infra::metrics::InstrumentHandle> instruments_;
 };
 
 class CompositeTelemetrySink final : public ICognitionTelemetrySink {
@@ -550,6 +594,9 @@ void append_field(std::vector<TelemetryField>& fields,
   if (context.result_code.has_value()) {
     append_field(fields, "result_code", std::to_string(*context.result_code));
   }
+  if (context.latency_ms.has_value()) {
+    append_field(fields, "latency_ms", std::to_string(*context.latency_ms));
+  }
   append_field(fields,
                "structured_projection_enabled",
                bool_to_string(context.structured_projection.enabled));
@@ -595,6 +642,87 @@ void append_field(std::vector<TelemetryField>& fields,
   }
   metric_name += "_total";
   return metric_name;
+}
+
+[[nodiscard]] TelemetryMetric make_event_metric(const TelemetryEvent& event,
+                                                std::vector<TelemetryField> labels) {
+  return TelemetryMetric{
+      .name = build_metric_name(event.name),
+      .value = 1.0,
+      .labels = std::move(labels),
+      .type = infra::metrics::MetricType::Counter,
+      .unit = "1",
+      .description = "cognition telemetry event count",
+  };
+}
+
+[[nodiscard]] std::vector<TelemetryField> make_semantic_metric_labels(
+    std::vector<TelemetryField> labels,
+    std::string outcome,
+    std::optional<std::string> decision_kind = std::nullopt) {
+  append_field(labels, "outcome", outcome);
+  if (decision_kind.has_value() && !decision_kind->empty()) {
+    append_field(labels, "decision_kind", *decision_kind);
+  }
+  return labels;
+}
+
+[[nodiscard]] TelemetryMetric make_stage_total_metric(std::vector<TelemetryField> labels,
+                                                      std::string outcome,
+                                                      std::optional<std::string> decision_kind = std::nullopt) {
+  return TelemetryMetric{
+      .name = "cognition_stage_total",
+      .value = 1.0,
+      .labels = make_semantic_metric_labels(std::move(labels), std::move(outcome), decision_kind),
+      .type = infra::metrics::MetricType::Counter,
+      .unit = "1",
+      .description = "cognition stage result count",
+  };
+}
+
+[[nodiscard]] std::optional<TelemetryMetric> make_stage_latency_metric(
+    const StageTelemetryContext& context,
+    std::vector<TelemetryField> labels,
+    std::string outcome,
+    std::optional<std::string> decision_kind = std::nullopt) {
+  if (!context.latency_ms.has_value()) {
+    return std::nullopt;
+  }
+
+  return TelemetryMetric{
+      .name = "cognition_stage_latency_ms",
+      .value = static_cast<double>(*context.latency_ms),
+      .labels = make_semantic_metric_labels(std::move(labels), std::move(outcome), decision_kind),
+      .type = infra::metrics::MetricType::Histogram,
+      .unit = "ms",
+      .description = "cognition stage latency in milliseconds",
+  };
+}
+
+[[nodiscard]] std::optional<TelemetryMetric> make_action_decision_metric(
+    std::vector<TelemetryField> labels,
+    const decision::ActionDecisionKind decision_kind,
+    std::string outcome) {
+  if (decision_kind == decision::ActionDecisionKind::NoDecision) {
+    return std::nullopt;
+  }
+
+  return TelemetryMetric{
+      .name = "cognition_action_decision_total",
+      .value = 1.0,
+      .labels = make_semantic_metric_labels(
+          std::move(labels), std::move(outcome), decision_kind_to_string(decision_kind)),
+      .type = infra::metrics::MetricType::Counter,
+      .unit = "1",
+      .description = "cognition action decision count",
+  };
+}
+
+void append_metric_if_present(std::vector<TelemetryMetric>& metrics,
+                              std::optional<TelemetryMetric> metric) {
+  if (metric.has_value()) {
+    metrics.push_back(std::move(*metric));
+  }
 }
 
 [[nodiscard]] bool replace_json_assignment(std::string& text,
@@ -724,12 +852,9 @@ TelemetryEmitResult CognitionTelemetry::emit_stage_started(
       .fields = make_context_fields(context),
       .audit_refs = {},
   };
-  TelemetryMetric metric{
-      .name = build_metric_name(event.name),
-      .value = 1.0,
-      .labels = make_context_fields(context),
-  };
-  return emit_event(std::move(event), std::move(metric));
+  std::vector<TelemetryMetric> metrics;
+  metrics.push_back(make_event_metric(event, make_context_fields(context)));
+  return emit_event(std::move(event), std::move(metrics));
 }
 
 TelemetryEmitResult CognitionTelemetry::emit_stage_completed(
@@ -752,12 +877,21 @@ TelemetryEmitResult CognitionTelemetry::emit_stage_completed(
   };
   auto metric_labels = make_context_fields(context);
   append_field(metric_labels, "decision_kind", decision_kind_to_string(record.decision_kind));
-  TelemetryMetric metric{
-      .name = build_metric_name(event.name),
-      .value = 1.0,
-      .labels = std::move(metric_labels),
-  };
-  return emit_event(std::move(event), std::move(metric));
+  std::vector<TelemetryMetric> metrics;
+  metrics.push_back(make_event_metric(event, metric_labels));
+  metrics.push_back(make_stage_total_metric(metric_labels,
+                                            "success",
+                                            decision_kind_to_string(record.decision_kind)));
+  append_metric_if_present(metrics,
+                           make_stage_latency_metric(context,
+                                                     metric_labels,
+                                                     "success",
+                                                     decision_kind_to_string(record.decision_kind)));
+  append_metric_if_present(metrics,
+                           make_action_decision_metric(metric_labels,
+                                                       record.decision_kind,
+                                                       "success"));
+  return emit_event(std::move(event), std::move(metrics));
 }
 
 TelemetryEmitResult CognitionTelemetry::emit_stage_failed(
@@ -790,12 +924,12 @@ TelemetryEmitResult CognitionTelemetry::emit_stage_failed(
   if (error_info.details.code.has_value()) {
     append_field(metric_labels, "error_code", std::to_string(*error_info.details.code));
   }
-  TelemetryMetric metric{
-      .name = build_metric_name(event.name),
-      .value = 1.0,
-      .labels = std::move(metric_labels),
-  };
-  return emit_event(std::move(event), std::move(metric));
+  std::vector<TelemetryMetric> metrics;
+  metrics.push_back(make_event_metric(event, metric_labels));
+  metrics.push_back(make_stage_total_metric(metric_labels, "failure"));
+  append_metric_if_present(metrics,
+                           make_stage_latency_metric(context, metric_labels, "failure"));
+  return emit_event(std::move(event), std::move(metrics));
 }
 
 TelemetryEmitResult CognitionTelemetry::emit_clarification_requested(
@@ -812,12 +946,9 @@ TelemetryEmitResult CognitionTelemetry::emit_clarification_requested(
       .fields = std::move(fields),
       .audit_refs = record.audit_refs,
   };
-  TelemetryMetric metric{
-      .name = build_metric_name(event.name),
-      .value = 1.0,
-      .labels = make_context_fields(context),
-  };
-  return emit_event(std::move(event), std::move(metric));
+  std::vector<TelemetryMetric> metrics;
+  metrics.push_back(make_event_metric(event, make_context_fields(context)));
+  return emit_event(std::move(event), std::move(metrics));
 }
 
 TelemetryEmitResult CognitionTelemetry::emit_response_degraded(
@@ -843,12 +974,12 @@ TelemetryEmitResult CognitionTelemetry::emit_response_degraded(
   append_field(metric_labels, "resolved_route", record.resolved_route);
   append_field(metric_labels, "failure_category", record.failure_category);
   append_field(metric_labels, "error_type", record.error_type);
-  TelemetryMetric metric{
-      .name = build_metric_name(event.name),
-      .value = 1.0,
-      .labels = std::move(metric_labels),
-  };
-  return emit_event(std::move(event), std::move(metric));
+  std::vector<TelemetryMetric> metrics;
+  metrics.push_back(make_event_metric(event, metric_labels));
+  metrics.push_back(make_stage_total_metric(metric_labels, "degraded"));
+  append_metric_if_present(metrics,
+                           make_stage_latency_metric(context, metric_labels, "degraded"));
+  return emit_event(std::move(event), std::move(metrics));
 }
 
 TelemetryEmitResult CognitionTelemetry::emit_detail_event(
@@ -871,12 +1002,9 @@ TelemetryEmitResult CognitionTelemetry::emit_detail_event(
       .fields = std::move(event_fields),
       .audit_refs = std::move(audit_refs),
   };
-  TelemetryMetric metric{
-      .name = build_metric_name(event.name),
-      .value = 1.0,
-      .labels = std::move(metric_labels),
-  };
-  return emit_event(std::move(event), std::move(metric));
+  std::vector<TelemetryMetric> metrics;
+  metrics.push_back(make_event_metric(event, metric_labels));
+  return emit_event(std::move(event), std::move(metrics));
 }
 
 DecisionTelemetryRecord CognitionTelemetry::make_decision_record(
@@ -898,7 +1026,7 @@ DecisionTelemetryRecord CognitionTelemetry::make_decision_record(
 }
 
 TelemetryEmitResult CognitionTelemetry::emit_event(TelemetryEvent event,
-                                                   TelemetryMetric metric) const {
+                                                   std::vector<TelemetryMetric> metrics) const {
   TelemetryEmitResult result;
   event = redact_event_fields(config_, std::move(event), result);
 
@@ -909,11 +1037,13 @@ TelemetryEmitResult CognitionTelemetry::emit_event(TelemetryEvent event,
     result.diagnostics.push_back("telemetry_sink_failure:log");
   }
 
-  try {
-    sink_->emit_metric(metric);
-    result.emitted = true;
-  } catch (...) {
-    result.diagnostics.push_back("telemetry_sink_failure:metric");
+  for (const auto& metric : metrics) {
+    try {
+      sink_->emit_metric(metric);
+      result.emitted = true;
+    } catch (...) {
+      result.diagnostics.push_back(std::string("telemetry_sink_failure:metric:") + metric.name);
+    }
   }
 
   if (config_.observability.emit_stage_spans) {

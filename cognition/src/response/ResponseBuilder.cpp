@@ -69,6 +69,13 @@ using observability::TelemetryField;
   return std::chrono::duration_cast<std::chrono::milliseconds>(now).count();
 }
 
+[[nodiscard]] std::uint32_t elapsed_ms_since(
+    const std::chrono::steady_clock::time_point& started_at) {
+  return static_cast<std::uint32_t>(std::chrono::duration_cast<std::chrono::milliseconds>(
+                                    std::chrono::steady_clock::now() - started_at)
+                                    .count());
+}
+
 void ignore_emit_result(const TelemetryEmitResult&) {}
 
 void append_detail_field(std::vector<TelemetryField>& fields,
@@ -1047,6 +1054,7 @@ class ResponseBuilder final : public IResponseBuilder {
 
   [[nodiscard]] ResponseBuildResult build(
       const ResponseBuildRequest& request) override {
+    const auto started_at = std::chrono::steady_clock::now();
     auto telemetry_context = make_response_stage_context(request, false);
     ResponseBuildResult result;
     const auto validation_result =
@@ -1055,6 +1063,7 @@ class ResponseBuilder final : public IResponseBuilder {
       apply_invalid_response_result(result, validation_result);
       telemetry_context.result_code =
           static_cast<int>(contracts::ResultCode::ValidationFieldMissing);
+      telemetry_context.latency_ms = elapsed_ms_since(started_at);
       ignore_emit_result(telemetry_.emit_stage_failed(telemetry_context, *result.error_info));
       return result;
     }
@@ -1072,6 +1081,7 @@ class ResponseBuilder final : public IResponseBuilder {
                                   "runtime policy snapshot could not produce a response stage plan",
                                   "response_policy_projection_failed");
       telemetry_context = make_response_stage_context(request, false, result.result_code);
+      telemetry_context.latency_ms = elapsed_ms_since(started_at);
       ignore_emit_result(telemetry_.emit_stage_failed(telemetry_context, *result.error_info));
       return result;
     }
@@ -1130,6 +1140,7 @@ class ResponseBuilder final : public IResponseBuilder {
     }
 
     telemetry_context = make_response_stage_context(request, result.fallback_used, result.result_code);
+    telemetry_context.latency_ms = elapsed_ms_since(started_at);
     emit_replay_trace(
       telemetry_, telemetry_context, "replay.trace.build.result", serialize_build_result(result));
     const auto checkpoint_mode = resolved_response_mode(result, selected_mode);

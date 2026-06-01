@@ -10,6 +10,7 @@
 #include "CognitionDependencies.h"
 #include "decision/ActionDecision.h"
 #include "error/ErrorInfo.h"
+#include "metrics/MetricTypes.h"
 
 namespace dasall::cognition::observability {
 
@@ -38,6 +39,7 @@ struct StageTelemetryContext {
   bool fallback_used = false;
   std::optional<int> result_code;
   StructuredProjectionTelemetry structured_projection;
+  std::optional<std::uint32_t> latency_ms;
 };
 
 struct AuditReferenceSet {
@@ -79,6 +81,9 @@ struct TelemetryMetric {
   std::string name;
   double value = 0.0;
   std::vector<TelemetryField> labels;
+  infra::metrics::MetricType type = infra::metrics::MetricType::Counter;
+  std::string unit = "1";
+  std::string description;
 };
 
 struct TelemetryEmitResult {
@@ -129,7 +134,7 @@ class CognitionTelemetry {
  private:
   [[nodiscard]] TelemetryEmitResult emit_event(
       TelemetryEvent event,
-      TelemetryMetric metric) const;
+      std::vector<TelemetryMetric> metrics) const;
 
   CognitionConfig config_;
   std::shared_ptr<ICognitionTelemetrySink> sink_;

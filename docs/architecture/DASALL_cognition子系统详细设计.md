@@ -710,14 +710,26 @@ sequenceDiagram
 
 | 指标名 | 类型 | 标签 |
 |---|---|---|
-| cognition_stage_latency_ms | histogram | stage、profile、result |
-| cognition_stage_total | counter | stage、result |
-| cognition_action_decision_total | counter | decision_kind、profile |
+| cognition_stage_latency_ms | histogram | stage、profile、result（metrics provider 内归一为 `outcome`）；成功决策阶段追加 decision_kind |
+| cognition_stage_total | counter | stage、profile、result（metrics provider 内归一为 `outcome`）；存在决策语义时追加 decision_kind |
+| cognition_action_decision_total | counter | stage、profile、decision_kind、result（metrics provider 内归一为 `outcome`） |
 | cognition_clarification_total | counter | reason |
 | cognition_replan_suggestion_total | counter | reason |
 | cognition_schema_violation_total | counter | stage |
 | cognition_response_fallback_total | counter | fallback_mode |
 | cognition_confidence_value | histogram | stage |
+
+#### 6.11.2.1 stage_latency SLO
+
+下表给出默认运行路径的 `cognition_stage_latency_ms` SLO；阈值以各 profile 的 `timeout_policy.llm.timeout_ms` 为 fail-safe 上限，并为 Runtime recovery / fallback 留出余量，不把 provider deadline 直接等同为用户可感知延迟目标。
+
+| profile | llm timeout budget | p50 | p95 | p99 | 说明 |
+|---|---:|---:|---:|---:|---|
+| desktop_full | 30000 ms | <= 1500 ms | <= 4500 ms | <= 9000 ms | 桌面档允许更深推理，但 SLO 仍按交互延迟收紧，避免把大 timeout 当作常态吞吐目标 |
+| edge_balanced | 2500 ms | <= 700 ms | <= 1400 ms | <= 2000 ms | 资源受限档保留语义完整性；p99 需留出约 20% 余量给 fallback / retry 裁定 |
+| edge_minimal | 1800 ms | <= 500 ms | <= 1100 ms | <= 1500 ms | 最小档默认更积极降级；p99 必须低于轻量链路 deadline，避免挤占模板回退窗口 |
+
+当 `request.execution_hints.low_latency_preferred == true` 时，按上表阈值再收紧 50%，与 `StagePolicyResolver::derive_deadline_ms()` 的半 deadline 策略保持一致。
 
 #### 6.11.3 追踪
 

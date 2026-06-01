@@ -119,6 +119,13 @@ template <typename Fn>
   };
 }
 
+[[nodiscard]] std::uint32_t elapsed_ms_since(
+    const std::chrono::steady_clock::time_point& started_at) {
+  return static_cast<std::uint32_t>(std::chrono::duration_cast<std::chrono::milliseconds>(
+                                    std::chrono::steady_clock::now() - started_at)
+                                    .count());
+}
+
 [[nodiscard]] std::string default_response_summary(const CognitionStepRequest& request) {
   if (request.context_packet.current_goal_summary.has_value() &&
       !request.context_packet.current_goal_summary->empty()) {
@@ -1104,6 +1111,7 @@ class CognitionFacade final : public ICognitionEngine {
 
   [[nodiscard]] CognitionDecisionResult decide(
       const CognitionStepRequest& request) override {
+    const auto started_at = std::chrono::steady_clock::now();
     const auto validation_result =
         validation::InputBoundaryValidator::validate_decide_request(request);
     auto telemetry_context = make_stage_context(request, "execution", false);
@@ -1114,6 +1122,7 @@ class CognitionFacade final : public ICognitionEngine {
       apply_invalid_decide_result(result, validation_result);
       telemetry_context.result_code =
           static_cast<int>(contracts::ResultCode::ValidationFieldMissing);
+      telemetry_context.latency_ms = elapsed_ms_since(started_at);
       ignore_emit_result(telemetry_.emit_stage_failed(telemetry_context, *result.error_info));
       return result;
     }
@@ -1133,6 +1142,7 @@ class CognitionFacade final : public ICognitionEngine {
                          result.result_code,
                          summarize_structured_projection_telemetry(
                            result.diagnostics));
+    telemetry_context.latency_ms = elapsed_ms_since(started_at);
 
     emit_replay_trace(telemetry_,
                       "replay.trace.decide.result",
@@ -1158,6 +1168,7 @@ class CognitionFacade final : public ICognitionEngine {
 
   [[nodiscard]] CognitionReflectionResult reflect(
       const ReflectionRequest& request) override {
+    const auto started_at = std::chrono::steady_clock::now();
     const auto validation_result =
         validation::InputBoundaryValidator::validate_reflection_request(request);
     auto telemetry_context = make_stage_context(request, "reflection", false);
@@ -1168,6 +1179,7 @@ class CognitionFacade final : public ICognitionEngine {
       apply_invalid_reflection_result(result, validation_result);
       telemetry_context.result_code =
           static_cast<int>(contracts::ResultCode::ValidationFieldMissing);
+      telemetry_context.latency_ms = elapsed_ms_since(started_at);
       ignore_emit_result(telemetry_.emit_stage_failed(telemetry_context, *result.error_info));
       return result;
     }
@@ -1179,6 +1191,7 @@ class CognitionFacade final : public ICognitionEngine {
 
     auto result = run_reflection_pipeline(request);
     telemetry_context = make_stage_context(request, "reflection", false, result.result_code);
+    telemetry_context.latency_ms = elapsed_ms_since(started_at);
 
     emit_replay_trace(telemetry_,
                       "replay.trace.reflect.result",

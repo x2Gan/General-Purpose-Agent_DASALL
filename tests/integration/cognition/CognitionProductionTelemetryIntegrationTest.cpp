@@ -125,18 +125,36 @@ class RecordingMetricsProvider final : public dasall::infra::metrics::IMetricsPr
   return false;
 }
 
+[[nodiscard]] bool has_metric_identity(
+    const std::vector<dasall::infra::metrics::MetricIdentity>& identities,
+    const std::string& name,
+    const dasall::infra::metrics::MetricType type) {
+  return std::any_of(
+      identities.begin(),
+      identities.end(),
+      [&](const dasall::infra::metrics::MetricIdentity& identity) {
+        return identity.name == name && identity.type == type;
+      });
+}
+
 [[nodiscard]] const dasall::infra::metrics::MetricSample* find_metric_sample(
     const std::vector<dasall::infra::metrics::MetricSample>& samples,
     const std::string& name,
     const std::string& stage,
     const std::string& outcome,
-    const std::string& resolved_route = std::string()) {
+    const std::string& resolved_route = std::string(),
+    const std::string& profile = std::string(),
+    const std::string& decision_kind = std::string()) {
   const auto match = std::find_if(samples.begin(),
                                   samples.end(),
                                   [&](const dasall::infra::metrics::MetricSample& sample) {
                                     return sample.identity_ref.name == name &&
                                            sample.labels.stage == stage &&
                                            sample.labels.outcome == outcome &&
+                                           (profile.empty() ||
+                                            sample.labels.profile == profile) &&
+                                           (decision_kind.empty() ||
+                                            sample.labels.decision_kind == decision_kind) &&
                                            (resolved_route.empty() ||
                                             sample.labels.resolved_route == resolved_route);
                                   });
@@ -293,6 +311,72 @@ void test_cognition_production_telemetry_sink_emits_completed_failed_and_degrade
 
   assert_true(!recording_meter->recorded_samples.empty(),
               "production telemetry integration should emit cognition metrics into the injected metrics provider");
+    assert_true(recording_metrics_provider->last_scope.name == "cognition" &&
+            recording_metrics_provider->last_scope.version == "v1",
+          "production telemetry integration should request the cognition meter scope when registering semantic metrics");
+    assert_true(has_metric_identity(recording_meter->created_identities,
+                    "cognition_stage_latency_ms",
+                    dasall::infra::metrics::MetricType::Histogram),
+          "production telemetry integration should register cognition_stage_latency_ms as a histogram");
+    assert_true(has_metric_identity(recording_meter->created_identities,
+                    "cognition_stage_total",
+                    dasall::infra::metrics::MetricType::Counter),
+          "production telemetry integration should register cognition_stage_total as a counter");
+    assert_true(has_metric_identity(recording_meter->created_identities,
+                    "cognition_action_decision_total",
+                    dasall::infra::metrics::MetricType::Counter),
+          "production telemetry integration should register cognition_action_decision_total as a counter");
+
+    const auto* stage_latency_success = find_metric_sample(recording_meter->recorded_samples,
+                               "cognition_stage_latency_ms",
+                               "execution",
+                               "success",
+                               std::string(),
+                               "desktop_full",
+                               "DirectResponse");
+    assert_true(stage_latency_success != nullptr,
+          "production telemetry integration should emit cognition_stage_latency_ms with stage, result, profile, and decision_kind labels on successful decide output");
+
+    const auto* stage_total_success = find_metric_sample(recording_meter->recorded_samples,
+                               "cognition_stage_total",
+                               "execution",
+                               "success",
+                               std::string(),
+                               "desktop_full",
+                               "DirectResponse");
+    assert_true(stage_total_success != nullptr,
+          "production telemetry integration should emit cognition_stage_total with stage, result, profile, and decision_kind labels on successful decide output");
+
+    const auto* action_decision_success = find_metric_sample(recording_meter->recorded_samples,
+                                 "cognition_action_decision_total",
+                                 "execution",
+                                 "success",
+                                 std::string(),
+                                 "desktop_full",
+                                 "DirectResponse");
+    assert_true(action_decision_success != nullptr,
+          "production telemetry integration should emit cognition_action_decision_total with stage, result, profile, and decision_kind labels on successful decide output");
+
+    const auto* stage_total_failure = find_metric_sample(recording_meter->recorded_samples,
+                               "cognition_stage_total",
+                               "execution",
+                               "failure",
+                               std::string(),
+                               "desktop_full");
+    assert_true(stage_total_failure != nullptr &&
+            stage_total_failure->labels.decision_kind == "none",
+          "production telemetry integration should materialize decision_kind on failed stage totals even when no decision was produced");
+
+    const auto* stage_total_degraded = find_metric_sample(recording_meter->recorded_samples,
+                              "cognition_stage_total",
+                              "response",
+                              "degraded",
+                              std::string(),
+                              "desktop_full");
+    assert_true(stage_total_degraded != nullptr &&
+            stage_total_degraded->labels.decision_kind == "none",
+          "production telemetry integration should materialize decision_kind on degraded stage totals for template fallback output");
+
   const auto* degraded_metric = find_metric_sample(recording_meter->recorded_samples,
                                                    "cognition_response_degraded_total",
                                                    "response",

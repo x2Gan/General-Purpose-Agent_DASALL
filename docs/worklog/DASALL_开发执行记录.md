@@ -1,3 +1,37 @@
+## 记录 #858
+
+- 日期：2026-06-01
+- 阶段：cognition / production telemetry live metric closure
+- 任务：完成 WP-COG-GAP-003 生产 metric live 验证 + SLO 表
+- 状态：已完成（semantic metric registration、focused integration regression 与 SLO 文档回写已闭合）
+
+### 执行前提
+
+1. [docs/deliverables/COG-EVAL-2026-05-31-cognition子系统落地评估与生产级缺口治理任务规划.md](../deliverables/COG-EVAL-2026-05-31-cognition子系统落地评估与生产级缺口治理任务规划.md) 将 `WP-COG-GAP-003` 定义为 GA 前 P0 缺口：必须验证 `cognition_stage_latency_ms`、`cognition_stage_total`、`cognition_action_decision_total` 已被 live metrics provider 真实注册，而不是只存在设计声明。
+2. [docs/architecture/DASALL_cognition子系统详细设计.md](../architecture/DASALL_cognition子系统详细设计.md) §6.11 已声明 stage latency / stage total / action decision 三类指标，但此前缺少 provider live 证据与按 profile 发布的 p50/p95/p99 SLO 表。
+3. 仓库现有 infra metrics schema 统一使用 `outcome` 承载结果维度；本轮只能在 cognition owner 与 infra metrics seam 内补 semantic metric，不新增第二套 `result` label key，以免破坏全仓 label 规范。
+
+### 改动
+
+1. 更新 [infra/include/metrics/MetricTypes.h](../infra/include/metrics/MetricTypes.h)、[infra/src/metrics/CardinalityGuard.cpp](../infra/src/metrics/CardinalityGuard.cpp) 与 [infra/src/metrics/MetricsConfigPolicy.cpp](../infra/src/metrics/MetricsConfigPolicy.cpp)，把 `decision_kind` 纳入 metrics allowlist、归一化与 series signature，确保 semantic metrics 的标签能稳定穿过 provider。
+2. 更新 [cognition/src/observability/CognitionTelemetry.h](../cognition/src/observability/CognitionTelemetry.h) 与 [cognition/src/observability/CognitionTelemetry.cpp](../cognition/src/observability/CognitionTelemetry.cpp)，为 telemetry metric 增加 instrument type / unit / description，并把 semantic counter / histogram 注册到 live meter，而不是继续塌缩为 generic event counter。
+3. 更新 [cognition/src/CognitionFacade.cpp](../cognition/src/CognitionFacade.cpp) 与 [cognition/src/response/ResponseBuilder.cpp](../cognition/src/response/ResponseBuilder.cpp)，在 decide / reflect / build 的 completed、failed、degraded 路径发射前写入 `latency_ms`，保证 `cognition_stage_latency_ms` 有真实样本。
+4. 更新 [tests/integration/cognition/CognitionProductionTelemetryIntegrationTest.cpp](../tests/integration/cognition/CognitionProductionTelemetryIntegrationTest.cpp)，断言 meter scope、semantic metric identity 与 success / failure / degraded 样本上的 `stage/profile/result(outcome)/decision_kind` 标签均可见。
+5. 更新 [docs/architecture/DASALL_cognition子系统详细设计.md](../architecture/DASALL_cognition子系统详细设计.md) 与 [docs/deliverables/COG-EVAL-2026-05-31-cognition子系统落地评估与生产级缺口治理任务规划.md](../deliverables/COG-EVAL-2026-05-31-cognition子系统落地评估与生产级缺口治理任务规划.md)，补齐三档 profile 的 stage_latency SLO，并把 `result -> outcome` 的 provider 归一化关系写明。
+
+### 验证
+
+1. `Build_CMakeTools(buildTargets=["dasall_cognition_production_telemetry_integration_test"])`
+   - 结果：通过。
+2. `RunCtest_CMakeTools(tests=["CognitionProductionTelemetryIntegrationTest"])`
+   - 结果：通过；`100% tests passed, 0 tests failed out of 1`。
+
+### 结果
+
+1. cognition 现在会真实向 live metrics provider 注册 `cognition_stage_latency_ms`、`cognition_stage_total`、`cognition_action_decision_total`，并保留 `decision_kind` 语义，不再只有 generic event metric 证据。
+2. `result` 维度已在 provider 内稳定映射到仓库 canonical `outcome` 标签名，避免 cognition 为单一任务破坏全仓 metrics schema 与 cardinality 规则。
+3. `WP-COG-GAP-003` 的代码、focused integration regression 与 SLO 文档已闭合；后续 `WP-COG-GAP-007` 可以直接在这套 semantic metric 底座上追加 token / cost / finish_reason 归因。
+
 ## 记录 #857
 
 - 日期：2026-05-31

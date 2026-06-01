@@ -130,6 +130,7 @@ std::vector<MetricLabelEntry> CardinalityGuard::to_entries(const MetricLabels& l
       MetricLabelEntry{.key = "profile", .value = labels.profile},
       MetricLabelEntry{.key = "outcome", .value = labels.outcome},
       MetricLabelEntry{.key = "error_code", .value = labels.error_code},
+      MetricLabelEntry{.key = "decision_kind", .value = labels.decision_kind},
       MetricLabelEntry{.key = "resolved_route", .value = labels.resolved_route},
       MetricLabelEntry{.key = "failure_category", .value = labels.failure_category},
       MetricLabelEntry{.key = "error_type", .value = labels.error_type},
@@ -144,6 +145,7 @@ std::optional<MetricLabels> CardinalityGuard::materialize_labels(
   bool has_profile = false;
   bool has_outcome = false;
   bool has_error_code = false;
+  bool has_decision_kind = false;
   bool has_resolved_route = false;
   bool has_failure_category = false;
   bool has_error_type = false;
@@ -194,6 +196,15 @@ std::optional<MetricLabels> CardinalityGuard::materialize_labels(
       continue;
     }
 
+    if (label.key == "decision_kind") {
+      if (has_decision_kind) {
+        return std::nullopt;
+      }
+      materialized.decision_kind = label.value;
+      has_decision_kind = true;
+      continue;
+    }
+
     if (label.key == "resolved_route") {
       if (has_resolved_route) {
         return std::nullopt;
@@ -227,6 +238,9 @@ std::optional<MetricLabels> CardinalityGuard::materialize_labels(
   if (!has_error_code || materialized.error_code.empty()) {
     materialized.error_code = "none";
   }
+  if (!has_decision_kind || materialized.decision_kind.empty()) {
+    materialized.decision_kind = "none";
+  }
   if (!has_resolved_route || materialized.resolved_route.empty()) {
     materialized.resolved_route = "none";
   }
@@ -252,6 +266,7 @@ bool CardinalityGuard::is_allowlisted(std::string_view key) {
 std::string CardinalityGuard::make_series_signature(const MetricLabels& labels) {
   return labels.module + "\x1f" + labels.stage + "\x1f" + labels.profile + "\x1f" +
          labels.outcome + "\x1f" + labels.error_code + "\x1f" +
+         labels.decision_kind + "\x1f" +
          labels.resolved_route + "\x1f" + labels.failure_category + "\x1f" +
          labels.error_type;
 }

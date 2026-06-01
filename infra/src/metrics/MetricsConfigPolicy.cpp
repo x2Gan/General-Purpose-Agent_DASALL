@@ -118,6 +118,9 @@ MetricLabelsNormalizationResult MetricsConfigPolicy::normalize_labels(
   if (normalized.error_code.empty()) {
     normalized.error_code = "none";
   }
+  if (normalized.decision_kind.empty()) {
+    normalized.decision_kind = "none";
+  }
 
   return MetricLabelsNormalizationResult::success(std::move(normalized));
 }
