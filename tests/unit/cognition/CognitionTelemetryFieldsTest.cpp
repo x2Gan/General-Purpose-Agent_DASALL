@@ -39,6 +39,16 @@ using dasall::tests::support::assert_true;
   return false;
 }
 
+[[nodiscard]] std::string find_field_value(const std::vector<TelemetryField>& fields,
+                                           const std::string& key) {
+  for (const auto& field : fields) {
+    if (field.key == key) {
+      return field.value;
+    }
+  }
+  return std::string{};
+}
+
 [[nodiscard]] StageTelemetryContext make_context() {
   return StageTelemetryContext{
       .request_id = "req-cog-022",
@@ -100,22 +110,30 @@ using dasall::tests::support::assert_true;
 
 void test_emit_stage_started_and_completed_propagates_required_fields() {
   auto sink = std::make_shared<MockCognitionTelemetrySink>();
-  CognitionTelemetry telemetry(dasall::cognition::CognitionConfig{}, sink);
+  dasall::cognition::CognitionConfig config;
+  config.observability.redact_context_payload = true;
+  CognitionTelemetry telemetry(config, sink);
   const auto context = make_context();
   const auto action_decision = make_action_decision();
+  auto decision_record = CognitionTelemetry::make_decision_record(action_decision);
+  decision_record.prompt_tokens = 144U;
+  decision_record.completion_tokens = 36U;
+  decision_record.total_cost = 0.123456;
+  decision_record.finish_reason = std::string{"stop"};
+  decision_record.response_summary = std::string{"raw_prompt=secret concise summary"};
 
   const auto started = telemetry.emit_stage_started(context);
-  const auto completed = telemetry.emit_stage_completed(
-      context,
-      CognitionTelemetry::make_decision_record(action_decision));
+  const auto completed = telemetry.emit_stage_completed(context, decision_record);
 
   assert_true(started.emitted, "stage started should emit telemetry across available sinks");
   assert_true(completed.emitted,
               "stage completed should emit telemetry across available sinks");
+  assert_true(completed.redacted,
+              "completed telemetry should report redaction when response summary contains sensitive content");
   assert_equal(2, static_cast<int>(sink->log_events.size()),
                "two log events should be recorded for started + completed");
-  assert_equal(2, static_cast<int>(sink->metrics.size()),
-               "two metrics should be recorded for started + completed");
+  assert_equal(4, static_cast<int>(sink->metrics.size()),
+               "started/completed should record event, stage-total and action-decision metrics");
   assert_equal(2, static_cast<int>(sink->trace_events.size()),
                "two trace events should be recorded when stage spans are enabled");
   assert_equal(2, static_cast<int>(sink->audit_events.size()),
@@ -154,6 +172,23 @@ void test_emit_stage_started_and_completed_propagates_required_fields() {
                         "projected_candidate_count",
                         "2"),
               "completed event should carry the projected candidate count");
+  assert_true(has_field(completed_event.fields, "prompt_tokens", "144"),
+              "completed event should carry prompt token usage");
+  assert_true(has_field(completed_event.fields, "completion_tokens", "36"),
+              "completed event should carry completion token usage");
+  assert_true(has_field(completed_event.fields, "total_cost", "0.123456"),
+              "completed event should carry total cost");
+  assert_true(has_field(completed_event.fields, "finish_reason", "stop"),
+              "completed event should carry finish reason");
+
+  const auto response_summary = find_field_value(completed_event.fields, "response_summary");
+  const auto omitted_details = find_field_value(completed_event.fields, "omitted_details");
+  assert_true(response_summary.find("secret") == std::string::npos,
+              "redaction should remove sensitive response summary content");
+  assert_true(response_summary.find("[REDACTED]") != std::string::npos,
+              "redaction should leave a marker in response summary");
+  assert_true(omitted_details.find("redacted:raw_prompt") != std::string::npos,
+              "redaction metadata should record the redacted raw_prompt field");
 }
 
 void test_emit_stage_failed_propagates_structured_projection_failure_fields() {
@@ -269,8 +304,8 @@ void test_emit_response_degraded_propagates_route_failure_and_metric_fields() {
               "response degraded should emit telemetry across available sinks");
   assert_equal(1, static_cast<int>(sink->log_events.size()),
                "one degraded log event should be recorded");
-  assert_equal(1, static_cast<int>(sink->metrics.size()),
-               "one degraded metric should be recorded");
+  assert_equal(2, static_cast<int>(sink->metrics.size()),
+               "degraded path should record event and stage-total metrics");
   assert_true(has_field(sink->log_events.back().fields,
                         "resolved_route",
                         "mock.route.response"),

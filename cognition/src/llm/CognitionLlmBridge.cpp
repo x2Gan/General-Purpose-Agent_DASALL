@@ -115,6 +115,42 @@ namespace {
   return "json_object";
 }
 
+[[nodiscard]] std::optional<std::string> find_response_tag_value(
+    const contracts::LLMResponse& response,
+    const std::string_view prefix) {
+  if (!response.tags.has_value()) {
+    return std::nullopt;
+  }
+
+  for (const auto& tag : *response.tags) {
+    if (tag.rfind(prefix, 0U) == 0U && tag.size() > prefix.size()) {
+      return tag.substr(prefix.size());
+    }
+  }
+
+  return std::nullopt;
+}
+
+[[nodiscard]] std::optional<double> extract_estimated_cost(
+    const contracts::LLMResponse& response) {
+  const auto cost_value =
+      find_response_tag_value(response, "usage:estimated_cost_usd=");
+  if (!cost_value.has_value()) {
+    return std::nullopt;
+  }
+
+  try {
+    std::size_t parsed_length = 0U;
+    const double parsed_cost = std::stod(*cost_value, &parsed_length);
+    if (parsed_length != cost_value->size() || parsed_cost < 0.0) {
+      return std::nullopt;
+    }
+    return parsed_cost;
+  } catch (...) {
+    return std::nullopt;
+  }
+}
+
 void append_unique(std::vector<std::string>& values, const std::string& value) {
   if (value.empty()) {
     return;
@@ -305,6 +341,26 @@ void append_error_type_diagnostic(StageLlmCallResult& result,
   result.diagnostics.push_back(
       std::string("error_type:") +
       std::string(contracts::result_code_category_name(*error_info->failure_type)));
+}
+
+void append_usage_diagnostics(StageLlmCallResult& result) {
+  if (result.prompt_tokens.has_value()) {
+    append_unique(result.diagnostics,
+                  "llm_usage.prompt_tokens:" + std::to_string(*result.prompt_tokens));
+  }
+  if (result.completion_tokens.has_value()) {
+    append_unique(result.diagnostics,
+                  "llm_usage.completion_tokens:" +
+                      std::to_string(*result.completion_tokens));
+  }
+  if (result.total_cost.has_value()) {
+    append_unique(result.diagnostics,
+                  "llm_usage.total_cost:" + std::to_string(*result.total_cost));
+  }
+  if (result.finish_reason.has_value() && !result.finish_reason->empty()) {
+    append_unique(result.diagnostics,
+                  "llm_usage.finish_reason:" + *result.finish_reason);
+  }
 }
 
 [[nodiscard]] contracts::ErrorInfo make_error_info(const contracts::ResultCode result_code,
@@ -519,6 +575,12 @@ StageLlmCallResult CognitionLlmBridge::normalize_llm_response(
     append_error_type_diagnostic(result, result.error_info);
     return result;
   }
+
+  result.prompt_tokens = response.input_tokens;
+  result.completion_tokens = response.output_tokens;
+  result.total_cost = extract_estimated_cost(response);
+  result.finish_reason = response.finish_reason;
+  append_usage_diagnostics(result);
 
   result.response = std::move(response);
   return result;

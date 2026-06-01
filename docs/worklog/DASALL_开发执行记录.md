@@ -1,3 +1,39 @@
+## 记录 #860
+
+- 日期：2026-06-01
+- 阶段：cognition / token-cost-finish-reason telemetry closure
+- 任务：完成 WP-COG-GAP-007 Token / cost / finish_reason 注入 telemetry
+- 状态：已完成（bridge usage/cost 透传、completed telemetry 字段补齐与 focused regression 已闭合）
+
+### 执行前提
+
+1. [docs/deliverables/COG-EVAL-2026-05-31-cognition子系统落地评估与生产级缺口治理任务规划.md](../deliverables/COG-EVAL-2026-05-31-cognition子系统落地评估与生产级缺口治理任务规划.md) 将 `WP-COG-GAP-007` 定义为 P1 稳定性缺口：必须把 prompt/completion tokens、cost 与 finish_reason 注入 cognition telemetry，补齐预算消耗归因。
+2. [docs/architecture/DASALL_cognition子系统详细设计.md](../architecture/DASALL_cognition子系统详细设计.md) 的 owner 边界要求 cognition 只能消费 llm 归一化后的 provider-neutral 事实，不能为了 telemetry 反向扩张 prompt/provider owner 或 raw payload 依赖。
+3. OpenTelemetry GenAI semantic conventions 推荐在 GenAI 观测中保留 `usage.input_tokens`、`usage.output_tokens` 与 `response.finish_reasons` 这类聚合字段，而把 input/output 原文视为敏感内容按 opt-in 处理；本轮据此保持 token/finish_reason 可观测，同时继续让 redaction 只作用于 raw prompt、provider payload、reasoning trace 等敏感字段。
+
+### 改动
+
+1. 更新 [cognition/src/llm/CognitionLlmBridge.h](../cognition/src/llm/CognitionLlmBridge.h) 与 [cognition/src/llm/CognitionLlmBridge.cpp](../cognition/src/llm/CognitionLlmBridge.cpp)，让 `StageLlmCallResult` 保留 `prompt_tokens`、`completion_tokens`、`total_cost`、`finish_reason`，其中 cost 由 normalized response 的 provider-neutral tag `usage:estimated_cost_usd=` 解析，不新增 shared `LLMResponse` 字段。
+2. 更新 [cognition/src/CognitionFacade.cpp](../cognition/src/CognitionFacade.cpp)，把 bridge 写入的 `llm_usage.*` diagnostics 汇总为 completed telemetry record，避免扩张 public cognition result 契约。
+3. 更新 [cognition/src/observability/CognitionTelemetry.h](../cognition/src/observability/CognitionTelemetry.h) 与 [cognition/src/observability/CognitionTelemetry.cpp](../cognition/src/observability/CognitionTelemetry.cpp)，让 `stage.completed` 事件发射 `prompt_tokens`、`completion_tokens`、`total_cost`、`finish_reason` 字段，并把这些键纳入 log allowlist；metrics 仍维持低基数标签，不引入 usage 数值标签。
+4. 更新 [tests/unit/cognition/CognitionLlmBridgeProjectionTest.cpp](../tests/unit/cognition/CognitionLlmBridgeProjectionTest.cpp) 与 [tests/unit/cognition/CognitionTelemetryFieldsTest.cpp](../tests/unit/cognition/CognitionTelemetryFieldsTest.cpp)，固定 bridge 字段透传、telemetry 字段存在，以及 redaction 不剥离这些聚合值。
+5. 更新 [docs/architecture/DASALL_cognition子系统详细设计.md](../architecture/DASALL_cognition子系统详细设计.md) 与 [docs/deliverables/COG-EVAL-2026-05-31-cognition子系统落地评估与生产级缺口治理任务规划.md](../deliverables/COG-EVAL-2026-05-31-cognition子系统落地评估与生产级缺口治理任务规划.md)，回写 usage/cost 口径、解阻状态与 closeout 证据。
+
+### 验证
+
+1. `Build_CMakeTools(buildTargets=["dasall_cognition_llm_bridge_projection_unit_test","dasall_cognition_telemetry_fields_unit_test"])`
+   - 结果：通过。
+2. `RunCtest_CMakeTools(tests=["CognitionLlmBridgeProjectionTest","CognitionTelemetryFieldsTest"])`
+   - 结果：通过；`100% tests passed, 0 tests failed out of 2`。
+3. VS Code diagnostics。
+   - 结果：本轮 touched bridge / telemetry / facade / test / docs 文件无新增错误。
+
+### 结果
+
+1. cognition 现在可以在 bridge 成功路径上稳定保留 token/cost/finish_reason 聚合事实，并把它们注入 `stage.completed` telemetry，补齐 stage-level 成本归因。
+2. redaction 继续 fail-open 地保护敏感 payload 字段，但不会误删 `prompt_tokens`、`completion_tokens`、`total_cost`、`finish_reason` 这类低敏聚合观测值。
+3. `WP-COG-GAP-007` 的代码、详细设计回链与 focused regression 已闭合；后续 `WP-COG-GAP-008` 可以直接复用这条 bridge->facade->telemetry 传递链。
+
 ## 记录 #859
 
 - 日期：2026-06-01

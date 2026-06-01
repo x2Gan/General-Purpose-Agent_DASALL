@@ -193,6 +193,10 @@ class InfraTelemetrySink final : public ICognitionTelemetrySink {
         "decision_kind",
         "confidence",
         "selected_node_id",
+        "prompt_tokens",
+        "completion_tokens",
+        "total_cost",
+        "finish_reason",
         "clarification_needed",
         "error_code",
         "error_stage",
@@ -523,6 +527,12 @@ class CompositeTelemetrySink final : public ICognitionTelemetrySink {
 [[nodiscard]] std::string format_score(const float value) {
   std::ostringstream stream;
   stream << std::fixed << std::setprecision(2) << value;
+  return stream.str();
+}
+
+[[nodiscard]] std::string format_cost(const double value) {
+  std::ostringstream stream;
+  stream << std::fixed << std::setprecision(6) << value;
   return stream.str();
 }
 
@@ -865,6 +875,18 @@ TelemetryEmitResult CognitionTelemetry::emit_stage_completed(
   append_field(fields, "confidence", format_score(record.confidence));
   append_field(fields, "candidate_scores", summarize_candidate_scores(record.candidate_scores));
   append_field(fields, "selected_node_id", record.selected_node_id);
+  if (record.prompt_tokens.has_value()) {
+    append_field(fields, "prompt_tokens", std::to_string(*record.prompt_tokens));
+  }
+  if (record.completion_tokens.has_value()) {
+    append_field(fields,
+                 "completion_tokens",
+                 std::to_string(*record.completion_tokens));
+  }
+  if (record.total_cost.has_value()) {
+    append_field(fields, "total_cost", format_cost(*record.total_cost));
+  }
+  append_field(fields, "finish_reason", record.finish_reason);
   append_field(fields, "clarification_needed", bool_to_string(record.clarification_needed));
   append_field(fields, "clarification_question", record.clarification_question);
   append_field(fields, "response_summary", record.response_summary);

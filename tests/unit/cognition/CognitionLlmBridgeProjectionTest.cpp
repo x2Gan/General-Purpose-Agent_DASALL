@@ -72,10 +72,14 @@ using dasall::tests::support::assert_true;
 
 void test_invoke_stage_projects_stage_hint_and_redacts_provider_private_fields() {
   auto llm_manager = std::make_shared<MockLLMManager>();
-  llm_manager->set_generate_result(MockLLMManager::make_success_result(
+  auto manager_result = MockLLMManager::make_success_result(
       R"({"plan_id":"plan-020","reasoning_content":"hidden-chain","summary":"ok"})",
       "llm.plan.primary",
-      std::string{"req-020-projection"}));
+      std::string{"req-020-projection"});
+  manager_result.response->tags = std::vector<std::string>{
+      "usage:estimated_cost_usd=0.000042",
+  };
+  llm_manager->set_generate_result(std::move(manager_result));
 
   CognitionLlmBridge bridge(llm_manager);
   const auto result = bridge.invoke_stage(make_call_request());
@@ -101,6 +105,22 @@ void test_invoke_stage_projects_stage_hint_and_redacts_provider_private_fields()
               "bridge should preserve normalized prompt eval metadata on successful responses");
   assert_equal(std::string("stable"), *result.response->release_scope,
                "bridge should preserve normalized prompt release scope metadata on successful responses");
+  assert_true(result.prompt_tokens.has_value() && *result.prompt_tokens == 16U,
+              "bridge should surface prompt token usage on StageLlmCallResult");
+  assert_true(result.completion_tokens.has_value() && *result.completion_tokens == 8U,
+              "bridge should surface completion token usage on StageLlmCallResult");
+  assert_true(result.total_cost.has_value() && *result.total_cost > 0.0,
+              "bridge should surface normalized total cost on StageLlmCallResult");
+  assert_equal(std::string("stop"), *result.finish_reason,
+               "bridge should surface normalized finish reason on StageLlmCallResult");
+  assert_true(contains_token(result.diagnostics, "llm_usage.prompt_tokens:16"),
+              "bridge diagnostics should retain prompt token telemetry facts for later consumption");
+  assert_true(contains_token(result.diagnostics, "llm_usage.completion_tokens:8"),
+              "bridge diagnostics should retain completion token telemetry facts for later consumption");
+  assert_true(contains_token(result.diagnostics, "llm_usage.total_cost:0.000042"),
+              "bridge diagnostics should retain total cost telemetry facts for later consumption");
+  assert_true(contains_token(result.diagnostics, "llm_usage.finish_reason:stop"),
+              "bridge diagnostics should retain finish reason telemetry facts for later consumption");
 
   assert_equal(1, llm_manager->generate_call_count(),
                "bridge should issue exactly one unary llm request");

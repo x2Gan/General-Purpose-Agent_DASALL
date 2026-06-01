@@ -53,6 +53,10 @@ struct StageLlmCallResult {
   std::optional<contracts::LLMResponse> response;
   std::optional<contracts::ErrorInfo> error_info;
   std::optional<contracts::ResultCode> result_code;
+  std::optional<std::uint32_t> prompt_tokens;
+  std::optional<std::uint32_t> completion_tokens;
+  std::optional<double> total_cost;
+  std::optional<std::string> finish_reason;
   StageBudgetHint budget_hint;
   std::string resolved_route;
   std::vector<std::string> warnings;

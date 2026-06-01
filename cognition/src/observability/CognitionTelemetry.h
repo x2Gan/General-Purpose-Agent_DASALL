@@ -53,6 +53,10 @@ struct DecisionTelemetryRecord {
   float confidence = 0.0F;
   std::vector<decision::CandidateDecisionScore> candidate_scores;
   std::optional<std::string> selected_node_id;
+  std::optional<std::uint32_t> prompt_tokens;
+  std::optional<std::uint32_t> completion_tokens;
+  std::optional<double> total_cost;
+  std::optional<std::string> finish_reason;
   bool clarification_needed = false;
   std::optional<std::string> clarification_question;
   std::optional<std::string> response_summary;

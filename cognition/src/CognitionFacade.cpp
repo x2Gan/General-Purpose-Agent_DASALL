@@ -677,6 +677,69 @@ void append_error_info_fields(std::vector<TelemetryField>& fields,
   return std::nullopt;
 }
 
+[[nodiscard]] std::optional<std::string> find_latest_prefixed_diagnostic_value(
+    const std::vector<std::string>& diagnostics,
+    const std::string_view prefix) {
+  for (auto it = diagnostics.rbegin(); it != diagnostics.rend(); ++it) {
+    if (it->rfind(prefix, 0) == 0 && it->size() > prefix.size()) {
+      return it->substr(prefix.size());
+    }
+  }
+
+  return std::nullopt;
+}
+
+struct LlmUsageTelemetrySummary {
+  std::optional<std::uint32_t> prompt_tokens;
+  std::optional<std::uint32_t> completion_tokens;
+  std::optional<double> total_cost;
+  std::optional<std::string> finish_reason;
+};
+
+[[nodiscard]] std::optional<std::uint32_t> parse_optional_uint32(
+    const std::optional<std::string>& value) {
+  if (!value.has_value()) {
+    return std::nullopt;
+  }
+
+  try {
+    return static_cast<std::uint32_t>(std::stoul(*value));
+  } catch (...) {
+    return std::nullopt;
+  }
+}
+
+[[nodiscard]] std::optional<double> parse_optional_double(
+    const std::optional<std::string>& value) {
+  if (!value.has_value()) {
+    return std::nullopt;
+  }
+
+  try {
+    const double parsed_value = std::stod(*value);
+    return parsed_value >= 0.0 ? std::optional<double>(parsed_value) : std::nullopt;
+  } catch (...) {
+    return std::nullopt;
+  }
+}
+
+[[nodiscard]] LlmUsageTelemetrySummary summarize_llm_usage_telemetry(
+    const std::vector<std::string>& diagnostics) {
+  return LlmUsageTelemetrySummary{
+      .prompt_tokens = parse_optional_uint32(
+          find_latest_prefixed_diagnostic_value(diagnostics,
+                                                "llm_usage.prompt_tokens:")),
+      .completion_tokens = parse_optional_uint32(
+          find_latest_prefixed_diagnostic_value(diagnostics,
+                                                "llm_usage.completion_tokens:")),
+      .total_cost = parse_optional_double(
+          find_latest_prefixed_diagnostic_value(diagnostics,
+                                                "llm_usage.total_cost:")),
+      .finish_reason = find_latest_prefixed_diagnostic_value(
+          diagnostics, "llm_usage.finish_reason:"),
+  };
+}
+
 void emit_decision_bridge_checkpoint(
   const observability::CognitionTelemetry& telemetry,
     const CognitionStepRequest& request,
@@ -1244,12 +1307,19 @@ void append_bridge_diagnostics(std::vector<std::string>& diagnostics,
   append_unique(diagnostics, bridge_result.diagnostics);
 }
 
-[[nodiscard]] DecisionTelemetryRecord make_completed_record(const ActionDecision& decision) {
+[[nodiscard]] DecisionTelemetryRecord make_completed_record(
+    const ActionDecision& decision,
+    const std::vector<std::string>& diagnostics) {
+  const auto llm_usage = summarize_llm_usage_telemetry(diagnostics);
   return DecisionTelemetryRecord{
       .decision_kind = decision.decision_kind,
       .confidence = decision.confidence,
       .candidate_scores = decision.candidate_scores,
       .selected_node_id = decision.selected_node_id,
+      .prompt_tokens = llm_usage.prompt_tokens,
+      .completion_tokens = llm_usage.completion_tokens,
+      .total_cost = llm_usage.total_cost,
+      .finish_reason = llm_usage.finish_reason,
       .clarification_needed = decision.clarification_needed,
       .clarification_question = decision.clarification_question,
       .response_summary = decision.response_outline.has_value()
@@ -1260,12 +1330,18 @@ void append_bridge_diagnostics(std::vector<std::string>& diagnostics,
 }
 
 [[nodiscard]] DecisionTelemetryRecord make_reflection_record(
-    const contracts::ReflectionDecision& decision) {
+    const contracts::ReflectionDecision& decision,
+    const std::vector<std::string>& diagnostics) {
+  const auto llm_usage = summarize_llm_usage_telemetry(diagnostics);
   return DecisionTelemetryRecord{
       .decision_kind = dasall::cognition::decision::ActionDecisionKind::NoDecision,
       .confidence = 0.0F,
       .candidate_scores = {},
       .selected_node_id = std::nullopt,
+      .prompt_tokens = llm_usage.prompt_tokens,
+      .completion_tokens = llm_usage.completion_tokens,
+      .total_cost = llm_usage.total_cost,
+      .finish_reason = llm_usage.finish_reason,
       .clarification_needed = false,
       .clarification_question = std::nullopt,
       .response_summary = decision.rationale,
@@ -1335,7 +1411,7 @@ class CognitionFacade final : public ICognitionEngine {
     }
 
     if (result.action_decision.has_value()) {
-      const auto record = make_completed_record(*result.action_decision);
+      const auto record = make_completed_record(*result.action_decision, result.diagnostics);
       if (result.action_decision->decision_kind == ActionDecisionKind::AskClarification) {
         ignore_emit_result(
             telemetry_.emit_clarification_requested(telemetry_context, record));
@@ -1385,7 +1461,8 @@ class CognitionFacade final : public ICognitionEngine {
 
     if (result.reflection_decision.has_value()) {
       ignore_emit_result(telemetry_.emit_stage_completed(
-          telemetry_context, make_reflection_record(*result.reflection_decision)));
+      telemetry_context,
+      make_reflection_record(*result.reflection_decision, result.diagnostics)));
     }
 
     return result;
