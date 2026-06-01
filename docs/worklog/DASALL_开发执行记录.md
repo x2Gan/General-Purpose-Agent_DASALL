@@ -1,3 +1,41 @@
+## 记录 #867
+
+- 日期：2026-06-01
+- 阶段：cognition / planner multi-candidate closure
+- 任务：完成 WP-COG-GAP-013 Planner 多候选 + 候选评估（GAP-P2-B / GAP-P2-D）
+- 状态：已完成（Planner 多候选生成、budget+confidence 排序、focused regression 与文档回链已闭合）
+
+### 执行前提
+
+1. [docs/deliverables/COG-EVAL-2026-05-31-cognition子系统落地评估与生产级缺口治理任务规划.md](../deliverables/COG-EVAL-2026-05-31-cognition子系统落地评估与生产级缺口治理任务规划.md) 已将 `WP-COG-GAP-013` 定义为 P2 质量增强任务，并明确要求 Planner 输出 2~3 个候选计划，新增 `PlanCandidateRanker` 按 budget+confidence 排序主候选与备选。
+2. [docs/architecture/DASALL_cognition子系统详细设计.md](../architecture/DASALL_cognition子系统详细设计.md) 与既有 [docs/todos/cognition/deliverables/COG-TODO-015-Planner与PlanGraphBuilder收敛.md](../todos/cognition/deliverables/COG-TODO-015-Planner与PlanGraphBuilder收敛.md) 均要求 `IPlanner::build_plan()` / `replan()` 公共签名保持稳定，且 `PlanGraph` / `ReplanResult` 继续停留在 cognition module-local supporting type；因此本轮必须在不改 shared contracts 和 IPlanner surface 的前提下闭合多候选。
+3. Prompt Engineering Guide 对 Self-Consistency 的总结指出，针对复杂推理场景，采样多条 reasoning paths 并选择最一致输出，通常比单一路径贪心决策更稳；本轮据此把“多候选 + 排序”收敛到 Planner owner 内的 candidate ranker，而不把复选逻辑外推到 Runtime 控制面。
+
+### 改动
+
+1. 新增 [cognition/include/planning/PlanCandidateRanker.h](../cognition/include/planning/PlanCandidateRanker.h) 与 [cognition/src/planning/PlanCandidateRanker.cpp](../cognition/src/planning/PlanCandidateRanker.cpp)，定义 `PlanCandidate`、`RankedPlanCandidates`、`PlanCandidateKind` 与基于 budget pressure / candidate confidence 的排序逻辑。
+2. 更新 [cognition/src/planning/PlanGraphBuilder.h](../cognition/src/planning/PlanGraphBuilder.h) 与 [cognition/src/planning/PlanGraphBuilder.cpp](../cognition/src/planning/PlanGraphBuilder.cpp)，抽出 `build_actionable_plan()`，并在 builder 内生成 canonical / lean / direct-response / clarification fallback 候选图，附带去重逻辑。
+3. 更新 [cognition/src/planning/Planner.h](../cognition/src/planning/Planner.h) 与 [cognition/src/planning/Planner.cpp](../cognition/src/planning/Planner.cpp)，新增 `build_ranked_plan_candidates()` module-local seam，并让既有 `build_plan()` 按预算压力裁成 2~3 候选后继续返回排序后的主候选。
+4. 新增 [tests/unit/cognition/PlannerMultiCandidateRankingTest.cpp](../tests/unit/cognition/PlannerMultiCandidateRankingTest.cpp)，并更新 [tests/unit/cognition/PlannerNodeBudgetTest.cpp](../tests/unit/cognition/PlannerNodeBudgetTest.cpp) 与 [tests/unit/cognition/CMakeLists.txt](../tests/unit/cognition/CMakeLists.txt)，分别固定主候选/备选排序与预算压力下候选数、节点上限交互。
+5. 更新 [cognition/CMakeLists.txt](../cognition/CMakeLists.txt)、[docs/architecture/DASALL_cognition子系统详细设计.md](../architecture/DASALL_cognition子系统详细设计.md) 与 [docs/deliverables/COG-EVAL-2026-05-31-cognition子系统落地评估与生产级缺口治理任务规划.md](../deliverables/COG-EVAL-2026-05-31-cognition子系统落地评估与生产级缺口治理任务规划.md)，把 ranker 源码、public header 与任务 closeout 一并接入构建和治理文档。
+
+### 验证
+
+1. `cmake -S . -B build-ci`
+   - 结果：通过；build-ci 已重新发现 `PlannerMultiCandidateRankingTest` 目标。
+2. `cmake --build build-ci --target dasall_planner_multi_candidate_ranking_unit_test dasall_planner_node_budget_unit_test`
+   - 结果：通过。
+3. `ctest --test-dir build-ci -R "PlannerMultiCandidate|PlannerNodeBudgetTest" --output-on-failure`
+   - 结果：通过；`100% tests passed, 0 tests failed out of 2`。
+4. `cmake --build build-ci --target dasall_planner_plan_graph_unit_test && ctest --test-dir build-ci -R "^PlannerPlanGraphTest$" --output-on-failure`
+   - 结果：通过；`100% tests passed, 0 tests failed out of 1`。
+
+### 结果
+
+1. Planner 现在可以在 cognition owner 内生成并排序 2~3 个候选计划，而不改变 shared contracts、Runtime owner boundary 或 `IPlanner` 公共接口。
+2. 正常预算下 canonical staged plan 保持主候选，lean execution 与 direct-response fallback 作为备选；高预算压力下候选数自动收紧到 2 个，并维持浅层 canonical plan 为主候选。
+3. `WP-COG-GAP-013` 的代码、focused regression、详细设计回链与交付 closeout 已闭合；后续 `WP-COG-GAP-014` 可以直接复用这条 planner candidate seam 做 self-refine 后的 plan 复选。
+
 ## 记录 #866
 
 - 日期：2026-06-01

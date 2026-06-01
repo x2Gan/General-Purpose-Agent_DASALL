@@ -220,6 +220,7 @@ cognition 子系统的实现覆盖度已经很高，当前主要问题不再是 
 4. 后续查漏补缺优先级：从 cognition owner 内部缺口转向 Gate-COG-12 关联的 repo-wide non-cognition blocker，以及更高层 installed/package 证据链闭合。
 5. 2026-06-01 已完成 `WP-COG-GAP-012` 的前置 BLOCK“LLM 子系统支持新的 canonical perception stage”：shared `CompositionStage`、llm prompt pipeline、baseline perception prompt 与五档 profile `model_profile.perception` route 已落盘，并通过 `PromptComposeRequestContractTest`、`PromptSpecReleaseContractTest`、`PromptAssetPackageParseTest`、`PromptRegistrySelectionTest`、`RuntimeProfileCompatibilityTest`；`WP-COG-GAP-012` 当前已从 blocked 转为可执行。
 6. 2026-06-01 已完成 `WP-COG-GAP-012` 主任务本体：`CognitionConfigProjector` / `StagePolicyResolver` 现投影 canonical perception stage 与 `perception.llm_enabled`，`StageSchemaRegistry` / `StageOutputValidator` 已冻结并校验 `cognition.perception.v1`，`CognitionFacade` 以 structured perception + rule perception 双路径收口 clarification / conflict / fallback 语义，并通过 `PerceptionLlmDualPathTest`、`CognitionPerceptionStructuredOutputIntegrationTest`、`CognitionReplayRegressionTest`、`CognitionRuntimeInteractionContractTest` 与 broader regression 复验；`GAP-P2-A` 的 cognition owner 缺口已闭合。
+7. 2026-06-01 已完成 `WP-COG-GAP-013` 主任务本体：Planner 现可在 cognition owner 内生成并排序 2~3 个 plan candidates，`PlanCandidateRanker` 按 budget+confidence 输出主候选与备选，`build_plan()` 继续兼容返回主候选；并通过 `PlannerMultiCandidateRankingTest`、扩展后的 `PlannerNodeBudgetTest` 与相邻 `PlannerPlanGraphTest` focused regression 复验；`GAP-P2-B / GAP-P2-D` 的 planner candidate seam 已闭合。
 
 ## 5. LLM 子系统查漏补缺
 

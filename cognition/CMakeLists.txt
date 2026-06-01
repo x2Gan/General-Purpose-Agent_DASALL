@@ -8,6 +8,7 @@ target_sources(dasall_cognition
     src/observability/CognitionTelemetry.cpp
     src/response/ResponseBuilder.cpp
     src/planning/Planner.cpp
+    src/planning/PlanCandidateRanker.cpp
     src/planning/PlanGraphBuilder.cpp
     src/projection/ActionDecisionStructuredProjector.cpp
     src/projection/PlanGraphStructuredProjector.cpp
@@ -39,6 +40,7 @@ target_sources(dasall_cognition
       include/perception/PerceptionResult.h
       include/plan/PlanGraph.h
       include/plan/ReplanResult.h
+      include/planning/PlanCandidateRanker.h
       include/response/ResponseBuildRequest.h
       include/response/ResponseBuildResult.h
 )

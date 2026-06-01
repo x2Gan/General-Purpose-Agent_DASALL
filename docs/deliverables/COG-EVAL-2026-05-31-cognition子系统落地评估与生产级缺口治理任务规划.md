@@ -532,6 +532,27 @@
   - `ctest --test-dir build-ci -R "PlannerMultiCandidate|PlannerNodeBudgetTest" --output-on-failure`
 - **阻塞 / 解阻**：与 GAP-P0-B 共享 replay 集做收敛评估。
 
+**Closeout（2026-06-01）**
+
+- 状态：已完成（Planner 多候选生成、budget+confidence 排序、focused regression 与设计回链已闭合）。
+- 设计回链：
+  - [docs/architecture/DASALL_cognition子系统详细设计.md](../architecture/DASALL_cognition子系统详细设计.md) 现已把 `PlanCandidate` / `RankedPlanCandidates` / `PlanCandidateRanker` 固定为 cognition owner 内的 module-local supporting types，并明确 `IPlanner::build_plan()` / `replan()` 公共签名保持不变。
+  - Planner 详细设计现已补充“candidate builder + ranker”执行流：actionable 请求生成 canonical / lean / fallback 候选，按 budget+confidence 排序后继续通过既有 `build_plan()` 返回主候选，避免把多候选语义推进 shared contracts。
+- 代码结果：
+  - 新增 [cognition/include/planning/PlanCandidateRanker.h](../../cognition/include/planning/PlanCandidateRanker.h) 与 [cognition/src/planning/PlanCandidateRanker.cpp](../../cognition/src/planning/PlanCandidateRanker.cpp)，定义 `PlanCandidate` / `RankedPlanCandidates` 与 budget+confidence 排序器。
+  - 更新 [cognition/src/planning/PlanGraphBuilder.h](../../cognition/src/planning/PlanGraphBuilder.h) 与 [cognition/src/planning/PlanGraphBuilder.cpp](../../cognition/src/planning/PlanGraphBuilder.cpp)，让 Planner 在既有单图逻辑之上额外生成 canonical / lean / direct-response / clarification fallback 候选，并在 builder 内部去重。
+  - 更新 [cognition/src/planning/Planner.h](../../cognition/src/planning/Planner.h) 与 [cognition/src/planning/Planner.cpp](../../cognition/src/planning/Planner.cpp)，新增 `build_ranked_plan_candidates()` module-local seam，并让 `build_plan()` 继续返回排序后的主候选，保持 façade 与 `IPlanner` 兼容。
+  - 新增 [tests/unit/cognition/PlannerMultiCandidateRankingTest.cpp](../../tests/unit/cognition/PlannerMultiCandidateRankingTest.cpp)，并更新 [tests/unit/cognition/PlannerNodeBudgetTest.cpp](../../tests/unit/cognition/PlannerNodeBudgetTest.cpp)、[tests/unit/cognition/CMakeLists.txt](../../tests/unit/cognition/CMakeLists.txt) 与 [cognition/CMakeLists.txt](../../cognition/CMakeLists.txt)，固定候选排序、预算收紧后 2~3 候选输出与 focused build 入口。
+- 验证结果：
+  - `cmake -S . -B build-ci`：通过；新测试目标已进入 build-ci。
+  - `cmake --build build-ci --target dasall_planner_multi_candidate_ranking_unit_test dasall_planner_node_budget_unit_test`：通过。
+  - `ctest --test-dir build-ci -R "PlannerMultiCandidate|PlannerNodeBudgetTest" --output-on-failure`：通过；`100% tests passed, 0 tests failed out of 2`。
+  - `cmake --build build-ci --target dasall_planner_plan_graph_unit_test && ctest --test-dir build-ci -R "^PlannerPlanGraphTest$" --output-on-failure`：通过；`100% tests passed, 0 tests failed out of 1`。
+- 结果：
+  - Planner 现在能够在 cognition owner 内生成并排序 2~3 个 plan candidates，而不改 shared contracts、Runtime 边界或 `IPlanner` 公开签名。
+  - 正常预算下保留 canonical / lean / direct-response 三个候选并以 canonical 为主候选；高预算压力下候选数自动收紧为 2，并保持浅层 canonical plan 为主候选、direct-response 为备选。
+  - `WP-COG-GAP-013` 的代码、focused regression 与交付 closeout 已闭合；后续 `WP-COG-GAP-014` 可直接复用这条 planner candidate seam 做 reflection self-refine 后的 plan 复选。
+
 #### WP-COG-GAP-014 Reflection 多轮 self-refine（GAP-P2-C）
 
 - **代码目标**

@@ -139,6 +139,12 @@ dasall_add_cognition_unit_test(
 )
 
 dasall_add_cognition_unit_test(
+	dasall_planner_multi_candidate_ranking_unit_test
+	PlannerMultiCandidateRankingTest.cpp
+	PlannerMultiCandidateRankingTest
+)
+
+dasall_add_cognition_unit_test(
 	dasall_reasoner_action_decision_unit_test
 	ReasonerActionDecisionTest.cpp
 	ReasonerActionDecisionTest
@@ -545,6 +551,11 @@ target_include_directories(dasall_planner_replan_unit_test
 )
 
 target_include_directories(dasall_planner_node_budget_unit_test
+	PRIVATE
+		${CMAKE_SOURCE_DIR}/cognition/src
+)
+
+target_include_directories(dasall_planner_multi_candidate_ranking_unit_test
 	PRIVATE
 		${CMAKE_SOURCE_DIR}/cognition/src
 )

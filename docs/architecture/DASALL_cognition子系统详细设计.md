@@ -384,6 +384,7 @@ flowchart TD
 | ResponseBuildRequest / ResponseBuildResult | cognition 公共接口面 | 终态结果构造输入输出 | 只服务 cognition 终态输出路径 |
 | PerceptionResult | 模块内类型 | 感知阶段结构化结果 | 属于阶段内部对象，不是跨模块稳定交接对象 |
 | PlanGraph / PlanNode / ReplanResult | 模块内公共类型 | 规划与重规划支撑对象 | InterfaceCatalog 明确仍处于 AwaitingSupportingContracts |
+| PlanCandidate / RankedPlanCandidates / PlanCandidateRanker | 模块内公共/私有混合支撑类型 | Planner 多候选生成、budget+confidence 排序与主候选/备选收敛 | 只留在 cognition/include 与 cognition/src，不进入 shared contracts |
 | ActionDecision | 模块内公共类型 | 认知动作意图对象 | 当前共享契约只有 ActionDecisionTag，没有字段表 |
 | BeliefUpdateHint | 模块内公共类型 | cognition 到 runtime、memory 的写回提示 | 共享 BeliefState 补丁语义尚未冻结 |
 | StageModelHint | 模块内类型 | 对 llm 的复杂度、SLA、推理深度提示 | 只对 cognition 与 llm 的组合面有意义 |
@@ -396,6 +397,7 @@ flowchart TD
 | PlanGraph | plan_id、revision、nodes、edges、open_questions、plan_rationale、estimated_complexity | 只表达语义计划，不含 runtime retry/backoff |
 | PlanNode | node_id、objective、success_signal、action_kind_hint、depends_on、evidence_refs | 不写 deadline、lease、worker runtime state |
 | ReplanResult | new_plan、replaced_node_ids、replan_reason、confidence | 不写 recovery counters |
+| PlanCandidate | plan_graph、candidate_kind、confidence、budget_fit、ranking_score | 只在 cognition owner 内表达候选计划评估，不外推到 shared contracts |
 | ActionDecision | decision_kind、selected_node_id、rationale、confidence、clarification_needed、clarification_question、tool_intent_hint、delegate_hint、response_outline、diagnostics | 不直接等于 ToolRequest，不包含 provider/tool execution 细节；`diagnostics` 只承载 cognition owner 内的低基数审计标记，例如 `budget_pressure_decision_path:*` |
 | BeliefUpdateHint | confirmed_facts_delta、hypotheses_delta、assumptions_delta、evidence_refs_delta、confidence_hint、merge_mode | 只做建议，不自己写 memory |
 
@@ -827,11 +829,11 @@ sequenceDiagram
 
 1. 职责：把 GoalContract、PerceptionResult、BeliefState、ContextPacket 收敛为可执行的 PlanGraph，并在 Observation 失败或假设被推翻时输出 ReplanResult。
 2. 非职责边界：不执行工具或 workflow；不持有 Runtime budget 裁定；不直接面向用户发起澄清；不生成 ToolRequest；不承担恢复执行控制。
-3. 核心数据定义：围绕 PlanningRequest、ReplanRequest、PlanGraph、PlanNode、ReplanResult、OpenQuestionSet 建模；PlanGraph 至少包含 plan_id、revision、nodes、edges、open_questions、plan_rationale、estimated_complexity，且必须满足无环、节点上限与深度上限约束。
-4. 公共/内部接口：公共面保持 IPlanner::build_plan() 与 IPlanner::replan()；内部建议拆为 derive_plan_mode()、build_direct_response_plan()、expand_goal_into_nodes()、validate_plan_graph()、merge_observation_into_replan()、compress_plan_when_budget_tight()。
-5. 关键执行流：先根据 PerceptionResult 判断是否存在必须先澄清的 open questions；若任务可直接收敛，则生成单节点的终态计划；否则按 GoalContract 成功判据和 BeliefState 事实分解出步骤节点与依赖关系，并为每个节点标注 success_signal、action_kind_hint、evidence_refs；replan 时保持 plan_id 不变、revision 递增，并明确 replaced_node_ids 与 replan_reason。
-6. 失败与降级语义：若图校验失败、超过 max_plan_nodes/max_plan_depth 或关键前提无法成立，则返回 cognition.plan_build_failed；预算紧张时允许把多节点压缩为浅层计划，但不得生成无 success_signal 或无依赖闭环的伪计划；需要澄清时优先回到 open_questions，而不是强行产出完整 DAG。
-7. 测试与验收出口：建议单测为 tests/unit/cognition/PlannerPlanGraphTest.cpp、tests/unit/cognition/PlannerReplanTest.cpp、tests/unit/cognition/PlannerNodeBudgetTest.cpp；建议验收命令为 ctest --test-dir build-ci -R "Planner(PlanGraph|Replan|NodeBudget)Test" --output-on-failure。
+3. 核心数据定义：围绕 PlanningRequest、ReplanRequest、PlanGraph、PlanNode、ReplanResult、PlanCandidate、RankedPlanCandidates、OpenQuestionSet 建模；PlanGraph 至少包含 plan_id、revision、nodes、edges、open_questions、plan_rationale、estimated_complexity，且必须满足无环、节点上限与深度上限约束；PlanCandidate 只在 cognition owner 内表达候选图的 confidence、budget_fit 与 ranking_score。
+4. 公共/内部接口：公共面保持 IPlanner::build_plan() 与 IPlanner::replan() 不变；内部建议在 PlanGraphBuilder 侧补 build_plan_candidates()，并由 PlanCandidateRanker 按 budget+confidence 对 2~3 个候选做排序，输出主候选 + 备选；同时保留 derive_plan_mode()、build_direct_response_plan()、expand_goal_into_nodes()、validate_plan_graph()、merge_observation_into_replan()、compress_plan_when_budget_tight()。
+5. 关键执行流：先根据 PerceptionResult 判断是否存在必须先澄清的 open questions；若任务可直接收敛，则生成单节点的终态计划；否则按 GoalContract 成功判据和 BeliefState 事实分解出步骤节点与依赖关系，并为每个节点标注 success_signal、action_kind_hint、evidence_refs；在 actionable 路径上，Planner 还要额外生成 lean / fallback 等 2~3 个候选计划，由 PlanCandidateRanker 根据 budget pressure 与候选 confidence 排序，继续通过既有 `build_plan()` 返回主候选，以避免改变 IPlanner surface；replan 时保持 plan_id 不变、revision 递增，并明确 replaced_node_ids 与 replan_reason。
+6. 失败与降级语义：若图校验失败、超过 max_plan_nodes/max_plan_depth 或关键前提无法成立，则返回 cognition.plan_build_failed；预算紧张时允许把多节点压缩为浅层计划，并把候选数自动收紧到 2 个，但不得生成无 success_signal 或无依赖闭环的伪计划；需要澄清时优先回到 open_questions，而不是强行产出完整 DAG。
+7. 测试与验收出口：建议单测为 tests/unit/cognition/PlannerPlanGraphTest.cpp、tests/unit/cognition/PlannerReplanTest.cpp、tests/unit/cognition/PlannerNodeBudgetTest.cpp、tests/unit/cognition/PlannerMultiCandidateRankingTest.cpp；建议验收命令为 ctest --test-dir build-ci -R "PlannerMultiCandidate|PlannerNodeBudgetTest" --output-on-failure。
 
 ##### Reasoner
 

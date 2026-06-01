@@ -80,24 +80,42 @@ using dasall::tests::support::assert_true;
 
 void test_mid_budget_pressure_compresses_plan_to_three_nodes() {
   Planner planner(make_config(6U, 4U));
+  const auto request = make_planning_request(0.65F, false);
 
-  const auto graph = planner.build_plan(make_planning_request(0.65F, false));
+  const auto graph = planner.build_plan(request);
+  const auto ranked_candidates = planner.build_ranked_plan_candidates(request);
 
   assert_equal(3, static_cast<int>(graph.nodes.size()),
                "mid-budget pressure should compress the plan to three nodes");
   assert_true(graph.plan_rationale.find("compressed_for_budget") != std::string::npos,
               "mid-budget compression should be visible in the plan rationale");
+  assert_true(ranked_candidates.primary_candidate.has_value(),
+              "mid-budget planning should still produce a primary candidate");
+  assert_equal(3, static_cast<int>(ranked_candidates.ranked_candidates.size()),
+               "mid-budget planning should retain three ranked candidates");
+  assert_equal(graph.plan_id,
+               ranked_candidates.primary_candidate->plan_graph.plan_id,
+               "build_plan should continue to expose the ranked primary candidate");
 }
 
 void test_high_budget_pressure_clamps_plan_to_shallow_graph() {
   Planner planner(make_config(6U, 4U));
+  const auto request = make_planning_request(0.85F, true);
 
-  const auto graph = planner.build_plan(make_planning_request(0.85F, true));
+  const auto graph = planner.build_plan(request);
+  const auto ranked_candidates = planner.build_ranked_plan_candidates(request);
 
   assert_equal(2, static_cast<int>(graph.nodes.size()),
                "high budget pressure should clamp the plan to two shallow nodes");
   assert_true(graph.estimated_complexity <= 2U,
               "high budget pressure should also clamp the exposed plan complexity");
+  assert_true(ranked_candidates.primary_candidate.has_value(),
+              "high budget pressure should still produce a primary candidate");
+  assert_equal(2, static_cast<int>(ranked_candidates.ranked_candidates.size()),
+               "high budget pressure should shrink the candidate set to two plans");
+  assert_equal(graph.plan_id,
+               ranked_candidates.primary_candidate->plan_graph.plan_id,
+               "build_plan should continue to expose the ranked primary candidate");
 }
 
 }  // namespace

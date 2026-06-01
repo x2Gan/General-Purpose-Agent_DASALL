@@ -309,6 +309,36 @@ void append_unique(std::vector<std::string>& target,
   return merged;
 }
 
+[[nodiscard]] std::string build_candidate_fingerprint(const PlanGraph& graph) {
+  std::ostringstream stream;
+  stream << graph.plan_rationale << '#' << graph.nodes.size() << '#'
+         << graph.open_questions.size() << '#'
+         << graph.estimated_complexity;
+
+  for (const auto& node : graph.nodes) {
+    stream << '|' << node.objective << '@' << node.action_kind_hint << '@'
+           << node.success_signal;
+  }
+
+  for (const auto& question : graph.open_questions) {
+    stream << '?' << question.question << '@' << question.reason;
+  }
+
+  return stream.str();
+}
+
+[[nodiscard]] PlanBuildLimits derive_lean_limits(PlanBuildLimits limits) {
+  if (limits.max_plan_nodes <= 2U) {
+    limits.degraded_mode = true;
+    return limits;
+  }
+
+  limits.max_plan_nodes = std::min<std::uint32_t>(3U, limits.max_plan_nodes - 1U);
+  limits.max_plan_depth = std::min(limits.max_plan_depth, limits.max_plan_nodes);
+  limits.degraded_mode = true;
+  return limits;
+}
+
 [[nodiscard]] std::string derive_replan_reason(const ReplanRequest& request) {
   if (request.latest_observation.error.has_value() &&
       !request.latest_observation.error->details.message.empty()) {
@@ -449,6 +479,29 @@ PlanGraph PlanGraphBuilder::build_direct_response_plan(
   graph.plan_rationale =
       "perception indicates the goal can converge with a direct response";
   graph.estimated_complexity = 1U;
+  return graph;
+}
+
+PlanGraph PlanGraphBuilder::build_actionable_plan(
+    const PlanningRequest& request,
+    const PlanBuildLimits& limits) const {
+  PlanGraph graph;
+  graph.plan_id = make_plan_id(request.request_id);
+  graph.revision = 1U;
+  graph.nodes = expand_goal_into_nodes(request);
+  graph.edges = build_edges_from_nodes(graph.nodes);
+  graph.plan_rationale = limits.degraded_mode
+                             ? "planner built a shallow plan under budget pressure"
+                             : "planner expanded the goal into a staged execution graph";
+  graph.estimated_complexity = static_cast<std::uint32_t>(graph.nodes.size());
+  graph = compress_plan_when_budget_tight(std::move(graph), limits);
+
+  if (!validate_plan_graph(graph, limits)) {
+    auto fallback = build_direct_response_plan(request, limits);
+    fallback.edges = build_edges_from_nodes(fallback.nodes);
+    return fallback;
+  }
+
   return graph;
 }
 
@@ -593,6 +646,66 @@ bool PlanGraphBuilder::validate_plan_graph(const PlanGraph& graph,
   return graph.estimated_complexity > 0U;
 }
 
+std::vector<PlanCandidate> PlanGraphBuilder::build_plan_candidates(
+    const PlanningRequest& request) const {
+  const auto limits = derive_limits(request.budget_context);
+  std::vector<PlanCandidate> candidates;
+  std::unordered_set<std::string> fingerprints;
+
+  const auto append_candidate = [&](PlanCandidateKind kind, PlanGraph graph) {
+    if (graph.nodes.empty() && graph.open_questions.empty()) {
+      return;
+    }
+
+    const auto fingerprint = build_candidate_fingerprint(graph);
+    if (!fingerprints.insert(fingerprint).second) {
+      return;
+    }
+
+    candidates.push_back(PlanCandidate{.plan_graph = std::move(graph),
+                                       .candidate_kind = kind});
+  };
+
+  if (request.perception_result.requires_clarification ||
+      !request.perception_result.clarification_questions.empty()) {
+    append_candidate(PlanCandidateKind::ClarificationFallback,
+                     build_clarification_plan(request, limits));
+
+    auto direct_response = build_direct_response_plan(request, limits);
+    direct_response.edges = build_edges_from_nodes(direct_response.nodes);
+    append_candidate(PlanCandidateKind::DirectResponseFallback,
+                     std::move(direct_response));
+    return candidates;
+  }
+
+  if (request.perception_result.task_type == "direct_response") {
+    auto direct_response = build_direct_response_plan(request, limits);
+    direct_response.edges = build_edges_from_nodes(direct_response.nodes);
+    append_candidate(PlanCandidateKind::Canonical, std::move(direct_response));
+    append_candidate(PlanCandidateKind::LeanExecution,
+                     build_actionable_plan(request, derive_lean_limits(limits)));
+    return candidates;
+  }
+
+  append_candidate(PlanCandidateKind::Canonical,
+                   build_actionable_plan(request, limits));
+  append_candidate(PlanCandidateKind::LeanExecution,
+                   build_actionable_plan(request, derive_lean_limits(limits)));
+
+  auto direct_response = build_direct_response_plan(request, limits);
+  direct_response.edges = build_edges_from_nodes(direct_response.nodes);
+  append_candidate(PlanCandidateKind::DirectResponseFallback,
+                   std::move(direct_response));
+
+  if (request.perception_result.confidence < 0.55F ||
+      !request.perception_result.ambiguities.empty()) {
+    append_candidate(PlanCandidateKind::ClarificationFallback,
+                     build_clarification_plan(request, limits));
+  }
+
+  return candidates;
+}
+
 PlanGraph PlanGraphBuilder::build_plan_graph(const PlanningRequest& request) const {
   const auto limits = derive_limits(request.budget_context);
   if (request.perception_result.requires_clarification ||
@@ -610,24 +723,7 @@ PlanGraph PlanGraphBuilder::build_plan_graph(const PlanningRequest& request) con
     return graph;
   }
 
-  PlanGraph graph;
-  graph.plan_id = make_plan_id(request.request_id);
-  graph.revision = 1U;
-  graph.nodes = expand_goal_into_nodes(request);
-  graph.edges = build_edges_from_nodes(graph.nodes);
-  graph.plan_rationale = limits.degraded_mode
-                             ? "planner built a shallow plan under budget pressure"
-                             : "planner expanded the goal into a staged execution graph";
-  graph.estimated_complexity = static_cast<std::uint32_t>(graph.nodes.size());
-  graph = compress_plan_when_budget_tight(std::move(graph), limits);
-
-  if (!validate_plan_graph(graph, limits)) {
-    auto fallback = build_direct_response_plan(request, limits);
-    fallback.edges = build_edges_from_nodes(fallback.nodes);
-    return fallback;
-  }
-
-  return graph;
+  return build_actionable_plan(request, limits);
 }
 
 ReplanResult PlanGraphBuilder::build_replan_graph(
