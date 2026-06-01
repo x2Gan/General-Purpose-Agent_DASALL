@@ -106,6 +106,7 @@ class LLMManager final : public ILLMManager {
   [[nodiscard]] LLMManagerResult generate(const LLMGenerateRequest& request) override;
   [[nodiscard]] LLMManagerResult stream_generate(const LLMGenerateRequest& request,
                                                  IStreamObserver* observer) override;
+  [[nodiscard]] bool abandon_call(std::string_view llm_call_id) override;
   [[nodiscard]] HealthStatus health_check() const override;
 
   [[nodiscard]] bool is_initialized() const;

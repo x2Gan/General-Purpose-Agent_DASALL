@@ -703,6 +703,7 @@ public:
 1. 消费 Runtime handoff，其中 `LLMGenerateRequest.request.model_route` 是 required pre-route hint，`prompt_release_id_override` 是可选显式 selector。
 2. 负责 PromptPipeline 编排、route 解析、fallback、health 选择、adapter 调用和失败映射。
 3. 返回可被 Runtime 直接判定成功/失败的结果，不吞错；若 PromptPolicy 产生 `OverBudget`/`RequireRecompose`，则必须通过 `LLMManagerResult.governance_disposition + ErrorInfo.safe_to_replan` 原样回流 Runtime。
+4. 需要提供 `abandon_call(llm_call_id)` 作为 best-effort 的显式取消入口，供 cognition/runtime 在本地 deadline 触发后通知 llm owner 放弃该调用；该入口必须快速返回，不等待 provider cleanup 完成。
 
 ```cpp
 class ILLMManager {
@@ -712,6 +713,7 @@ public:
   virtual LLMManagerResult generate(const LLMGenerateRequest& request) = 0;
   virtual LLMManagerResult stream_generate(const LLMGenerateRequest& request,
                                            IStreamObserver* observer) = 0;
+  virtual bool abandon_call(std::string_view llm_call_id) = 0;
   virtual HealthStatus health_check() const = 0;
 };
 ```
@@ -1801,8 +1803,9 @@ LLMManager 当前更接近编排组件，而不是复杂状态机 owner，因此
 5. ownership 冻结为三段：Runtime owns request intent 与 observer lifetime；llm owns session registry entry 与 terminal state；adapter owns provider stream cursor。`IStreamObserver*` 不得被 registry 持久拥有，只能在 active callback 窗口内使用。
 6. backpressure 冻结为 fail-closed：全局 active stream session 有上限，超过上限拒绝新 session；每个 session 的 pending delta buffer 有上限，超过上限关闭该 session 并上报 overflow，不允许无界缓存。
 7. cancel 必须显式通知 adapter transport，并转换到 `CancelRequested` / `Cancelled`；不允许通过 detach thread、析构副作用或 observer 丢失来表达取消。
-8. 当前自动化 guard 由三部分组成：`StreamSessionLifecycleTest` 覆盖 registry cancel/overflow fail-closed 与 OpenAI-compatible SSE/observer 生命周期；`LLMStreamingIntegrationTest` 覆盖 manager -> route -> adapter stream -> normalize/usage 收口；`CognitionLlmBridgeErrorMappingTest` 覆盖 streaming preference 的失败投影。
-9. 实现成熟度更新为“architecture compatible / module-local implementation ready / shared admission not ready”：llm 内部已具备 controlled streaming，但 shared `StreamHandle` 仍未 admission，不应把当前能力误表述为跨模块 shared stream-ready。
+8. `ILLMManager::abandon_call(llm_call_id)` 现在作为 llm 的 best-effort abandon seam：优先按 `llm_call_id` 或可推导的 session id 请求取消，但若底层仍是同步 unary transport，则该调用允许退化为快速 no-op，真正的 late result 仍由上游 owner 丢弃。
+9. 当前自动化 guard 由四部分组成：`StreamSessionLifecycleTest` 覆盖 registry cancel/overflow fail-closed 与 OpenAI-compatible SSE/observer 生命周期；`LLMStreamingIntegrationTest` 覆盖 manager -> route -> adapter stream -> normalize/usage 收口；`CognitionLlmBridgeErrorMappingTest` 覆盖 streaming preference 的失败投影；`CognitionFacadeDeadlineCancelPropagationTest` 覆盖 cognition deadline -> llm abandon_call 的传播与非阻塞语义。
+10. 实现成熟度更新为“architecture compatible / module-local implementation ready / shared admission not ready”：llm 内部已具备 controlled streaming，但 shared `StreamHandle` 仍未 admission，不应把当前能力误表述为跨模块 shared stream-ready。
 
 #### 7.2.2 LLM-TODO-037 shared supporting object admission 评审结论
 

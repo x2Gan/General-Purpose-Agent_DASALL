@@ -1,3 +1,41 @@
+## 记录 #861
+
+- 日期：2026-06-01
+- 阶段：cognition / deadline cancel propagation closure
+- 任务：完成 WP-COG-GAP-008 deadline 触发时 LLM cancel 通道
+- 状态：已完成（llm abandon SPI、cognition timeout propagation 与 focused regression 已闭合）
+
+### 执行前提
+
+1. [docs/deliverables/COG-EVAL-2026-05-31-cognition子系统落地评估与生产级缺口治理任务规划.md](../deliverables/COG-EVAL-2026-05-31-cognition子系统落地评估与生产级缺口治理任务规划.md) 将 `WP-COG-GAP-008` 定义为 P1 稳定性缺口：需要在 cognition deadline 触发时向 llm 子系统显式发送一次 cancel/abandon 信号，而不是仅在门面层 detach 等待线程。
+2. [docs/architecture/DASALL_cognition子系统详细设计.md](../architecture/DASALL_cognition子系统详细设计.md) 与 [docs/architecture/DASALL_llm子系统详细设计.md](../architecture/DASALL_llm子系统详细设计.md) 的 owner 边界要求 cognition 只能通过 `ILLMManager` 公开接口向 llm 发出放弃信号，不能直接侵入 adapter/transport 生命周期 owner。
+3. MDN `AbortController` 说明 abort 应是显式的异步取消通道，可用于中止 request、response body consumption 与 streams；本轮据此把 `abandon_call(...)` 设计为 best-effort 且快速返回的 signal，而不是阻塞等待 cleanup 完成。
+
+### 改动
+
+1. 更新 [llm/include/ILLMManager.h](../llm/include/ILLMManager.h)、[llm/src/LLMManager.h](../llm/src/LLMManager.h) 与 [llm/src/LLMManager.cpp](../llm/src/LLMManager.cpp)，新增 `abandon_call(std::string_view llm_call_id)` SPI；当前实现优先按 `llm_call_id` 或带 route 前缀的 session id 向 `StreamSessionRegistry` 发起 best-effort cancel，未命中则快速返回 false。
+2. 更新 [cognition/src/llm/CognitionLlmBridge.h](../cognition/src/llm/CognitionLlmBridge.h)、[cognition/src/llm/CognitionLlmBridge.cpp](../cognition/src/llm/CognitionLlmBridge.cpp) 与 [cognition/src/CognitionFacade.cpp](../cognition/src/CognitionFacade.cpp)，让 bridge 暴露 `abandon_call(...)`，并让 `run_stage_with_deadline(...)` 在 llm bridge 超时时异步触发 abandon，保证 timeout 返回路径不等待取消完成。
+3. 更新 [tests/mocks/include/MockLLMManager.h](../tests/mocks/include/MockLLMManager.h)、[tests/unit/llm/InterfaceSurfaceTest.cpp](../tests/unit/llm/InterfaceSurfaceTest.cpp)、[apps/runtime_support/src/RuntimeLiveDependencyComposition.cpp](../apps/runtime_support/src/RuntimeLiveDependencyComposition.cpp) 与 [tests/unit/cognition/CMakeLists.txt](../tests/unit/cognition/CMakeLists.txt)，补齐新 SPI 的 mock / interface surface / scripted runtime-support manager / test registration。
+4. 新增 [tests/unit/cognition/CognitionFacadeDeadlineCancelPropagationTest.cpp](../tests/unit/cognition/CognitionFacadeDeadlineCancelPropagationTest.cpp)，固定 planning stage timeout 时的 `abandon_call` 传播与 non-blocking 语义。
+5. 更新 [docs/architecture/DASALL_llm子系统详细设计.md](../architecture/DASALL_llm子系统详细设计.md)、[docs/architecture/DASALL_cognition子系统详细设计.md](../architecture/DASALL_cognition子系统详细设计.md) 与 [docs/deliverables/COG-EVAL-2026-05-31-cognition子系统落地评估与生产级缺口治理任务规划.md](../deliverables/COG-EVAL-2026-05-31-cognition子系统落地评估与生产级缺口治理任务规划.md)，回写 abandon SPI、deadline->abandon 语义和 closeout 证据。
+
+### 验证
+
+1. `Build_CMakeTools(buildTargets=["dasall_cognition_facade_stage_timeout_unit_test"])`
+   - 结果：通过，并触发 CMake reconfigure，把新增 cognition 单测接入测试发现。
+2. `Build_CMakeTools(buildTargets=["dasall_cognition_facade_deadline_cancel_propagation_unit_test","dasall_llm_interface_surface_unit_test"])`
+   - 结果：通过。
+3. `RunCtest_CMakeTools(tests=["CognitionFacadeDeadlineCancelPropagationTest","LLMInterfaceSurfaceTest"])`
+   - 结果：通过；`100% tests passed, 0 tests failed out of 2`。
+4. `Build_CMakeTools(buildTargets=["dasall_apps_runtime_support"])`
+   - 结果：通过；`ninja: no work to do.`。
+
+### 结果
+
+1. cognition 现在会在 llm bridge deadline 触发后显式发出一次 `abandon_call(llm_call_id)`，不再只是本地 timeout 后静默 detach。
+2. timeout 路径保持 non-blocking：即使 abandon handler 自身更慢，门面仍会按 deadline 快速返回 `cognition.stage_timeout`。
+3. 当前实现对同步 unary provider 仍是 best-effort abandon seam，而非 transport-level guaranteed cancel；late result 继续由 cognition 门面丢弃，不倒灌到下一轮请求。
+
 ## 记录 #860
 
 - 日期：2026-06-01

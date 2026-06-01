@@ -353,6 +353,27 @@
   - `ctest --test-dir build-ci -R "CognitionFacadeDeadlineCancelPropagationTest" --output-on-failure`
 - **阻塞 / 解阻**：依赖 LLM 子系统接口扩展（先冻结 LLM 侧 API）。
 
+**Closeout（2026-06-01）**
+
+- 状态：已完成（llm abandon SPI、cognition deadline cancel propagation 与 focused regression 已闭合）。
+- 设计回链：
+  - [docs/architecture/DASALL_llm子系统详细设计.md](../architecture/DASALL_llm子系统详细设计.md) 现已把 `ILLMManager::abandon_call(llm_call_id)` 冻结为 best-effort 的显式取消入口，要求快速返回且不等待 provider cleanup。
+  - [docs/architecture/DASALL_cognition子系统详细设计.md](../architecture/DASALL_cognition子系统详细设计.md) 已补 `CognitionLlmBridge::abandon_call(...)` 与门面层 `deadline -> abandon_call` 的异步传播语义，明确 timeout 返回不等于 provider 已完成取消。
+  - 外部参考：MDN `AbortController` 明确取消信号应作为显式异步 abort 通道，可用于 request、response body consumption 与 streams；本轮据此保持 cognition timeout 路径“发信号但不等待 cleanup”语义。
+- 代码结果：
+  - 更新 [llm/include/ILLMManager.h](../../llm/include/ILLMManager.h)、[llm/src/LLMManager.h](../../llm/src/LLMManager.h) 与 [llm/src/LLMManager.cpp](../../llm/src/LLMManager.cpp)，新增 `abandon_call(std::string_view llm_call_id)`；当前实现优先按 `llm_call_id` 或可推导的 `session_id` 向 `StreamSessionRegistry` 发起 best-effort cancel，未命中时快速返回 false。
+  - 更新 [cognition/src/llm/CognitionLlmBridge.h](../../cognition/src/llm/CognitionLlmBridge.h)、[cognition/src/llm/CognitionLlmBridge.cpp](../../cognition/src/llm/CognitionLlmBridge.cpp) 与 [cognition/src/CognitionFacade.cpp](../../cognition/src/CognitionFacade.cpp)，让 bridge 暴露 `abandon_call(...)`，并让 `run_stage_with_deadline` 在 llm bridge 超时时异步触发一次 abandon，而不阻塞 timeout 返回路径。
+  - 更新 [tests/mocks/include/MockLLMManager.h](../../tests/mocks/include/MockLLMManager.h)、[tests/unit/llm/InterfaceSurfaceTest.cpp](../../tests/unit/llm/InterfaceSurfaceTest.cpp)、[apps/runtime_support/src/RuntimeLiveDependencyComposition.cpp](../../apps/runtime_support/src/RuntimeLiveDependencyComposition.cpp) 与 [tests/unit/cognition/CMakeLists.txt](../../tests/unit/cognition/CMakeLists.txt)，补齐新 SPI 的 mock / surface / scripted manager / test registration。
+  - 新增 [tests/unit/cognition/CognitionFacadeDeadlineCancelPropagationTest.cpp](../../tests/unit/cognition/CognitionFacadeDeadlineCancelPropagationTest.cpp)，固定 timeout 触发 `abandon_call` 且不等待 abandon 完成的回归。
+- 验证结果：
+  - `Build_CMakeTools(buildTargets=["dasall_cognition_facade_deadline_cancel_propagation_unit_test","dasall_llm_interface_surface_unit_test"])`：通过。
+  - `RunCtest_CMakeTools(tests=["CognitionFacadeDeadlineCancelPropagationTest","LLMInterfaceSurfaceTest"])`：通过；`100% tests passed, 0 tests failed out of 2`。
+  - `Build_CMakeTools(buildTargets=["dasall_apps_runtime_support"])`：通过；`ninja: no work to do.`。
+- 结果：
+  - cognition 现在在 llm bridge deadline 触发后会显式发出一次 abandon 信号，而不是仅仅 detach 本地等待线程。
+  - cancel 传播路径保持 non-blocking；即使底层 abandon 需要更久完成，timeout 返回仍不会被拖住。
+  - 对仍不可中断的同步 unary provider，`abandon_call(...)` 当前仍是 best-effort seam，不把“已发取消”误表述为“provider 已停止计费/生成”。
+
 #### WP-COG-GAP-009 Reasoner 权重外置（GAP-P1-D）
 
 - **代码目标**

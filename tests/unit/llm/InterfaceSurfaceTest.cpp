@@ -271,6 +271,8 @@ void test_illm_manager_surface_freezes_spi_signatures() {
                  LLMManagerResult (ILLMManager::*)(const LLMGenerateRequest&)>);
   static_assert(std::is_same_v<decltype(&ILLMManager::stream_generate),
                  LLMManagerResult (ILLMManager::*)(const LLMGenerateRequest&, IStreamObserver*)>);
+  static_assert(std::is_same_v<decltype(&ILLMManager::abandon_call),
+                 bool (ILLMManager::*)(std::string_view)>);
   static_assert(std::is_same_v<decltype(&ILLMManager::health_check),
                  HealthStatus (ILLMManager::*)() const>);
   static_assert(std::is_abstract_v<ILLMManager>);

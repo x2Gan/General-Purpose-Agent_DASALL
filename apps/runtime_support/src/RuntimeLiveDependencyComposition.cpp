@@ -1389,6 +1389,10 @@ class ScriptedCognitionFirstLLMManager final : public llm::ILLMManager {
     return generate(request);
   }
 
+  bool abandon_call(std::string_view llm_call_id) override {
+    return !llm_call_id.empty();
+  }
+
   llm::HealthStatus health_check() const override {
     return llm::HealthStatus{
         .ready = true,

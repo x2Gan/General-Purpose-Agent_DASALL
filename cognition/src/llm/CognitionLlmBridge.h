@@ -4,6 +4,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "CognitionTypes.h"
@@ -75,6 +76,7 @@ class CognitionLlmBridge {
   explicit CognitionLlmBridge(std::shared_ptr<dasall::llm::ILLMManager> llm_manager);
 
   [[nodiscard]] StageLlmCallResult invoke_stage(const StageLlmCallRequest& request) const;
+  [[nodiscard]] bool abandon_call(std::string_view llm_call_id) const;
   [[nodiscard]] dasall::llm::LLMGenerateRequest build_llm_request(
       const StageLlmCallRequest& request) const;
   [[nodiscard]] StageBudgetHint derive_budget_hint(const StageLlmCallRequest& request) const;

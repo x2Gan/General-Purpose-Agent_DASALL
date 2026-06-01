@@ -54,7 +54,9 @@ struct TimedStageResult {
 };
 
 template <typename Fn>
-[[nodiscard]] auto run_stage_with_deadline(std::uint32_t deadline_ms, Fn&& fn)
+[[nodiscard]] auto run_stage_with_deadline(std::uint32_t deadline_ms,
+                       Fn&& fn,
+                       std::function<void()> on_timeout = {})
     -> TimedStageResult<std::invoke_result_t<Fn>> {
   using ReturnType = std::invoke_result_t<Fn>;
   const auto started_at = std::chrono::steady_clock::now();
@@ -107,6 +109,16 @@ template <typename Fn>
 
   if (worker.joinable()) {
     worker.detach();
+  }
+
+  if (on_timeout) {
+    std::thread timeout_notifier([on_timeout = std::move(on_timeout)]() mutable {
+      try {
+        on_timeout();
+      } catch (...) {
+      }
+    });
+    timeout_notifier.detach();
   }
 
   return TimedStageResult<ReturnType>{
@@ -2408,11 +2420,17 @@ class CognitionFacade final : public ICognitionEngine {
                                  : std::string{},
         .allow_plain_text_fallback = !requires_structured_output,
     };
+    const auto bridge_llm_call_id = bridge_request.llm_call_id;
 
     const auto bridge_result = run_stage_with_deadline(
         bridge_request.model_hint.deadline_ms,
         [llm_bridge = llm_bridge_, bridge_request]() mutable {
           return llm_bridge->invoke_stage(bridge_request);
+        },
+        [llm_bridge = llm_bridge_, bridge_llm_call_id]() {
+          if (llm_bridge != nullptr && !bridge_llm_call_id.empty()) {
+            static_cast<void>(llm_bridge->abandon_call(bridge_llm_call_id));
+          }
         });
     if (bridge_result.timed_out) {
       const auto timeout_error = make_stage_timeout_error_info(
@@ -2560,11 +2578,17 @@ class CognitionFacade final : public ICognitionEngine {
       .output_schema_ref = "schema://cognition/reflection/v1",
         .allow_plain_text_fallback = false,
     };
+    const auto bridge_llm_call_id = bridge_request.llm_call_id;
 
     const auto bridge_result = run_stage_with_deadline(
         bridge_request.model_hint.deadline_ms,
         [llm_bridge = llm_bridge_, bridge_request]() mutable {
           return llm_bridge->invoke_stage(bridge_request);
+        },
+        [llm_bridge = llm_bridge_, bridge_llm_call_id]() {
+          if (llm_bridge != nullptr && !bridge_llm_call_id.empty()) {
+            static_cast<void>(llm_bridge->abandon_call(bridge_llm_call_id));
+          }
         });
     if (bridge_result.timed_out) {
       const auto timeout_error = make_stage_timeout_error_info(

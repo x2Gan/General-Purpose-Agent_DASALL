@@ -85,6 +85,20 @@ std::uint32_t elapsed_ms_since(const std::chrono::steady_clock::time_point& star
       elapsed_ms, 0, std::numeric_limits<std::uint32_t>::max()));
 }
 
+bool session_matches_call_id(std::string_view session_id, std::string_view llm_call_id) {
+  if (session_id == llm_call_id) {
+    return true;
+  }
+
+  if (session_id.size() <= llm_call_id.size()) {
+    return false;
+  }
+
+  const auto suffix_offset = session_id.size() - llm_call_id.size();
+  return session_id.compare(suffix_offset, llm_call_id.size(), llm_call_id) == 0 &&
+         session_id[suffix_offset - 1U] == ':';
+}
+
 std::string to_lower_copy(std::string value) {
   std::transform(value.begin(), value.end(), value.begin(), [](unsigned char character) {
     return static_cast<char>(std::tolower(character));
@@ -1958,6 +1972,28 @@ bool LLMManager::init(const LLMSubsystemConfig& config) {
   config_ = config;
   initialized_ = true;
   return true;
+}
+
+bool LLMManager::abandon_call(std::string_view llm_call_id) {
+  if (llm_call_id.empty() || stream_session_registry_ == nullptr) {
+    return false;
+  }
+
+  const auto direct_cancel = stream_session_registry_->request_cancel(llm_call_id);
+  if (direct_cancel.ok) {
+    return true;
+  }
+
+  const auto sessions = stream_session_registry_->snapshot();
+  for (const auto& session : sessions) {
+    if (!session_matches_call_id(session.session_id, llm_call_id)) {
+      continue;
+    }
+
+    return stream_session_registry_->request_cancel(session.session_id).ok;
+  }
+
+  return false;
 }
 
 LLMManagerResult LLMManager::generate(const LLMGenerateRequest& request) {

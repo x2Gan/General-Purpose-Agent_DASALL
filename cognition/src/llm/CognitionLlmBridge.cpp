@@ -607,4 +607,12 @@ StageLlmCallResult CognitionLlmBridge::invoke_stage(const StageLlmCallRequest& r
   return normalize_llm_response(request, manager_result);
 }
 
+bool CognitionLlmBridge::abandon_call(std::string_view llm_call_id) const {
+  if (llm_manager_ == nullptr || llm_call_id.empty()) {
+    return false;
+  }
+
+  return llm_manager_->abandon_call(llm_call_id);
+}
+
 }  // namespace dasall::cognition::llm_bridge

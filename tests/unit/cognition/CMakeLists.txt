@@ -90,6 +90,13 @@ dasall_add_cognition_unit_test(
 )
 
 dasall_add_cognition_unit_test(
+	dasall_cognition_facade_deadline_cancel_propagation_unit_test
+	CognitionFacadeDeadlineCancelPropagationTest.cpp
+	CognitionFacadeDeadlineCancelPropagationTest
+)
+
+
+dasall_add_cognition_unit_test(
 	dasall_cognition_facade_degraded_mode_unit_test
 	CognitionFacadeDegradedModeTest.cpp
 	CognitionFacadeDegradedModeTest

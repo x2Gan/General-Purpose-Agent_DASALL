@@ -31,6 +31,7 @@ class MockLLMManager : public dasall::llm::ILLMManager {
   using StreamHandler =
       std::function<dasall::llm::LLMManagerResult(
           const dasall::llm::LLMGenerateRequest&, dasall::llm::IStreamObserver*)>;
+  using AbandonHandler = std::function<bool(std::string_view)>;
   using HealthHandler = std::function<dasall::llm::HealthStatus()>;
 
   static dasall::llm::LLMManagerResult make_success_result(
@@ -154,6 +155,18 @@ class MockLLMManager : public dasall::llm::ILLMManager {
     return generate(request);
   }
 
+  bool abandon_call(std::string_view llm_call_id) override {
+    ++abandon_call_count_;
+    last_abandoned_call_id_ = std::string(llm_call_id);
+    abandoned_call_ids_.emplace_back(llm_call_id);
+
+    if (abandon_handler_) {
+      return abandon_handler_(llm_call_id);
+    }
+
+    return abandon_result_;
+  }
+
   dasall::llm::HealthStatus health_check() const override {
     ++health_check_call_count_;
 
@@ -202,11 +215,22 @@ class MockLLMManager : public dasall::llm::ILLMManager {
   void clear_recorded_requests() {
     last_request_.reset();
     last_stream_request_.reset();
+    last_abandoned_call_id_.reset();
     generate_requests_.clear();
     stream_generate_requests_.clear();
+    abandoned_call_ids_.clear();
   }
 
   void set_stream_handler(StreamHandler handler) { stream_handler_ = std::move(handler); }
+
+  void set_abandon_handler(AbandonHandler handler) {
+    abandon_handler_ = std::move(handler);
+  }
+
+  void set_abandon_result(bool abandon_result) {
+    abandon_result_ = abandon_result;
+    abandon_handler_ = {};
+  }
 
   void set_health_handler(HealthHandler handler) { health_handler_ = std::move(handler); }
 
@@ -224,6 +248,7 @@ class MockLLMManager : public dasall::llm::ILLMManager {
   [[nodiscard]] int stream_generate_call_count() const {
     return stream_generate_call_count_;
   }
+  [[nodiscard]] int abandon_call_count() const { return abandon_call_count_; }
   [[nodiscard]] int health_check_call_count() const {
     return health_check_call_count_;
   }
@@ -248,6 +273,12 @@ class MockLLMManager : public dasall::llm::ILLMManager {
   }
   [[nodiscard]] dasall::llm::IStreamObserver* last_stream_observer() const {
     return last_stream_observer_;
+  }
+  [[nodiscard]] const std::optional<std::string>& last_abandoned_call_id() const {
+    return last_abandoned_call_id_;
+  }
+  [[nodiscard]] const std::vector<std::string>& abandoned_call_ids() const {
+    return abandoned_call_ids_;
   }
 
  private:
@@ -287,16 +318,20 @@ class MockLLMManager : public dasall::llm::ILLMManager {
   InitHandler init_handler_;
   GenerateHandler generate_handler_;
   StreamHandler stream_handler_;
+  AbandonHandler abandon_handler_;
   HealthHandler health_handler_;
   std::optional<dasall::llm::LLMSubsystemConfig> last_init_config_;
   std::optional<dasall::llm::LLMGenerateRequest> last_request_;
   std::optional<dasall::llm::LLMGenerateRequest> last_stream_request_;
+  std::optional<std::string> last_abandoned_call_id_;
   std::vector<dasall::llm::LLMGenerateRequest> generate_requests_;
   std::vector<dasall::llm::LLMGenerateRequest> stream_generate_requests_;
+  std::vector<std::string> abandoned_call_ids_;
   std::optional<dasall::llm::LLMManagerResult> generate_result_;
   std::unordered_map<std::string, dasall::llm::LLMManagerResult> stage_results_;
   dasall::llm::IStreamObserver* last_stream_observer_{nullptr};
   bool init_result_{true};
+  bool abandon_result_{false};
   std::string default_content_;
   dasall::llm::HealthStatus health_status_{
       .ready = true,
@@ -306,6 +341,7 @@ class MockLLMManager : public dasall::llm::ILLMManager {
   int init_call_count_{0};
   int generate_call_count_{0};
   int stream_generate_call_count_{0};
+  int abandon_call_count_{0};
   mutable int health_check_call_count_{0};
 };
 
