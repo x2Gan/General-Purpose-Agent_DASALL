@@ -564,6 +564,24 @@
   - `ctest --test-dir build-ci -R "ReflectionSelfRefine" --output-on-failure`
 - **阻塞 / 解阻**：依赖 GAP-P1-A reflection schema 冻结。
 
+**Closeout（2026-06-01）**
+
+- 状态：已完成（reflection 单次 self-refine 控制、budget cap、focused regression 与设计回链已闭合）。
+- 设计回链：
+  - [docs/architecture/DASALL_cognition子系统详细设计.md](../architecture/DASALL_cognition子系统详细设计.md) 已补 ReflectionEngine / StageModelHint 的 self-refine 语义：首轮 authoritative `failure_analysis` 仅在非 Tool / 非 Policy 失败上允许追加 1 轮 `replan_advice`，且第二轮必须走 tighter deadline / output budget。
+  - 外部参考继续采用 Self-Refine / Reflexion 的 suggestion-first 思路：迭代反馈用于改进建议质量，但恢复执行权仍留在外部控制面；本轮据此保持 ADR-007 边界不变。
+- 代码结果：
+  - 更新 [cognition/src/CognitionFacade.cpp](../../cognition/src/CognitionFacade.cpp)，让 reflection 主链真正消费 `reflection_round_limit`，并在 bridge authoritative 首轮成功后，仅对非 Tool / 非 Policy 的失败追加最多 1 轮 `replan_advice` self-refine；第二轮使用收紧后的 `max_output_tokens` / `deadline_ms`，失败时保留首轮 `ReflectionDecision`，不会把 reflect 提升为恢复执行器。
+  - 新增 [tests/unit/cognition/ReflectionSelfRefineSingleRoundTest.cpp](../../tests/unit/cognition/ReflectionSelfRefineSingleRoundTest.cpp) 与 [tests/unit/cognition/ReflectionSelfRefineBudgetCapTest.cpp](../../tests/unit/cognition/ReflectionSelfRefineBudgetCapTest.cpp)，分别固定“恰好一轮第二次 reflection bridge 调用”和“tight-budget profile 跳过第二轮”的正反路径。
+  - 更新 [tests/unit/cognition/CMakeLists.txt](../../tests/unit/cognition/CMakeLists.txt)，注册上述两个 unit target。
+- 验证结果：
+  - `Build_CMakeTools(buildTargets=["dasall_reflection_self_refine_single_round_unit_test","dasall_reflection_self_refine_budget_cap_unit_test"])`：通过。
+  - `RunCtest_CMakeTools(tests=["ReflectionSelfRefineSingleRoundTest","ReflectionSelfRefineBudgetCapTest"])`：通过；`100% tests passed, 0 tests failed out of 2`。
+  - `RunCtest_CMakeTools(tests=["CognitionFacadeFlowTest","CognitionReflectionStructuredOutputIntegrationTest"])`：通过；`100% tests passed, 0 tests failed out of 2`。
+- 结果：
+  - reflection 现在已具备受控的一次 self-refine 能力，能够在 reasoning-like 失败上用第二轮 `replan_advice` 修正首轮建议，而不触碰 Runtime 的恢复执行权。
+  - tight-budget / low-latency 条件下会显式跳过第二轮，并通过 diagnostics 留痕，不再无上限地重复 reflection bridge 调用。
+
 #### WP-COG-GAP-015 Tool 候选预筛（GAP-P2-E）
 
 - **代码目标**

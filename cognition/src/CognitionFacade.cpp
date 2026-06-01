@@ -1633,9 +1633,11 @@ void apply_reflection_failure(
 }
 
 [[nodiscard]] std::vector<std::string> make_reflection_stage_messages(
-    const ReflectionRequest& request) {
+    const ReflectionRequest& request,
+    const std::string& task_type = "failure_analysis",
+    const contracts::ReflectionDecision* previous_decision = nullptr) {
   std::vector<std::string> messages;
-  messages.push_back("stage=reflection; task_type=failure_analysis");
+  messages.push_back("stage=reflection; task_type=" + task_type);
   messages.push_back("goal=" + optional_text(request.goal_contract.goal_description));
   messages.push_back("context=" + optional_text(request.context_packet.user_turn));
   if (request.latest_observation.payload.has_value()) {
@@ -1644,7 +1646,86 @@ void apply_reflection_failure(
   if (request.latest_observation.error.has_value()) {
     messages.push_back("latest_error=" + request.latest_observation.error->details.message);
   }
+  if (previous_decision != nullptr) {
+    if (previous_decision->decision_kind.has_value()) {
+      messages.push_back(
+          "previous_decision_kind=" +
+          replay_reflection_decision_kind_name(*previous_decision->decision_kind));
+    }
+    if (previous_decision->rationale.has_value()) {
+      messages.push_back("previous_rationale=" + *previous_decision->rationale);
+    }
+    if (previous_decision->hint_ref.has_value()) {
+      messages.push_back("previous_hint_ref=" + *previous_decision->hint_ref);
+    }
+  }
   return messages;
+}
+
+[[nodiscard]] const contracts::ErrorInfo* find_reflection_error_info(
+    const ReflectionRequest& request) {
+  if (request.latest_observation.error.has_value()) {
+    return &*request.latest_observation.error;
+  }
+
+  return nullptr;
+}
+
+[[nodiscard]] bool reflection_profile_is_budget_capped(const std::string& profile_id) {
+  return profile_id == "edge_balanced" || profile_id == "edge_minimal" ||
+         profile_id == "factory_test";
+}
+
+[[nodiscard]] bool reflection_error_allows_self_refine(
+    const ReflectionRequest& request) {
+  const auto* error_info = find_reflection_error_info(request);
+  if (error_info == nullptr || !error_info->failure_type.has_value()) {
+    return false;
+  }
+
+  return *error_info->failure_type != contracts::ResultCodeCategory::Tool &&
+         *error_info->failure_type != contracts::ResultCodeCategory::Policy;
+}
+
+[[nodiscard]] std::uint32_t resolve_reflection_round_limit(
+    const ReflectionRequest& request,
+    const std::optional<policy::StageExecutionPlan>& reflection_plan) {
+  auto round_limit =
+      reflection_plan.has_value() && reflection_plan->reflection_round_limit > 0U
+          ? reflection_plan->reflection_round_limit
+          : 2U;
+  if (request.execution_hints.low_latency_preferred ||
+      reflection_profile_is_budget_capped(request.profile_id)) {
+    round_limit = std::min<std::uint32_t>(round_limit, 1U);
+  }
+
+  return std::max<std::uint32_t>(1U, round_limit);
+}
+
+[[nodiscard]] StageModelHint make_reflection_self_refine_hint(
+    const ReflectionRequest& request,
+    const StageModelHint* stage_model_hint) {
+  StageModelHint hint =
+      stage_model_hint != nullptr
+          ? *stage_model_hint
+          : make_bridge_model_hint("reflection",
+                                   "replan_advice",
+                                   ModelCapabilityTier::ReasoningHeavy,
+                                   true,
+                                   192U,
+                                   request.execution_hints.low_latency_preferred ? 500U
+                                                                                 : 900U);
+  hint.task_type = "replan_advice";
+  hint.max_output_tokens =
+      hint.max_output_tokens == 0U
+          ? 192U
+          : std::min<std::uint32_t>(hint.max_output_tokens, 192U);
+  hint.deadline_ms =
+      hint.deadline_ms == 0U
+          ? (request.execution_hints.low_latency_preferred ? 500U : 900U)
+          : std::max<std::uint32_t>(300U, hint.deadline_ms / 2U);
+  hint.cost_sensitivity = std::max(hint.cost_sensitivity, 0.55F);
+  return hint;
 }
 
 void append_bridge_diagnostics(std::vector<std::string>& diagnostics,
@@ -2750,6 +2831,8 @@ class CognitionFacade final : public ICognitionEngine {
                                       : nullptr;
     const auto stage_deadline_ms =
       reflection_plan.has_value() ? reflection_plan->deadline_ms : 0U;
+    const auto reflection_round_limit =
+        resolve_reflection_round_limit(request, reflection_plan);
     if (reflection_plan.has_value() && reflection_hint == nullptr) {
       apply_reflection_failure(
           result,
@@ -2798,6 +2881,37 @@ class CognitionFacade final : public ICognitionEngine {
     }
 
     if (result.reflection_decision.has_value()) {
+      if (has_diagnostic(result.diagnostics,
+                         "structured_projection.projected_reflection_decision") &&
+          reflection_error_allows_self_refine(request)) {
+        if (reflection_round_limit > 1U) {
+          append_unique(result.diagnostics,
+                        "reflection_pipeline.self_refine.started");
+          const auto self_refine_hint =
+              make_reflection_self_refine_hint(request, reflection_hint);
+          CognitionReflectionResult self_refine_result;
+          consume_reflection_bridge_stage(request,
+                                          self_refine_result,
+                                          &self_refine_hint,
+                                          "replan_advice",
+                                          &(*result.reflection_decision));
+          if (self_refine_result.reflection_decision.has_value() &&
+              !self_refine_result.result_code.has_value() &&
+              !self_refine_result.error_info.has_value()) {
+            result.reflection_decision = *self_refine_result.reflection_decision;
+            result.belief_update_hint = self_refine_result.belief_update_hint;
+            append_unique(result.diagnostics, self_refine_result.diagnostics);
+            append_unique(result.diagnostics,
+                          "reflection_pipeline.self_refine.completed");
+          } else {
+            append_unique(result.diagnostics,
+                          "reflection_pipeline.self_refine.retained_initial_decision");
+          }
+        } else {
+          append_unique(result.diagnostics,
+                        "reflection_pipeline.self_refine.skipped:budget_cap");
+        }
+      }
       emit_pipeline_checkpoint(
           telemetry_,
           make_stage_context(request, "reflection", false),
@@ -2805,7 +2919,12 @@ class CognitionFacade final : public ICognitionEngine {
           "analysis",
           "completed",
           {
-              TelemetryField{.key = "source", .value = "llm_bridge"},
+              TelemetryField{.key = "source",
+                             .value = has_diagnostic(
+                                          result.diagnostics,
+                                          "reflection_pipeline.self_refine.completed")
+                                          ? "llm_bridge_self_refine"
+                                          : "llm_bridge"},
               TelemetryField{.key = "diagnostic_count",
                              .value = std::to_string(result.diagnostics.size())},
           });
@@ -3092,9 +3211,12 @@ class CognitionFacade final : public ICognitionEngine {
     return std::nullopt;
   }
 
-  void consume_reflection_bridge_stage(const ReflectionRequest& request,
-                                       CognitionReflectionResult& result,
-                                       const StageModelHint* stage_model_hint) const {
+  void consume_reflection_bridge_stage(
+      const ReflectionRequest& request,
+      CognitionReflectionResult& result,
+      const StageModelHint* stage_model_hint,
+      std::string_view task_type = "failure_analysis",
+      const contracts::ReflectionDecision* previous_decision = nullptr) const {
     if (!llm_bridge_) {
       append_unique(result.diagnostics, "llm_bridge.unavailable:reflection");
       emit_reflection_bridge_checkpoint(telemetry_,
@@ -3113,15 +3235,17 @@ class CognitionFacade final : public ICognitionEngine {
     llm_bridge::StageLlmCallRequest bridge_request;
     bridge_request.request_id = request.request_id;
     bridge_request.trace_id = request.trace_id;
-    bridge_request.llm_call_id = request.request_id + ":reflection:failure_analysis";
+    bridge_request.llm_call_id =
+      request.request_id + ":reflection:" + std::string(task_type);
     bridge_request.stage_name = "reflection";
-    bridge_request.task_type = "failure_analysis";
-    bridge_request.messages = make_reflection_stage_messages(request);
+    bridge_request.task_type = std::string(task_type);
+    bridge_request.messages = make_reflection_stage_messages(
+      request, bridge_request.task_type, previous_decision);
     bridge_request.model_hint = stage_model_hint != nullptr
                     ? *stage_model_hint
                     : make_bridge_model_hint(
                         "reflection",
-                        "failure_analysis",
+              bridge_request.task_type,
                         ModelCapabilityTier::Advanced,
                         true,
                         384U,

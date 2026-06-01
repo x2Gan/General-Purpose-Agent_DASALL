@@ -187,6 +187,18 @@ dasall_add_cognition_unit_test(
 )
 
 dasall_add_cognition_unit_test(
+	dasall_reflection_self_refine_single_round_unit_test
+	ReflectionSelfRefineSingleRoundTest.cpp
+	ReflectionSelfRefineSingleRoundTest
+)
+
+dasall_add_cognition_unit_test(
+	dasall_reflection_self_refine_budget_cap_unit_test
+	ReflectionSelfRefineBudgetCapTest.cpp
+	ReflectionSelfRefineBudgetCapTest
+)
+
+dasall_add_cognition_unit_test(
 	dasall_belief_update_synthesizer_unit_test
 	BeliefUpdateSynthesizerTest.cpp
 	BeliefUpdateSynthesizerTest

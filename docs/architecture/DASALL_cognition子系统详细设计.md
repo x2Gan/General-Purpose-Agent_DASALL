@@ -878,8 +878,8 @@ flowchart LR
 2. 非职责边界：不持有 retry counter、backoff、checkpoint admission；不直接调用 Planner 或 ToolManager；不越级执行恢复动作；不直接提交 RecoveryOutcome。
 3. 核心数据定义：围绕 ReflectionAnalysisRequest、ReflectionAnalysisFrame、FailureHypothesis、AssumptionInvalidationSet、ReflectionDecision 建模；ReflectionAnalysisFrame 至少显式表达 failure_source、goal_gap、plan_node_status、belief_invalidations、recoverability_score、safety_risk。
 4. 公共/内部接口：公共面保持 IReflectionEngine::analyze()；内部建议拆为 classify_failure_source()、evaluate_goal_gap()、detect_assumption_invalidations()、project_reflection_decision()、validate_reflection_contract()。
-5. 关键执行流：先对 latest Observation 与 ErrorInfo 做失败分类，再对照当前计划节点 success_signal 和 GoalContract 成功判据评估是局部失配还是全局偏航；随后结合 BeliefState 判断关键假设是否被推翻，并在 retry_step、replan、abort_safe 之间做 suggestion-only 决策；最终把 rationale、confidence 与 relevant_observation_refs 写入 ReflectionDecision。
-6. 失败与降级语义：若证据不足以安全判定且存在明显风险，应优先给出 abort_safe 或保守 ErrorInfo，而不是输出激进的 retry 建议；ReflectionEngine 自身失败时返回 cognition.reflection_failed，不得把恢复权回退给内部阶段逻辑。
+5. 关键执行流：先对 latest Observation 与 ErrorInfo 做失败分类，再对照当前计划节点 success_signal 和 GoalContract 成功判据评估是局部失配还是全局偏航；随后结合 BeliefState 判断关键假设是否被推翻，并在 retry_step、replan、abort_safe 之间做 suggestion-only 决策；最终把 rationale、confidence 与 relevant_observation_refs 写入 ReflectionDecision。若首轮 structured reflection 由 llm bridge 成功投影为 authoritative `ReflectionDecision`，且 latest ErrorInfo 属于非 Tool / 非 Policy 的推理类失败，Facade 可在不突破 ADR-007 的前提下追加最多 1 轮 `replan_advice` self-refine；该轮只允许使用收紧后的 reflection-local deadline / output budget，并继续只产出 suggestion-only `ReflectionDecision`。
+6. 失败与降级语义：若证据不足以安全判定且存在明显风险，应优先给出 abort_safe 或保守 ErrorInfo，而不是输出激进的 retry 建议；ReflectionEngine 自身失败时返回 cognition.reflection_failed，不得把恢复权回退给内部阶段逻辑。self-refine 第二轮属于 best-effort：Tool / Policy 失败与 tight-budget profile 必须跳过该轮；若第二轮 schema / projection / provider / timeout 失败，则保留首轮建议，不把 reflection 调用升级成恢复执行器。
 7. 测试与验收出口：建议单测为 tests/unit/cognition/ReflectionEngineDecisionTest.cpp、tests/unit/cognition/ReflectionEngineBeliefInvalidationTest.cpp、tests/unit/cognition/ReflectionEngineConservativeAbortTest.cpp；建议验收命令为 ctest --test-dir build-ci -R "ReflectionEngine(Decision|BeliefInvalidation|ConservativeAbort)Test" --output-on-failure。
 
 ##### BeliefUpdateSynthesizer
@@ -1106,6 +1106,7 @@ enum class ModelCapabilityTier : uint8_t {
 2. CognitionLlmBridge 负责把 StageModelHint 投影到 llm 公共接口的 LLMGenerateRequest 对应字段；`stage_name` 直接透传 canonical key，`task_type` 用于保留 cognition 组件语义。
 3. llm 侧的 ModelRouter 有权忽略 hint 并按自有策略路由，hint 只是建议。
 4. bridge / projector / profile compatibility test 不得私有维护 `reasoning -> execution` 或 `planner/responder -> planning/response` 映射表；唯一映射表以本节为准。Perception 现在直接使用 `perception` canonical stage，不再允许 `perception -> planning` 私有转换。
+5. `replan_advice` 只用于 reflection bridge 在 authoritative `failure_analysis` 之后的单次 self-refine：仅当 ErrorInfo 属于非 Tool / 非 Policy 的推理类失败时可触发，最多 1 轮，并必须使用 tighter deadline / output budget；tight-budget profile 或 low-latency hint 下必须跳过。无论执行与否，最终输出仍只是 suggestion-only `ReflectionDecision`，恢复执行权继续留在 Runtime / RecoveryManager。
 
 #### 6.14.3 Cognition 错误回流链路
 

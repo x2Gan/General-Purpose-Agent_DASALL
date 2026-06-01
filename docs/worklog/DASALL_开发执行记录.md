@@ -1,3 +1,40 @@
+## 记录 #868
+
+- 日期：2026-06-01
+- 阶段：cognition / reflection self-refine closure
+- 任务：完成 WP-COG-GAP-014 Reflection 多轮 self-refine（GAP-P2-C）
+- 状态：已完成（reflection 单次 self-refine 控制、budget cap、focused regression 与设计回链已闭合）
+
+### 执行前提
+
+1. [docs/deliverables/COG-EVAL-2026-05-31-cognition子系统落地评估与生产级缺口治理任务规划.md](../deliverables/COG-EVAL-2026-05-31-cognition子系统落地评估与生产级缺口治理任务规划.md) 已将 `WP-COG-GAP-014` 定义为 P2 质量增强任务，并明确要求在 reflection 路径上仅对推理错误（非工具错误）开放 1 轮 self-refine，且保持 ADR-007 suggestion-only 边界。
+2. [docs/architecture/DASALL_cognition子系统详细设计.md](../architecture/DASALL_cognition子系统详细设计.md) 已提前冻结 `cognition.reflection.v1` structured contract，并把 ReflectionEngine 的 canonical task_type 口径定为 `failure_analysis / replan_advice`；因此本轮应优先复用现有 reflection bridge seam，而不是扩张 shared contracts、Runtime recovery 输入或 ReflectionRequest 公共形状。
+3. Self-Refine 与 Reflexion 的共同启发是：同一模型可在测试时基于首轮输出与失败反馈做有限轮次的自反馈改写，但“改进建议”和“执行恢复”必须分层；本轮据此把 second-pass 约束为 Facade 内的 capped `replan_advice` bridge round，并让最终执行权继续停留在 Runtime / RecoveryManager。
+
+### 改动
+
+1. 更新 [cognition/src/CognitionFacade.cpp](../cognition/src/CognitionFacade.cpp)，让 reflection 主链真正消费 `reflection_round_limit`，并在首轮 authoritative `failure_analysis` 成功后，仅对 non-Tool / non-Policy 的失败追加最多 1 轮 `replan_advice` self-refine。
+2. 同文件中新增 reflection self-refine budget cap：第二轮会收紧 `max_output_tokens` 与 `deadline_ms`，tight-budget profile / low-latency hint 会显式跳过第二轮，并写入 `reflection_pipeline.self_refine.*` diagnostics；第二轮若失败则保留首轮 `ReflectionDecision`，不把 reflect 升级成恢复执行器。
+3. 新增 [tests/unit/cognition/ReflectionSelfRefineSingleRoundTest.cpp](../tests/unit/cognition/ReflectionSelfRefineSingleRoundTest.cpp) 与 [tests/unit/cognition/ReflectionSelfRefineBudgetCapTest.cpp](../tests/unit/cognition/ReflectionSelfRefineBudgetCapTest.cpp)，分别固定“恰好一轮第二次 reflection bridge 调用”和“edge_minimal 紧预算 profile 跳过第二轮”的正反路径。
+4. 更新 [tests/unit/cognition/CMakeLists.txt](../tests/unit/cognition/CMakeLists.txt)，注册两个新的 self-refine unit tests；并更新 [docs/architecture/DASALL_cognition子系统详细设计.md](../architecture/DASALL_cognition子系统详细设计.md) 与 [docs/deliverables/COG-EVAL-2026-05-31-cognition子系统落地评估与生产级缺口治理任务规划.md](../deliverables/COG-EVAL-2026-05-31-cognition子系统落地评估与生产级缺口治理任务规划.md)，把 reflection self-refine 语义与任务 closeout 回写到治理文档。
+
+### 验证
+
+1. `Build_CMakeTools(buildTargets=["dasall_cognition"])`
+   - 结果：通过；reflection Facade 主链编译通过，仅有既存 `StageTelemetryContext::latency_ms` 初始化 warning。
+2. `Build_CMakeTools(buildTargets=["dasall_reflection_self_refine_single_round_unit_test","dasall_reflection_self_refine_budget_cap_unit_test"])`
+   - 结果：通过。
+3. `RunCtest_CMakeTools(tests=["ReflectionSelfRefineSingleRoundTest","ReflectionSelfRefineBudgetCapTest"])`
+   - 结果：通过；`100% tests passed, 0 tests failed out of 2`。
+4. `RunCtest_CMakeTools(tests=["CognitionFacadeFlowTest","CognitionReflectionStructuredOutputIntegrationTest"])`
+   - 结果：通过；`100% tests passed, 0 tests failed out of 2`。
+
+### 结果
+
+1. reflection 现在能够在不突破 ADR-007 的前提下，对 reasoning-like 失败做恰好一轮的 bridge self-refine，并用第二轮 `replan_advice` payload 生成最终 `ReflectionDecision`。
+2. budget cap 现在是显式、可测且可审计的：tight-budget profile 与 low-latency hint 会直接跳过第二轮，而不是隐式继续消耗 reflection budget。
+3. `WP-COG-GAP-014` 的代码、focused regression、详细设计回链与交付 closeout 已闭合；后续 `WP-COG-GAP-015` 可以直接在当前 reflection / planner seam 之上继续做工具候选预筛，而无需再补 self-refine 基础设施。
+
 ## 记录 #867
 
 - 日期：2026-06-01
