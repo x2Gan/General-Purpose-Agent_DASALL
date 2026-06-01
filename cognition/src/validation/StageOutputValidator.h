@@ -6,6 +6,7 @@
 #include <string>
 #include <vector>
 
+#include "checkpoint/ReflectionDecision.h"
 #include "decision/ActionDecision.h"
 #include "error/ErrorInfo.h"
 #include "llm/CognitionLlmBridge.h"
@@ -25,6 +26,7 @@ enum class ValidationIssueCode : std::uint8_t {
   ResponseEnvelopeInvariant = 6,
   MalformedJson = 7,
   UnknownField = 8,
+  ReflectionDecisionInvariant = 9,
 };
 
 struct ValidationIssue {
@@ -59,6 +61,8 @@ class StageOutputValidator {
   [[nodiscard]] ValidationResult validate_action_decision_invariants(
       const decision::ActionDecision& action_decision,
       const plan::PlanGraph* active_plan = nullptr) const;
+    [[nodiscard]] ValidationResult validate_reflection_decision_invariants(
+      const contracts::ReflectionDecision& reflection_decision) const;
   [[nodiscard]] ValidationResult validate_response_envelope(
       const ResponseBuildResult& response_result) const;
 };

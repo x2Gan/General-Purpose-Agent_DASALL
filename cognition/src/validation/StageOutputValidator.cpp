@@ -1,5 +1,6 @@
 #include "validation/StageOutputValidator.h"
 
+#include "checkpoint/ReflectionDecisionGuards.h"
 #include "validation/StructuredPayloadView.h"
 
 #include <algorithm>
@@ -592,6 +593,52 @@ ValidationResult StageOutputValidator::validate_action_decision_invariants(
   }
 
   return finalize_result(std::move(issue_set), "execution", std::move(diagnostics));
+}
+
+[[nodiscard]] std::string reflection_issue_field_path(std::string_view reason) {
+  if (reason.find("request_id") != std::string_view::npos) {
+    return "request_id";
+  }
+  if (reason.find("decision_kind") != std::string_view::npos) {
+    return "decision_kind";
+  }
+  if (reason.find("rationale") != std::string_view::npos) {
+    return "rationale";
+  }
+  if (reason.find("goal_id") != std::string_view::npos) {
+    return "goal_id";
+  }
+  if (reason.find("confidence") != std::string_view::npos) {
+    return "confidence";
+  }
+  if (reason.find("hint_ref") != std::string_view::npos) {
+    return "hint_ref";
+  }
+  if (reason.find("created_at") != std::string_view::npos) {
+    return "created_at";
+  }
+  if (reason.find("relevant_observation_refs") != std::string_view::npos) {
+    return "relevant_observation_refs";
+  }
+  if (reason.find("tags") != std::string_view::npos) {
+    return "tags";
+  }
+  return "reflection_decision";
+}
+
+ValidationResult StageOutputValidator::validate_reflection_decision_invariants(
+    const contracts::ReflectionDecision& reflection_decision) const {
+  ValidationIssueSet issue_set;
+  std::vector<std::string> diagnostics;
+
+  const auto guard = contracts::validate_reflection_decision_field_rules(reflection_decision);
+  if (!guard.ok) {
+    issue_set.add(ValidationIssueCode::ReflectionDecisionInvariant,
+                  reflection_issue_field_path(guard.reason),
+                  std::string(guard.reason));
+  }
+
+  return finalize_result(std::move(issue_set), "reflection", std::move(diagnostics));
 }
 
 ValidationResult StageOutputValidator::validate_response_envelope(

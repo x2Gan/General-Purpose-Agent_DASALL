@@ -5,8 +5,8 @@
 | 版本 | v1.1 |
 | 状态 | 评审优化版 |
 | 初版日期 | 2026-04-14 |
-| 最近修订 | 2026-05-15 |
-| 修订说明 | v1.0→v1.1：补充行业实践对齐、跨子系统交互契约精化、并发模型、上下文与预算感知、被否决方案归纳；扩充约束与风险。2026-05-15 追补 COG-TODO-039 ~ 042 后的当前工程状态与证据链入口 |
+| 最近修订 | 2026-06-01 |
+| 修订说明 | v1.0→v1.1：补充行业实践对齐、跨子系统交互契约精化、并发模型、上下文与预算感知、被否决方案归纳；扩充约束与风险。2026-05-15 追补 COG-TODO-039 ~ 042 后的当前工程状态与证据链入口。2026-06-01 追补 WP-COG-GAP-006 的 reflection / response v1 schema 冻结与 structured response authority。 |
 
 本文档面向 DASALL 认知子系统的子系统级详细设计，目标是在不改写既有 ADR、SSOT 与共享契约冻结结论的前提下，为 cognition 模块提供可直接映射到 Build 的工程方案。
 
@@ -169,7 +169,7 @@ flowchart LR
 | 阶段组件 | 五段组件与门面主链已具备真实实现，且已有 schema、budget、degraded path、telemetry、structured output 等 focused 回归 | 保持五段组件可独立验证，并让 clean gate 继续覆盖 facade / runtime 交接 | 低 | 当前剩余缺口不在“有没有组件”，而在 repo-wide gate 仍被非 cognition owner 阻断 | cognition/src；tests/unit/cognition；COG-TODO-040 ~ 042 deliverables |
 | 共享契约适配 | GoalContract、BeliefState、ContextPacket、Observation、ReflectionDecision、AgentResult 已冻结；ActionDecision 只有 tag | 认知内部正确复用已冻结对象，并以模块内类型承接未冻结字段 | 中 | 误把支撑对象写入 contracts | contracts/include/agent/GoalContract.h；BeliefState.h；ContextPacket.h；Observation.h；ReflectionDecision.h；AgentResult.h；ActionDecisionTag.h |
 | 规划接口准入 | InterfaceCatalog 里 IPlanner 仍是 AwaitingSupportingContracts | 先落模块公共接口，再等待下一轮准入评审 | 中 | 过早共享化导致支撑契约返工 | InterfaceCatalog.h；WP05-T011；WP05-T012 |
-| Response 路径 | 当前无 ResponseBuilder 落点 | 形成终态结果构造路径并映射 AgentResult | 高 | runtime 无法闭环用户输出 | DASALL_Agent_architecture.md 4.3、5.8；AgentResult.h |
+| Response 路径 | `ResponseBuilder` 已落地，且 llm bridge 主路径已切到 `ResponseEnvelope` structured schema；模板路径继续作为显式 fallback | 形成终态结果构造路径并把 response_mode / fallback_used / omitted_details 一致映射到 AgentResult | 低 | 后续主要风险已转为 template 文案外置与 streaming response 未收口，而非缺少终态输出路径 | cognition/src/response/ResponseBuilder.cpp；tests/unit/cognition/ResponseBuilderTemplateFallbackTest.cpp；WP-COG-GAP-006 closeout |
 | 单元测试 | `tests/unit/cognition/` 已覆盖 public surface、五段组件、schema validator、structured projection、telemetry、LLM bridge 与 degraded path；042 clean regex 中 cognition unit slice 继续通过 | 保持模块级回归稳定，并在后续 warning gate 提升时继续保持无语义回退 | 低 | 044 前仍有 cognition test init warning hygiene 待清理 | tests/unit/cognition/CMakeLists.txt；COG-TODO-042 deliverable |
 | 集成测试 | `tests/integration/cognition/` 已具备 runtime interaction、profile compatibility、review regression、failure injection、structured output 等回归；`RuntimeCognitionLoopSmokeTest` 已通过 cognition 主链，不再绕过 cognition。042 复验显示 clean gate 的 contract / integration executable 仍被 repo-wide 非 cognition blocker 卡住 | 建立可在 clean gate 目录中完整执行的 runtime + cognition + contracts + integrations 路径 | 中 | 当前统一验收仍受 non-cognition executable 缺口与 access/daemon failures 阻断 | tests/unit/runtime/RuntimeCognitionLoopSmokeTest.cpp；tests/integration/cognition；COG-TODO-039 ~ 042 deliverables |
 | 测试 mocks | `MockLLMManager`、`MockCognitionFixture` 与 runtime integration fixture 已落盘，可支撑 facade / integration / failure-injection 回归 | 继续维持 cognition-specific fixture 的最小合法初始化，并避免测试夹具漂移出真实 runtime policy 投影 | 低 | 044 之前仍有少量 `policy_snapshot` 初始化 warning 待收口 | tests/mocks/include；tests/fixtures/runtime/CognitionRuntimeIntegrationFixture.h；COG-TODO-040、044 |
@@ -890,10 +890,10 @@ flowchart LR
 1. 职责：在 Runtime 已判定进入终态输出路径后，把 GoalContract、ContextPacket、BeliefState、latest Observation 和 terminal decision 映射为共享 AgentResult，并保证模板降级和最小失败输出可用。
 2. 非职责边界：不直接向用户通道提交结果；不替 Runtime 决定何时进入终态；不直接发起恢复；不暴露 raw prompt、provider payload 或 reasoning_content。
 3. 核心数据定义：围绕 ResponseBuildRequest、ResponseBuildResult、ResponseBuildPolicy、ResponseEnvelope、AgentResult status/provenance 建模；ResponseEnvelope 至少显式表达 response_mode、summary_text、structured_sections、artifact_refs、omitted_details、fallback_used。
-4. 公共/内部接口：公共面保持 IResponseBuilder::build()；内部建议拆为 select_response_mode()、build_with_llm()、build_with_template()、project_agent_result_status()、redact_unsafe_fields()、clamp_output_size()。
-5. 关键执行流：先根据 terminal_decision、goal completion 和 build_hints 选择 llm 生成或模板路径；若选择 llm，则通过 CognitionLlmBridge 请求结构化响应并经 StageOutputValidator 校验；随后统一映射为 AgentResult，包括 status、summary、artifacts、error_info、completion signals，并附带 fallback_used 与 omitted_details。
-6. 失败与降级语义：llm 不可用或响应结构不合法时，若 template_fallback_enabled=true 则退化为模板结果并把 AgentResult.status 置为 PartiallyCompleted 或 Failed；若模板也不可用，则返回 ResponseBuildResult(ErrorInfo)，由 Runtime 构造最小失败结果；任何情况下都不得静默丢失失败信息。
-7. 测试与验收出口：建议单测为 tests/unit/cognition/ResponseBuilderAgentResultMappingTest.cpp、tests/unit/cognition/ResponseBuilderTemplateFallbackTest.cpp、tests/unit/cognition/ResponseBuilderRedactionTest.cpp；建议验收命令为 ctest --test-dir build-ci -R "ResponseBuilder(AgentResultMapping|TemplateFallback|Redaction)Test" --output-on-failure。
+4. 公共/内部接口：公共面保持 IResponseBuilder::build()；内部建议拆为 select_response_mode()、build_with_llm_bridge()、build_with_template()、project_response_envelope()、project_agent_result_status()、redact_unsafe_fields()、clamp_output_size()。
+5. 关键执行流：先根据 terminal_decision、goal completion 和 build_hints 选择 llm 生成或模板路径；若选择 llm，则通过 CognitionLlmBridge 请求 `schema://cognition/response/v1` 的结构化响应，依次执行 raw schema 校验、`ResponseEnvelope` typed projection 与 ResponseBuildResult invariant 校验；随后统一映射为 AgentResult，包括 status、summary、artifacts、error_info、completion signals，并附带 fallback_used、omitted_details 与 schema_version。
+6. 失败与降级语义：llm 不可用、schema 违例、typed projection 失败或 response envelope invariant 不合法时，若 template_fallback_enabled=true 则退化为模板结果并把 AgentResult.status 置为 PartiallyCompleted 或 Failed；若模板也不可用，则返回 ResponseBuildResult(ErrorInfo)，由 Runtime 构造最小失败结果；任何情况下都不得静默丢失失败信息，也不得把 bridge content 当未校验纯文本直接吞入最终 summary。
+7. 测试与验收出口：建议单测为 tests/unit/cognition/ResponseBuilderAgentResultMappingTest.cpp、tests/unit/cognition/ResponseBuilderTemplateFallbackTest.cpp、tests/unit/cognition/ResponseBuilderRedactionTest.cpp、tests/unit/cognition/StageOutputValidatorResponseEnvelopeTest.cpp；建议验收命令为 ctest --test-dir build-ci -R "ResponseBuilder(AgentResultMapping|TemplateFallback|Redaction)Test|StageOutputValidatorResponseEnvelopeTest" --output-on-failure。
 
 反思与终态收敛关键时序如下：
 
@@ -950,13 +950,15 @@ sequenceDiagram
 ##### Structured Projection Authoritative Consumption（COG-FIX-004A）
 
 1. 目标：把 LLM structured payload 从“bridge 成功后的辅助 diagnostics 证据”升级为 planning / execution typed object 的权威来源；当 structured projection 启用且 bridge 返回 schema-valid payload 时，`PlanGraph` / `ActionDecision` 的 source of truth 只能来自投影结果，本地 Planner / Reasoner 只保留显式 fallback 或 comparison diagnostics 角色。
-2. 组件编排：`CognitionLlmBridge` 继续只负责 stage / task / schema / budget 投影与 provider-private redaction；`StageOutputValidator` 负责 raw payload schema 与投影后 object invariant 校验；新增的 `StageSchemaRegistry`、`PlanGraphStructuredProjector`、`ActionDecisionStructuredProjector` 分别冻结 schema baseline 与 typed projection；`CognitionFacade` 只编排 bridge -> validator -> projector -> invariant validator -> diagnostics / telemetry，不直接解析 JSON 字段。
+2. 组件编排：`CognitionLlmBridge` 继续只负责 stage / task / schema / budget 投影与 provider-private redaction；`StageOutputValidator` 负责 raw payload schema 与投影后 object invariant 校验；新增的 `StageSchemaRegistry`、`PlanGraphStructuredProjector`、`ActionDecisionStructuredProjector` 分别冻结 schema baseline 与 typed projection；reflection / response 允许保留 stage-local typed projection helper，但必须统一经 `StructuredPayloadView` 读字段并按 bridge -> validator -> projector -> invariant validator -> diagnostics / telemetry 顺序编排，不能把 provider-private JSON 解析散落到业务分支。
 3. schema baseline 冻结如下：
 
 | schema / stage | typed target | 必填字段基线 | unknown field 策略 |
 |---|---|---|---|
 | `cognition.plan.v1` / `planning` | `plan::PlanGraph` | `schema_version`、`plan_id`、`revision`、`nodes`、`edges`、`plan_rationale`、`estimated_complexity`；其中 `nodes[].node_id`、`nodes[].objective`、`nodes[].success_signal`、`nodes[].action_kind_hint` 必填 | 首版 fail-closed；仅当字段名以 `x_` 开头且 `StageSchemaRegistry` 明确允许时放行 |
 | `cognition.reasoning.v1` / `execution` | `decision::ActionDecision` | `schema_version`、`decision_kind`、`confidence`、`rationale`、`selected_node_id`、`tool_intent_hint`、`clarification_needed`、`clarification_question`、`response_outline`、`candidate_scores` | 首版 fail-closed；版本漂移、未知字段与类型错配统一进入 schema / projection failure |
+| `cognition.reflection.v1` / `reflection` | `contracts::ReflectionDecision` | `schema_version`、`request_id`、`decision_kind`、`rationale`；可选 `goal_id`、`confidence`、`hint_ref`、`created_at`、`relevant_observation_refs`、`tags` | 首版 fail-closed；schema / projection / invariant failure 仅在 `degraded_path_allowed=true` 时退回本地 ReflectionEngine |
+| `cognition.response.v1` / `response` | `ResponseEnvelope` | `schema_version`、`response_mode`、`summary_text`、`structured_sections`、`omitted_details`、`fallback_used` | 首版 fail-closed；schema / projection / invariant failure 仅在 `template_fallback_enabled=true` 时退回模板降级 |
 
 4. fallback policy 必须由 `CognitionConfig` / `StageExecutionPlan` 驱动，不允许测试私有开关重写主链语义：
 
@@ -1086,7 +1088,7 @@ enum class ModelCapabilityTier : uint8_t {
 | Planner | `planning` | `plan` / `replan` | Standard / Advanced | true | true（仅 advanced 计划） |
 | Reasoner | `execution` | `action_decision` | Standard | true | false |
 | ReflectionEngine | `reflection` | `failure_analysis` / `replan_advice` | Advanced / ReasoningHeavy | true | true |
-| ResponseBuilder | `response` | `final_response` | Standard | false（自然语言输出） | false |
+| ResponseBuilder | `response` | `final_response` | Standard | true（`ResponseEnvelope` structured schema） | false |
 
 约束：
 

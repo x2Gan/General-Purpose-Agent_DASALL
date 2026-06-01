@@ -12,6 +12,8 @@ using dasall::cognition::validation::StageSchemaSpec;
 using dasall::cognition::validation::UnknownFieldPolicy;
 using dasall::cognition::validation::schema_for_execution_action_decision;
 using dasall::cognition::validation::schema_for_planning_plan;
+using dasall::cognition::validation::schema_for_reflection_decision;
+using dasall::cognition::validation::schema_for_response_envelope;
 using dasall::tests::support::assert_equal;
 using dasall::tests::support::assert_true;
 
@@ -77,12 +79,54 @@ void test_execution_schema_registry_freezes_action_baseline() {
                "execution schema should freeze candidate_scores list sizing");
 }
 
+void test_reflection_schema_registry_freezes_decision_baseline() {
+  const auto& schema = schema_for_reflection_decision();
+
+  assert_equal(std::string("reflection"), schema.stage_name,
+               "reflection schema should declare the reflection stage owner");
+  assert_equal(std::string("cognition.reflection.v1"), schema.schema_version,
+               "reflection schema should freeze cognition.reflection.v1");
+  assert_true(contains_string(schema.required_fields, "request_id"),
+              "reflection schema should require request_id");
+  assert_true(contains_string(schema.known_top_level_fields, "relevant_observation_refs"),
+              "reflection schema should freeze optional evidence fields for unknown-field checks");
+  assert_true(has_enum_constraint(schema, "decision_kind", "Continue"),
+              "reflection schema should allow continue decisions");
+  assert_true(has_enum_constraint(schema, "decision_kind", "AbortSafe"),
+              "reflection schema should allow abort_safe decisions");
+  assert_equal(2, static_cast<int>(schema.numeric_bounds.size()),
+               "reflection schema should freeze confidence and created_at numeric bounds");
+}
+
+void test_response_schema_registry_freezes_envelope_baseline() {
+  const auto& schema = schema_for_response_envelope();
+
+  assert_equal(std::string("response"), schema.stage_name,
+               "response schema should declare the response stage owner");
+  assert_equal(std::string("cognition.response.v1"), schema.schema_version,
+               "response schema should freeze cognition.response.v1");
+  assert_true(contains_string(schema.required_fields, "response_mode"),
+              "response schema should require response_mode");
+  assert_true(contains_string(schema.required_fields, "summary_text"),
+              "response schema should require summary_text");
+  assert_true(contains_string(schema.known_top_level_fields, "fallback_used"),
+              "response schema should freeze fallback_used for unknown-field checks");
+  assert_true(has_enum_constraint(schema, "response_mode", "llm_bridge"),
+              "response schema should allow llm_bridge mode");
+  assert_true(has_enum_constraint(schema, "response_mode", "template_fallback"),
+              "response schema should allow template_fallback mode");
+  assert_true(schema.unknown_field_policy == UnknownFieldPolicy::AllowRegisteredExtensions,
+              "response schema should only allow registered extensions");
+}
+
 }  // namespace
 
 int main() {
   try {
     test_planning_schema_registry_freezes_plan_baseline();
     test_execution_schema_registry_freezes_action_baseline();
+    test_reflection_schema_registry_freezes_decision_baseline();
+    test_response_schema_registry_freezes_envelope_baseline();
   } catch (const std::exception& ex) {
     std::cerr << ex.what() << '\n';
     return 1;

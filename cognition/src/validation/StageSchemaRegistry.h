@@ -45,5 +45,7 @@ struct StageSchemaSpec {
 
 [[nodiscard]] const StageSchemaSpec& schema_for_planning_plan();
 [[nodiscard]] const StageSchemaSpec& schema_for_execution_action_decision();
+[[nodiscard]] const StageSchemaSpec& schema_for_reflection_decision();
+[[nodiscard]] const StageSchemaSpec& schema_for_response_envelope();
 
 }  // namespace dasall::cognition::validation

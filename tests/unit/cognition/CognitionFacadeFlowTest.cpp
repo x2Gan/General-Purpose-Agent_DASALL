@@ -63,14 +63,23 @@ using dasall::tests::support::assert_true;
   return active_plan;
 }
 
+[[nodiscard]] std::string make_structured_response_payload() {
+  return std::string{"{"}
+      + "\"schema_version\":\"cognition.response.v1\","
+      + "\"response_mode\":\"llm_bridge\","
+      + "\"summary_text\":\"llm bridge composed the final response\","
+      + "\"structured_sections\":[\"summary\"],"
+      + "\"omitted_details\":[],"
+      + "\"fallback_used\":false}"
+      ;
+}
+
 void test_cognition_facade_orchestrates_decide_reflect_and_response_flow() {
   MockCognitionFixture fixture;
-  fixture.llm_manager()->set_stage_result(
+  fixture.llm_manager()->set_structured_stage_payload(
       "response",
-      MockLLMManager::make_success_result(
-          "llm bridge composed the final response",
-          "mock.route.response",
-          std::string{"req-cognition-fixture"}));
+      make_structured_response_payload(),
+      std::string{"req-cognition-fixture"});
   auto engine = fixture.make_engine();
   auto builder = fixture.make_response_builder();
 

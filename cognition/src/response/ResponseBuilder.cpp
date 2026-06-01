@@ -18,6 +18,9 @@
 #include "llm/CognitionLlmBridge.h"
 #include "observability/CognitionTelemetry.h"
 #include "validation/InputBoundaryValidator.h"
+#include "validation/StageSchemaRegistry.h"
+#include "validation/StageOutputValidator.h"
+#include "validation/StructuredPayloadView.h"
 
 namespace dasall::cognition {
 namespace {
@@ -521,6 +524,7 @@ void append_json_array(std::string& json,
   std::string payload;
   payload.reserve(256U + envelope.summary_text.size());
   payload += "{";
+  payload += "\"schema_version\":\"cognition.response.v1\",";
   payload += "\"response_mode\":\"" + escape_json_string(envelope.response_mode) + "\",";
   payload += "\"summary_text\":\"" + escape_json_string(envelope.summary_text) + "\",";
   append_json_array(payload, "structured_sections", envelope.structured_sections);
@@ -530,6 +534,108 @@ void append_json_array(std::string& json,
   payload += envelope.fallback_used ? "true" : "false";
   payload += '}';
   return payload;
+}
+
+struct ResponseEnvelopeProjectionResult {
+  bool ok = false;
+  std::optional<ResponseEnvelope> envelope;
+  std::optional<contracts::ErrorInfo> error_info;
+};
+
+[[nodiscard]] contracts::ErrorInfo make_response_projection_error(std::string field_path,
+                                                                  std::string message) {
+  return contracts::ErrorInfo{
+      .failure_type = contracts::classify_result_code(contracts::ResultCode::ValidationFieldMissing),
+      .retryable = false,
+      .safe_to_replan = false,
+      .details = contracts::ErrorDetails{
+          .code = static_cast<int>(contracts::ResultCode::ValidationFieldMissing),
+          .message = std::move(message),
+          .stage = "response",
+      },
+      .source_ref = contracts::ErrorSourceRefMinimal{
+          .ref_type = "cognition.response_structured_projector",
+          .ref_id = std::move(field_path),
+      },
+  };
+}
+
+[[nodiscard]] ResponseEnvelopeProjectionResult make_response_projection_failure(
+    std::string field_path,
+    std::string message) {
+  ResponseEnvelopeProjectionResult result;
+  result.ok = false;
+  result.error_info = make_response_projection_error(std::move(field_path), std::move(message));
+  return result;
+}
+
+[[nodiscard]] ResponseEnvelopeProjectionResult project_response_envelope(
+    const validation::StructuredPayloadView& payload_view) {
+  const auto response_mode = payload_view.read_string("response_mode");
+  if (!response_mode.has_value()) {
+    return make_response_projection_failure(
+        "response_mode",
+        "response structured payload must encode response_mode as a string");
+  }
+
+  const auto summary_text = payload_view.read_string("summary_text");
+  if (!summary_text.has_value()) {
+    return make_response_projection_failure(
+        "summary_text",
+        "response structured payload must encode summary_text as a string");
+  }
+
+  const auto fallback_used = payload_view.read_bool("fallback_used");
+  if (!fallback_used.has_value()) {
+    return make_response_projection_failure(
+        "fallback_used",
+        "response structured payload must encode fallback_used as a boolean");
+  }
+
+  const auto project_string_array = [&](std::string_view field_path)
+      -> std::optional<std::vector<std::string>> {
+    const auto array_view = payload_view.read_list(field_path);
+    if (!array_view.has_value()) {
+      return std::nullopt;
+    }
+
+    std::vector<std::string> values;
+    values.reserve(array_view->size());
+    for (std::size_t index = 0; index < array_view->size(); ++index) {
+      const auto value = array_view->read_string(index);
+      if (!value.has_value()) {
+        return std::nullopt;
+      }
+      values.push_back(*value);
+    }
+
+    return values;
+  };
+
+  const auto structured_sections = project_string_array("structured_sections");
+  if (!structured_sections.has_value()) {
+    return make_response_projection_failure(
+        "structured_sections",
+        "response structured payload must encode structured_sections as a string array");
+  }
+
+  const auto omitted_details = project_string_array("omitted_details");
+  if (!omitted_details.has_value()) {
+    return make_response_projection_failure(
+        "omitted_details",
+        "response structured payload must encode omitted_details as a string array");
+  }
+
+  ResponseEnvelopeProjectionResult result;
+  result.ok = true;
+  result.envelope = ResponseEnvelope{
+      .response_mode = *response_mode,
+      .summary_text = *summary_text,
+      .structured_sections = *structured_sections,
+      .omitted_details = *omitted_details,
+      .fallback_used = *fallback_used,
+  };
+  return result;
 }
 
 [[nodiscard]] contracts::AgentResult make_agent_result(const ResponseBuildRequest& request,
@@ -714,7 +820,9 @@ void append_unique(std::vector<std::string>& values, const std::string& value) {
 [[nodiscard]] StageModelHint make_response_model_hint(const ResponseBuildRequest& request,
                                                       const StageModelHint* stage_model_hint) {
   if (stage_model_hint != nullptr) {
-    return *stage_model_hint;
+    auto hint = *stage_model_hint;
+    hint.requires_structured_output = true;
+    return hint;
   }
 
   return StageModelHint{
@@ -723,7 +831,7 @@ void append_unique(std::vector<std::string>& values, const std::string& value) {
       .capability_tier = ModelCapabilityTier::Standard,
       .max_output_tokens = request.build_hints.max_summary_chars,
       .deadline_ms = 2500U,
-      .requires_structured_output = false,
+      .requires_structured_output = true,
       .requires_reasoning_trace = false,
       .cost_sensitivity = 0.0F,
       .preferred_provider = {},
@@ -766,9 +874,9 @@ void append_unique(std::vector<std::string>& values, const std::string& value) {
   bridge_request.messages = make_response_messages(request, payload);
   bridge_request.model_hint = make_response_model_hint(request, stage_model_hint);
   bridge_request.schema_spec = llm_bridge::StageSchemaSpec{
-      .schema_kind = llm_bridge::StageSchemaKind::Text,
-      .output_schema_ref = {},
-      .allow_plain_text_fallback = true,
+      .schema_kind = llm_bridge::StageSchemaKind::JsonObject,
+      .output_schema_ref = "schema://cognition/response/v1",
+      .allow_plain_text_fallback = false,
   };
   return bridge_request;
 }
@@ -993,33 +1101,102 @@ void append_bridge_diagnostics(std::vector<std::string>& diagnostics,
                               "response_llm_bridge_empty_payload");
   }
 
-  std::vector<std::string> diagnostics = {"response_mode:llm_bridge"};
+  std::vector<std::string> diagnostics;
   append_bridge_diagnostics(diagnostics, bridge_result);
 
-  auto redaction = redact_unsafe_fields(config, *bridge_result.response->content_payload);
-  if (redaction.redacted) {
-    diagnostics.push_back("response_redacted");
+  validation::StageOutputValidator validator;
+  const auto schema_validation =
+      validator.validate_stage_output(bridge_result, validation::schema_for_response_envelope());
+  for (const auto& diagnostic : schema_validation.diagnostics) {
+    append_unique(diagnostics, diagnostic);
   }
+  if (!schema_validation.ok) {
+    if (template_fallback_enabled(config, request, response_plan)) {
+      auto fallback = build_with_template(config, request);
+      fallback.diagnostics.push_back("structured_projection.schema_violation:response");
+      append_bridge_diagnostics(fallback.diagnostics, bridge_result);
+      return fallback;
+    }
+
+    auto result = build_error_result(contracts::ResultCode::ValidationFieldMissing,
+                                     "cognition.response.llm_bridge",
+                                     schema_validation.error_info->details.message,
+                                     "structured_projection.schema_violation:response");
+    append_bridge_diagnostics(result.diagnostics, bridge_result);
+    return result;
+  }
+
+  append_unique(diagnostics, "structured_projection.bridge_payload_valid:response");
+  const auto payload_view = validation::StructuredPayloadView::parse_structured_payload(
+      *bridge_result.response->content_payload);
+  if (!payload_view.has_value()) {
+    if (template_fallback_enabled(config, request, response_plan)) {
+      auto fallback = build_with_template(config, request);
+      fallback.diagnostics.push_back("structured_projection.projection_failed:response");
+      append_bridge_diagnostics(fallback.diagnostics, bridge_result);
+      return fallback;
+    }
+
+    auto result = build_error_result(contracts::ResultCode::ValidationFieldMissing,
+                                     "cognition.response.llm_bridge",
+                                     "response bridge payload could not be reparsed for projection",
+                                     "structured_projection.projection_failed:response");
+    append_bridge_diagnostics(result.diagnostics, bridge_result);
+    return result;
+  }
+
+  const auto projected_envelope = project_response_envelope(*payload_view);
+  if (!projected_envelope.ok || !projected_envelope.envelope.has_value()) {
+    if (template_fallback_enabled(config, request, response_plan)) {
+      auto fallback = build_with_template(config, request);
+      fallback.diagnostics.push_back("structured_projection.projection_failed:response");
+      append_bridge_diagnostics(fallback.diagnostics, bridge_result);
+      return fallback;
+    }
+
+    auto result = build_error_result(
+        contracts::ResultCode::ValidationFieldMissing,
+        "cognition.response.llm_bridge",
+        projected_envelope.error_info.value_or(make_response_projection_error(
+            "response_envelope",
+            "response bridge payload could not produce a structured response envelope"))
+            .details.message,
+        "structured_projection.projection_failed:response");
+    append_bridge_diagnostics(result.diagnostics, bridge_result);
+    return result;
+  }
+
+  ResponseEnvelope envelope = *projected_envelope.envelope;
+  auto redaction = redact_unsafe_fields(config, envelope.summary_text);
+  if (redaction.redacted) {
+    append_unique(diagnostics, "response_redacted");
+  }
+  for (const auto& omitted_detail : envelope.omitted_details) {
+    append_unique(redaction.omitted_details, omitted_detail);
+  }
+
   for (const auto& warning : bridge_result.warnings) {
     append_unique(redaction.omitted_details, std::string{"bridge_warning:"} + warning);
   }
 
-  ResponseEnvelope envelope{
-      .response_mode = "llm_bridge",
-      .summary_text = std::move(redaction.value),
-      .structured_sections = request.build_hints.required_sections,
-      .omitted_details = std::move(redaction.omitted_details),
-      .fallback_used = bridge_result.fallback_used,
-  };
+  envelope.summary_text = std::move(redaction.value);
+  envelope.omitted_details = std::move(redaction.omitted_details);
+  envelope.fallback_used = envelope.fallback_used || bridge_result.fallback_used;
+  append_unique(diagnostics, std::string{"response_mode:"} + envelope.response_mode);
+  append_unique(diagnostics, "structured_projection.projected_response_envelope");
   envelope.summary_text =
       clamp_output_size(request, std::move(envelope.summary_text), diagnostics, envelope.omitted_details);
 
-  auto agent_result = make_agent_result(request, contracts::AgentResultStatus::Completed,
-                                        envelope.summary_text);
+  const auto status = envelope.fallback_used ? contracts::AgentResultStatus::PartiallyCompleted
+                                             : contracts::AgentResultStatus::Completed;
+  auto agent_result = make_agent_result(request, status, envelope.summary_text);
   agent_result.structured_payload = build_structured_payload(envelope);
   if (agent_result.tags.has_value()) {
-    agent_result.tags->push_back("response_mode:llm_bridge");
+    agent_result.tags->push_back(std::string{"response_mode:"} + envelope.response_mode);
     agent_result.tags->push_back(std::string{"llm_route:"} + bridge_result.resolved_route);
+    if (envelope.fallback_used) {
+      agent_result.tags->push_back("response_fallback_used");
+    }
     if (redaction.redacted) {
       agent_result.tags->push_back("response_redacted");
     }
@@ -1027,8 +1204,29 @@ void append_bridge_diagnostics(std::vector<std::string>& diagnostics,
 
   ResponseBuildResult result;
   result.agent_result = std::move(agent_result);
-  result.fallback_used = bridge_result.fallback_used;
+  result.fallback_used = envelope.fallback_used;
   result.diagnostics = std::move(diagnostics);
+
+  const auto envelope_validation = validator.validate_response_envelope(result);
+  for (const auto& diagnostic : envelope_validation.diagnostics) {
+    append_unique(result.diagnostics, diagnostic);
+  }
+  if (!envelope_validation.ok) {
+    if (template_fallback_enabled(config, request, response_plan)) {
+      auto fallback = build_with_template(config, request);
+      fallback.diagnostics.push_back("structured_projection.invariant_failed:response");
+      append_bridge_diagnostics(fallback.diagnostics, bridge_result);
+      return fallback;
+    }
+
+    auto error_result = build_error_result(contracts::ResultCode::ValidationFieldMissing,
+                                           "cognition.response.llm_bridge",
+                                           envelope_validation.error_info->details.message,
+                                           "structured_projection.invariant_failed:response");
+    append_bridge_diagnostics(error_result.diagnostics, bridge_result);
+    return error_result;
+  }
+
   return result;
 }
 
@@ -1137,6 +1335,16 @@ class ResponseBuilder final : public IResponseBuilder {
                                     "response builder has no observation payload and template fallback is disabled",
                                     "response_mode_unavailable");
         break;
+    }
+
+    validation::StageOutputValidator validator;
+    const auto envelope_validation = validator.validate_response_envelope(result);
+    for (const auto& diagnostic : envelope_validation.diagnostics) {
+      append_unique(result.diagnostics, diagnostic);
+    }
+    if (!envelope_validation.ok && !result.error_info.has_value()) {
+      result.result_code = contracts::ResultCode::ValidationFieldMissing;
+      result.error_info = envelope_validation.error_info;
     }
 
     telemetry_context = make_response_stage_context(request, result.fallback_used, result.result_code);

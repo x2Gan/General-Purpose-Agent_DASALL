@@ -119,6 +119,17 @@ using dasall::tests::support::assert_true;
   return request;
 }
 
+[[nodiscard]] std::string make_structured_response_payload() {
+  return std::string{"{"}
+      + "\"schema_version\":\"cognition.response.v1\","
+      + "\"response_mode\":\"llm_bridge\","
+      + "\"summary_text\":\"bridge-authored structured response summary\","
+      + "\"structured_sections\":[\"summary\"],"
+      + "\"omitted_details\":[],"
+      + "\"fallback_used\":false}"
+      ;
+}
+
 void test_response_builder_uses_template_fallback_when_payload_is_absent() {
   auto builder = create_response_builder();
 
@@ -213,6 +224,45 @@ void test_response_builder_falls_back_when_bridge_returns_failure() {
               "bridge failure should fall back through the existing template path");
 }
 
+void test_response_builder_consumes_structured_bridge_payload() {
+  auto llm_manager = std::make_shared<MockLLMManager>();
+  llm_manager->set_structured_stage_payload(
+      "response",
+      make_structured_response_payload(),
+      std::string{"req-019-template"});
+  auto builder = create_response_builder(
+      CognitionConfig{},
+      CognitionRuntimeDependencies{
+          .llm_manager = llm_manager,
+          .policy_snapshot = nullptr,
+          .logger = nullptr,
+          .audit_logger = nullptr,
+          .metrics_provider = nullptr,
+          .tracer_provider = nullptr,
+      });
+  auto request = make_request(true);
+  request.latest_observation = make_observation();
+
+  const auto result = builder->build(request);
+
+  assert_true(result.agent_result.has_value(),
+              "valid structured bridge payload should materialize an AgentResult");
+  assert_true(!result.fallback_used,
+              "valid structured bridge payload should stay on the non-fallback path");
+  assert_true(result.agent_result->status == AgentResultStatus::Completed,
+              "valid structured bridge payload should keep the AgentResult completed");
+  assert_true(contains_token(result.diagnostics, "structured_projection.projected_response_envelope"),
+              "response builder should mark the structured response envelope projection");
+  assert_true(result.agent_result->response_text.has_value() &&
+                  *result.agent_result->response_text ==
+                      "bridge-authored structured response summary",
+              "response builder should consume the structured bridge summary_text");
+  assert_true(result.agent_result->structured_payload.has_value() &&
+                  result.agent_result->structured_payload->find("\"schema_version\":\"cognition.response.v1\"") !=
+                      std::string::npos,
+              "response builder should preserve the frozen response schema version in structured payload");
+}
+
 }  // namespace
 
 int main() {
@@ -220,6 +270,7 @@ int main() {
     test_response_builder_uses_template_fallback_when_payload_is_absent();
     test_response_builder_returns_explicit_error_when_template_fallback_is_disabled();
     test_response_builder_falls_back_when_bridge_returns_failure();
+    test_response_builder_consumes_structured_bridge_payload();
   } catch (const std::exception& ex) {
     std::cerr << ex.what() << '\n';
     return 1;

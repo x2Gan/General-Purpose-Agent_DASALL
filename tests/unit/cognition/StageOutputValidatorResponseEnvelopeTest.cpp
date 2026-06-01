@@ -59,12 +59,46 @@ void test_validate_response_envelope_rejects_completed_fallback_without_error_su
               "response envelope failures must use the response-envelope invariant code");
 }
 
+void test_validate_response_envelope_accepts_completed_non_fallback_result() {
+  StageOutputValidator validator;
+  auto response_result = make_valid_response_result();
+  response_result.fallback_used = false;
+  response_result.agent_result->status = AgentResultStatus::Completed;
+  response_result.agent_result->task_completed = true;
+
+  const auto result = validator.validate_response_envelope(response_result);
+
+  assert_true(result.ok,
+              "completed non-fallback envelopes should pass response validation");
+  assert_true(result.issue_set.empty(),
+              "completed non-fallback envelopes should not emit validation issues");
+}
+
+void test_validate_response_envelope_rejects_failed_result_without_error_info() {
+  StageOutputValidator validator;
+  auto response_result = make_valid_response_result();
+  response_result.fallback_used = false;
+  response_result.agent_result->status = AgentResultStatus::Failed;
+  response_result.agent_result->task_completed = false;
+
+  const auto result = validator.validate_response_envelope(response_result);
+
+  assert_true(!result.ok, "failed envelopes without error_info must fail validation");
+  assert_equal(1, static_cast<int>(result.issue_set.issues.size()),
+               "failed envelopes without error_info should surface one invariant issue");
+  assert_equal(std::string("error_info"),
+               result.issue_set.issues.front().field_path,
+               "failed envelopes without error_info should surface the error_info field path");
+}
+
 }  // namespace
 
 int main() {
   try {
     test_validate_response_envelope_accepts_consistent_fallback_result();
     test_validate_response_envelope_rejects_completed_fallback_without_error_surface();
+    test_validate_response_envelope_accepts_completed_non_fallback_result();
+    test_validate_response_envelope_rejects_failed_result_without_error_info();
   } catch (const std::exception& ex) {
     std::cerr << ex.what() << '\n';
     return 1;

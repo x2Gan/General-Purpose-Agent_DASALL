@@ -1,3 +1,39 @@
+## 记录 #859
+
+- 日期：2026-06-01
+- 阶段：cognition / reflection-response schema freeze closure
+- 任务：完成 WP-COG-GAP-006 reflection.v1 / response.v1 schema 冻结
+- 状态：已完成（reflection authoritative structured consumption、response structured envelope 与 focused regression 已闭合）
+
+### 执行前提
+
+1. [docs/deliverables/COG-EVAL-2026-05-31-cognition子系统落地评估与生产级缺口治理任务规划.md](../deliverables/COG-EVAL-2026-05-31-cognition子系统落地评估与生产级缺口治理任务规划.md) 将 `WP-COG-GAP-006` 定义为 P1 稳定性缺口：必须冻结 `cognition.reflection.v1` / `cognition.response.v1` schema，并把 reflection / response 从 diagnostics 字符串判定切到 schema 驱动。
+2. [docs/architecture/DASALL_cognition子系统详细设计.md](../architecture/DASALL_cognition子系统详细设计.md) 的 structured output 约束要求 schema 违例、projection 失败与 provider failure 分层处理；reflection 不得借 structured output 获得恢复执行权，response fallback 也不得绕开 `AgentResult.status` / `fallback_used` 不变量。
+3. 本轮继续遵守 ADR-006 / ADR-007 / ADR-008 owner 边界：不把 prompt/policy/memory/tool 执行权拉回 cognition，只在 cognition owner 内补 schema baseline、typed projection、validator 与 focused 回归。
+
+### 改动
+
+1. 更新 [cognition/src/validation/StageSchemaRegistry.h](../cognition/src/validation/StageSchemaRegistry.h)、[cognition/src/validation/StageSchemaRegistry.cpp](../cognition/src/validation/StageSchemaRegistry.cpp) 与 [tests/unit/cognition/StageSchemaRegistryTest.cpp](../tests/unit/cognition/StageSchemaRegistryTest.cpp)，冻结 `cognition.reflection.v1` 与 `cognition.response.v1` raw schema baseline。
+2. 更新 [cognition/src/validation/StageOutputValidator.h](../cognition/src/validation/StageOutputValidator.h)、[cognition/src/validation/StageOutputValidator.cpp](../cognition/src/validation/StageOutputValidator.cpp)、[tests/unit/cognition/StageOutputValidatorReflectionInvariantTest.cpp](../tests/unit/cognition/StageOutputValidatorReflectionInvariantTest.cpp) 与 [tests/unit/cognition/StageOutputValidatorResponseEnvelopeTest.cpp](../tests/unit/cognition/StageOutputValidatorResponseEnvelopeTest.cpp)，补 reflection typed invariant 与 response envelope invariant 校验。
+3. 更新 [cognition/src/CognitionFacade.cpp](../cognition/src/CognitionFacade.cpp)，让 reflection 桥请求切到 `schema://cognition/reflection/v1`，并在 bridge 成功时走 raw schema -> typed projection -> invariant 校验；校验通过后 bridge payload 成为 `ReflectionDecision` 的 authoritative source，仅在 `degraded_path_allowed=true` 时退回本地 ReflectionEngine。
+4. 更新 [cognition/src/response/ResponseBuilder.cpp](../cognition/src/response/ResponseBuilder.cpp)，把 response 桥请求切到 `JsonObject` + `schema://cognition/response/v1`，将 structured payload 投影为 `ResponseEnvelope`，并在 bridge/raw payload/ResponseBuildResult 三层统一校验 `fallback_used`、`response_mode` 与 `AgentResult.status` 一致性。
+5. 新增 [tests/integration/cognition/CognitionReflectionStructuredOutputIntegrationTest.cpp](../tests/integration/cognition/CognitionReflectionStructuredOutputIntegrationTest.cpp)，并更新 [tests/integration/cognition/CMakeLists.txt](../tests/integration/cognition/CMakeLists.txt)、[tests/unit/cognition/ResponseBuilderTemplateFallbackTest.cpp](../tests/unit/cognition/ResponseBuilderTemplateFallbackTest.cpp)、[tests/unit/cognition/CognitionFacadeFlowTest.cpp](../tests/unit/cognition/CognitionFacadeFlowTest.cpp)、[tests/unit/cognition/CMakeLists.txt](../tests/unit/cognition/CMakeLists.txt) 与相关设计/交付文档，固定 reflection / response structured output 主路径回归与 closeout 证据。
+
+### 验证
+
+1. `cmake --build build-ci --target dasall_stage_output_validator_reflection_invariant_unit_test dasall_cognition_reflection_structured_output_integration_test dasall_stage_output_validator_response_envelope_unit_test dasall_response_builder_template_fallback_unit_test dasall_cognition_facade_flow_unit_test`
+   - 结果：通过。
+2. `ctest --test-dir build-ci -R "^(StageOutputValidatorReflectionInvariantTest|CognitionReflectionStructuredOutputIntegrationTest|StageOutputValidatorResponseEnvelopeTest|ResponseBuilderTemplateFallbackTest|CognitionFacadeFlowTest)$" --output-on-failure`
+   - 结果：通过；`100% tests passed, 0 tests failed out of 5`。
+3. VS Code diagnostics。
+   - 结果：本轮 touched cognition / docs 文件无新增错误。
+
+### 结果
+
+1. reflection 桥 payload 现在经过 schema、typed projection 与 invariant 三层校验后成为权威 `ReflectionDecision` 来源，不再只是 diagnostics 辅助证据。
+2. response 阶段已从纯文本 bridge content 切到 `ResponseEnvelope` structured schema；`schema_version`、`structured_sections`、`omitted_details` 与 `fallback_used/status` 一致性都有稳定回归。
+3. `WP-COG-GAP-006` 的代码、详细设计回链与 focused regression 已闭合；后续 `WP-COG-GAP-007` 与 `WP-COG-GAP-010` 可以直接复用这套 structured response contract。
+
 ## 记录 #858
 
 - 日期：2026-06-01

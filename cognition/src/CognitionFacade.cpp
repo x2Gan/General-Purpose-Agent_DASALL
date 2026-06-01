@@ -911,6 +911,186 @@ void apply_decision_failure(
       *bridge_result.response->content_payload);
 }
 
+struct ReflectionDecisionProjectionResult {
+  bool ok = false;
+  std::optional<contracts::ReflectionDecision> reflection_decision;
+  std::optional<contracts::ErrorInfo> error_info;
+};
+
+[[nodiscard]] contracts::ErrorInfo make_reflection_projection_error(
+    std::string field_path,
+    std::string message) {
+  return contracts::ErrorInfo{
+      .failure_type =
+          contracts::classify_result_code(contracts::ResultCode::ValidationFieldMissing),
+      .retryable = false,
+      .safe_to_replan = false,
+      .details = contracts::ErrorDetails{
+          .code = static_cast<int>(contracts::ResultCode::ValidationFieldMissing),
+          .message = std::move(message),
+          .stage = "reflection",
+      },
+      .source_ref = contracts::ErrorSourceRefMinimal{
+          .ref_type = "cognition.reflection_structured_projector",
+          .ref_id = std::move(field_path),
+      },
+  };
+}
+
+[[nodiscard]] std::optional<contracts::ReflectionDecisionKind> parse_reflection_decision_kind(
+    std::string_view literal) {
+  if (literal == "Continue") {
+    return contracts::ReflectionDecisionKind::Continue;
+  }
+  if (literal == "RetryStep") {
+    return contracts::ReflectionDecisionKind::RetryStep;
+  }
+  if (literal == "Replan") {
+    return contracts::ReflectionDecisionKind::Replan;
+  }
+  if (literal == "AbortSafe") {
+    return contracts::ReflectionDecisionKind::AbortSafe;
+  }
+  return std::nullopt;
+}
+
+[[nodiscard]] ReflectionDecisionProjectionResult project_reflection_decision(
+    const validation::StructuredPayloadView& payload_view) {
+  ReflectionDecisionProjectionResult result;
+
+  const auto request_id = payload_view.read_string("request_id");
+  if (!request_id.has_value()) {
+    result.error_info = make_reflection_projection_error(
+        "request_id",
+        "reflection structured payload must encode request_id as a string");
+    return result;
+  }
+
+  const auto decision_kind_literal = payload_view.read_string("decision_kind");
+  if (!decision_kind_literal.has_value()) {
+    result.error_info = make_reflection_projection_error(
+        "decision_kind",
+        "reflection structured payload must encode decision_kind as a string");
+    return result;
+  }
+
+  const auto decision_kind = parse_reflection_decision_kind(*decision_kind_literal);
+  if (!decision_kind.has_value()) {
+    result.error_info = make_reflection_projection_error(
+        "decision_kind",
+        "reflection structured payload carried an unknown decision_kind literal");
+    return result;
+  }
+
+  const auto rationale = payload_view.read_string("rationale");
+  if (!rationale.has_value()) {
+    result.error_info = make_reflection_projection_error(
+        "rationale",
+        "reflection structured payload must encode rationale as a string");
+    return result;
+  }
+
+  contracts::ReflectionDecision reflection_decision;
+  reflection_decision.request_id = *request_id;
+  reflection_decision.decision_kind = *decision_kind;
+  reflection_decision.rationale = *rationale;
+
+  if (const auto token = payload_view.field_token("goal_id");
+      token.has_value() && token->kind != validation::JsonTokenKind::Null) {
+    const auto goal_id = payload_view.read_string("goal_id");
+    if (!goal_id.has_value()) {
+      result.error_info = make_reflection_projection_error(
+          "goal_id",
+          "reflection structured payload must encode goal_id as a string when present");
+      return result;
+    }
+    reflection_decision.goal_id = *goal_id;
+  }
+
+  if (const auto token = payload_view.field_token("confidence");
+      token.has_value() && token->kind != validation::JsonTokenKind::Null) {
+    const auto confidence = payload_view.read_number("confidence");
+    if (!confidence.has_value()) {
+      result.error_info = make_reflection_projection_error(
+          "confidence",
+          "reflection structured payload must encode confidence as a number when present");
+      return result;
+    }
+    reflection_decision.confidence = static_cast<float>(*confidence);
+  }
+
+  if (const auto token = payload_view.field_token("hint_ref");
+      token.has_value() && token->kind != validation::JsonTokenKind::Null) {
+    const auto hint_ref = payload_view.read_string("hint_ref");
+    if (!hint_ref.has_value()) {
+      result.error_info = make_reflection_projection_error(
+          "hint_ref",
+          "reflection structured payload must encode hint_ref as a string when present");
+      return result;
+    }
+    reflection_decision.hint_ref = *hint_ref;
+  }
+
+  if (const auto token = payload_view.field_token("created_at");
+      token.has_value() && token->kind != validation::JsonTokenKind::Null) {
+    const auto created_at = payload_view.read_number("created_at");
+    if (!created_at.has_value()) {
+      result.error_info = make_reflection_projection_error(
+          "created_at",
+          "reflection structured payload must encode created_at as a number when present");
+      return result;
+    }
+    reflection_decision.created_at = static_cast<std::int64_t>(*created_at);
+  }
+
+  const auto project_string_list = [&](std::string_view field_path)
+      -> std::optional<std::vector<std::string>> {
+    const auto list_view = payload_view.read_list(field_path);
+    if (!list_view.has_value()) {
+      return std::nullopt;
+    }
+
+    std::vector<std::string> values;
+    values.reserve(list_view->size());
+    for (std::size_t index = 0; index < list_view->size(); ++index) {
+      const auto value = list_view->read_string(index);
+      if (!value.has_value()) {
+        return std::nullopt;
+      }
+      values.push_back(*value);
+    }
+    return values;
+  };
+
+  if (const auto token = payload_view.field_token("relevant_observation_refs");
+      token.has_value() && token->kind != validation::JsonTokenKind::Null) {
+    const auto refs = project_string_list("relevant_observation_refs");
+    if (!refs.has_value()) {
+      result.error_info = make_reflection_projection_error(
+          "relevant_observation_refs",
+          "reflection structured payload must encode relevant_observation_refs as a string list when present");
+      return result;
+    }
+    reflection_decision.relevant_observation_refs = std::move(*refs);
+  }
+
+  if (const auto token = payload_view.field_token("tags");
+      token.has_value() && token->kind != validation::JsonTokenKind::Null) {
+    const auto tags = project_string_list("tags");
+    if (!tags.has_value()) {
+      result.error_info = make_reflection_projection_error(
+          "tags",
+          "reflection structured payload must encode tags as a string list when present");
+      return result;
+    }
+    reflection_decision.tags = std::move(*tags);
+  }
+
+  result.ok = true;
+  result.reflection_decision = std::move(reflection_decision);
+  return result;
+}
+
 [[nodiscard]] bool fallback_or_fail_structured_stage(
   const observability::CognitionTelemetry& telemetry,
   const CognitionStepRequest& request,
@@ -1964,8 +2144,29 @@ class CognitionFacade final : public ICognitionEngine {
           },
         });
 
+    append_structured_projection_flag(result.diagnostics, "enabled", "reflection");
+    append_structured_projection_flag(result.diagnostics, "required", "reflection");
+    append_structured_projection_value(
+        result.diagnostics, "schema_version", "reflection", "cognition.reflection.v1");
+
     consume_reflection_bridge_stage(request, result, reflection_hint);
     if (result.error_info.has_value()) {
+      return result;
+    }
+
+    if (result.reflection_decision.has_value()) {
+      emit_pipeline_checkpoint(
+          telemetry_,
+          make_stage_context(request, "reflection", false),
+          "reflection",
+          "analysis",
+          "completed",
+          {
+              TelemetryField{.key = "source", .value = "llm_bridge"},
+              TelemetryField{.key = "diagnostic_count",
+                             .value = std::to_string(result.diagnostics.size())},
+          });
+      append_unique(result.diagnostics, "reflection_pipeline.completed");
       return result;
     }
 
@@ -2279,7 +2480,7 @@ class CognitionFacade final : public ICognitionEngine {
                                               : 2500U);
     bridge_request.schema_spec = llm_bridge::StageSchemaSpec{
         .schema_kind = llm_bridge::StageSchemaKind::JsonObject,
-        .output_schema_ref = "schema://cognition/reflection/failure_analysis",
+      .output_schema_ref = "schema://cognition/reflection/v1",
         .allow_plain_text_fallback = false,
     };
 
@@ -2315,6 +2516,11 @@ class CognitionFacade final : public ICognitionEngine {
     }
 
     append_bridge_diagnostics(result.diagnostics, *bridge_result.value, "reflection");
+    const auto resolved_route =
+        find_prefixed_diagnostic_value(bridge_result.value->diagnostics, "route:");
+    const auto failure_category =
+        find_prefixed_diagnostic_value(bridge_result.value->diagnostics, "llm_failure:");
+
     if (!bridge_result.value->error_info.has_value()) {
       emit_replay_trace(telemetry_,
                         "replay.trace.reflect.bridge_payload",
@@ -2322,13 +2528,117 @@ class CognitionFacade final : public ICognitionEngine {
                         serialize_bridge_payload("reflect.bridge_payload",
                                                  "reflection",
                                                  *bridge_result.value));
+
+      const auto handle_structured_failure = [&](const std::string& failure_code,
+                                                 const contracts::ErrorInfo& error_info,
+                                                 std::string diagnostic) {
+        append_structured_projection_value(
+            result.diagnostics, "failure_code", "reflection", failure_code);
+        if (request.execution_hints.degraded_path_allowed) {
+          append_unique(result.diagnostics, std::move(diagnostic));
+          append_unique(result.diagnostics, "reflection_pipeline.llm_bridge_degraded:reflection");
+          append_unique(result.diagnostics, "structured_projection.local_fallback:reflection");
+          append_structured_projection_value(
+              result.diagnostics, "source", "reflection", "local_fallback");
+          emit_reflection_bridge_checkpoint(telemetry_,
+                                            request,
+                                            "degraded",
+                                            true,
+                                            failure_code,
+                                            std::nullopt,
+                                            &error_info,
+                                            bridge_result.elapsed_ms,
+                                            bridge_request.model_hint.deadline_ms,
+                                            result.diagnostics.size(),
+                                            resolved_route,
+                                            failure_category);
+          return;
+        }
+
+        apply_reflection_failure(result,
+                                 contracts::ResultCode::ValidationFieldMissing,
+                                 error_info,
+                                 std::move(diagnostic));
+        emit_reflection_bridge_checkpoint(telemetry_,
+                                          request,
+                                          "failed",
+                                          false,
+                                          failure_code,
+                                          result.result_code,
+                                          result.error_info.has_value() ? &(*result.error_info)
+                                                                        : &error_info,
+                                          bridge_result.elapsed_ms,
+                                          bridge_request.model_hint.deadline_ms,
+                                          result.diagnostics.size(),
+                                          resolved_route,
+                                          failure_category);
+      };
+
+      const auto schema_validation = validator_.validate_stage_output(
+          *bridge_result.value, validation::schema_for_reflection_decision());
+      append_unique(result.diagnostics, schema_validation.diagnostics);
+      if (!schema_validation.ok) {
+        handle_structured_failure("schema",
+                                  *schema_validation.error_info,
+                                  "structured_projection.schema_violation:reflection");
+        return;
+      }
+
+      append_unique(result.diagnostics, "structured_projection.bridge_payload_valid:reflection");
+      const auto payload_view = parse_bridge_payload_view(*bridge_result.value);
+      if (!payload_view.has_value()) {
+        handle_structured_failure(
+            "projection",
+            make_reflection_projection_error(
+                "response.content_payload",
+                "reflection bridge payload could not be reparsed for projection"),
+            "structured_projection.projection_failed:reflection");
+        return;
+      }
+
+      const auto projected_reflection = project_reflection_decision(*payload_view);
+      if (!projected_reflection.ok || !projected_reflection.reflection_decision.has_value()) {
+        handle_structured_failure(
+            "projection",
+            projected_reflection.error_info.value_or(make_reflection_projection_error(
+                "reflection_decision",
+                "reflection structured payload could not produce a reflection decision")),
+            "structured_projection.projection_failed:reflection");
+        return;
+      }
+
+      const auto invariant_validation =
+          validator_.validate_reflection_decision_invariants(
+              *projected_reflection.reflection_decision);
+      append_unique(result.diagnostics, invariant_validation.diagnostics);
+      if (!invariant_validation.ok) {
+        handle_structured_failure("invariant",
+                                  *invariant_validation.error_info,
+                                  "structured_projection.invariant_failed:reflection");
+        return;
+      }
+
+      result.reflection_decision = *projected_reflection.reflection_decision;
+      result.belief_update_hint = belief_update_synthesizer_.synthesize_from_reflection(
+          *projected_reflection.reflection_decision,
+          request.belief_state,
+          request.latest_observation);
+      append_unique(result.diagnostics, "structured_projection.projected_reflection_decision");
+      append_structured_projection_value(result.diagnostics, "source", "reflection", "llm_bridge");
+      emit_reflection_bridge_checkpoint(telemetry_,
+                                        request,
+                                        "completed",
+                                        request.execution_hints.degraded_path_allowed,
+                                        "",
+                                        std::nullopt,
+                                        nullptr,
+                                        bridge_result.elapsed_ms,
+                                        bridge_request.model_hint.deadline_ms,
+                                        result.diagnostics.size(),
+                                        resolved_route,
+                                        failure_category);
       return;
     }
-
-    const auto resolved_route =
-        find_prefixed_diagnostic_value(bridge_result.value->diagnostics, "route:");
-    const auto failure_category =
-        find_prefixed_diagnostic_value(bridge_result.value->diagnostics, "llm_failure:");
 
     if (request.execution_hints.degraded_path_allowed) {
       append_unique(result.diagnostics, "reflection_pipeline.llm_bridge_degraded:reflection");
