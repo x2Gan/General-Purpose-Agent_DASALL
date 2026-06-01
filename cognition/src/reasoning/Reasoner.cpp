@@ -28,6 +28,31 @@ constexpr std::string_view kConvergeSafeCandidate = "converge_safe";
          payload.find("conflict") != std::string_view::npos;
 }
 
+[[nodiscard]] bool has_high_budget_pressure(const ReasoningRequest& request) {
+  return request.budget_context.has_value() &&
+         request.budget_context->budget_utilization >= 0.8F;
+}
+
+void append_unique_diagnostic(std::vector<std::string>& diagnostics,
+                              std::string diagnostic) {
+  if (diagnostic.empty()) {
+    return;
+  }
+
+  if (std::find(diagnostics.begin(), diagnostics.end(), diagnostic) ==
+      diagnostics.end()) {
+    diagnostics.push_back(std::move(diagnostic));
+  }
+}
+
+void append_budget_pressure_decision_path(
+    decision::ActionDecision& action_decision,
+    std::string_view decision_path) {
+  append_unique_diagnostic(action_decision.diagnostics,
+                           std::string("budget_pressure_decision_path:") +
+                               std::string(decision_path));
+}
+
 }  // namespace
 
 Reasoner::Reasoner(CognitionConfig config)
@@ -47,6 +72,9 @@ decision::ActionDecision Reasoner::decide(const ReasoningRequest& request) {
   const auto clarification_needed = evaluate_clarification_need(request);
   const auto conflicting_observation = has_conflicting_observation(request);
   const auto near_budget_limit = is_near_budget_limit(request);
+  const auto high_budget_pressure = has_high_budget_pressure(request);
+  const auto prefer_direct = prefer_direct_response(request);
+  std::optional<std::string_view> budget_pressure_decision_path;
 
   decision::ActionDecision decision;
   if ((clarification_needed || conflicting_observation) &&
@@ -54,6 +82,23 @@ decision::ActionDecision Reasoner::decide(const ReasoningRequest& request) {
     decision = projector_.build_clarification_decision(
         request, derive_clarification_question(request), clarification_score,
         std::move(candidate_scores));
+  } else if (high_budget_pressure) {
+    const auto can_direct_respond =
+        prefer_direct &&
+        direct_response_score >= config_.thresholds.direct_response &&
+        direct_response_score >= converge_safe_score;
+    if (can_direct_respond) {
+      decision = projector_.build_direct_response_decision(
+          request, direct_response_score, std::move(candidate_scores));
+      budget_pressure_decision_path = kDirectResponseCandidate;
+    } else {
+      decision = projector_.build_converge_safe_decision(
+          request,
+          "budget utilization reached the high-pressure threshold; prefer safe convergence over executing additional steps",
+          std::max(converge_safe_score, config_.thresholds.replan_hint),
+          std::move(candidate_scores));
+      budget_pressure_decision_path = kConvergeSafeCandidate;
+    }
   } else if (near_budget_limit &&
              converge_safe_score >= std::max(execute_score, direct_response_score) &&
              converge_safe_score >= config_.thresholds.replan_hint) {
@@ -61,7 +106,7 @@ decision::ActionDecision Reasoner::decide(const ReasoningRequest& request) {
         request,
         "budget pressure or exhausted actionable nodes require safe convergence",
         converge_safe_score, std::move(candidate_scores));
-  } else if (prefer_direct_response(request) &&
+  } else if (prefer_direct &&
              direct_response_score >= config_.thresholds.direct_response &&
              direct_response_score >= execute_score) {
     decision = projector_.build_direct_response_decision(
@@ -86,7 +131,12 @@ decision::ActionDecision Reasoner::decide(const ReasoningRequest& request) {
         request, direct_response_score, std::move(candidate_scores));
   }
 
-  return validate_decision_thresholds(request, std::move(decision));
+  decision = validate_decision_thresholds(request, std::move(decision));
+  if (budget_pressure_decision_path.has_value()) {
+    append_budget_pressure_decision_path(decision,
+                                         *budget_pressure_decision_path);
+  }
+  return decision;
 }
 
 std::vector<decision::CandidateDecisionScore> Reasoner::score_candidates(

@@ -1,3 +1,40 @@
+## 记录 #864
+
+- 日期：2026-06-01
+- 阶段：cognition / budget pressure explicit branch closure
+- 任务：完成 WP-COG-GAP-011 BudgetContext ≥0.8 显式分支
+- 状态：已完成（ActionDecision diagnostics seam、Reasoner 高预算显式分支、focused regression 与文档回链已闭合）
+
+### 执行前提
+
+1. [docs/deliverables/COG-EVAL-2026-05-31-cognition子系统落地评估与生产级缺口治理任务规划.md](../deliverables/COG-EVAL-2026-05-31-cognition子系统落地评估与生产级缺口治理任务规划.md) 将 `WP-COG-GAP-011` 定义为 P1 稳定性缺口：需要让 `budget_utilization >= 0.8` 在 Reasoner 中走显式 `DirectResponse` / `ConvergeSafe` 分支，并把审计路径落到 `ActionDecision.diagnostics`。
+2. [docs/architecture/DASALL_cognition子系统详细设计.md](../architecture/DASALL_cognition子系统详细设计.md) 的 owner 边界要求 `ActionDecision` 继续保持 module-local supporting type；因此本轮只能在 cognition 内增加低基数审计字段，不能把 budget audit 扩张进 shared contracts、Runtime FSM 或工具执行面。
+3. LangGraph 的“Thinking in LangGraph”强调路由决策应由 node 内部显式表达并保持可追踪，而不是把关键分支埋进隐式状态或模糊评分；本轮据此把高预算压力收敛写成 Reasoner 内的显式分支，并附带 `budget_pressure_decision_path:*` 审计标记。
+
+### 改动
+
+1. 更新 [cognition/include/decision/ActionDecision.h](../cognition/include/decision/ActionDecision.h) 与 [tests/unit/cognition/CognitionInterfaceSurfaceTest.cpp](../tests/unit/cognition/CognitionInterfaceSurfaceTest.cpp)，为 `ActionDecision` 新增模块内 `diagnostics` 字段，并固定公共类型面。
+2. 更新 [cognition/src/reasoning/DecisionProjector.cpp](../cognition/src/reasoning/DecisionProjector.cpp) 与 [cognition/src/reasoning/Reasoner.cpp](../cognition/src/reasoning/Reasoner.cpp)，让 `budget_utilization >= 0.8` 在澄清门之后显式收敛到 `DirectResponse` 或 `ConvergeSafe`，并把最终路径写入 `budget_pressure_decision_path:<direct_response|converge_safe>`。
+3. 更新 [tests/unit/cognition/BudgetAwareDecisionTest.cpp](../tests/unit/cognition/BudgetAwareDecisionTest.cpp)，新增高预算 `ConvergeSafe` / `DirectResponse` 正例和 `<0.8` 不写 diagnostics 的负例，确保显式分支具备二值验收出口。
+4. 更新 [docs/architecture/DASALL_cognition子系统详细设计.md](../architecture/DASALL_cognition子系统详细设计.md) 与 [docs/deliverables/COG-EVAL-2026-05-31-cognition子系统落地评估与生产级缺口治理任务规划.md](../deliverables/COG-EVAL-2026-05-31-cognition子系统落地评估与生产级缺口治理任务规划.md)，回写 ActionDecision diagnostics 语义、高预算显式分支规则与 closeout 证据。
+
+### 验证
+
+1. `Build_CMakeTools(buildTargets=["dasall_budget_aware_decision_unit_test"])`
+   - 结果：通过。
+2. `RunCtest_CMakeTools(tests=["BudgetAwareDecisionTest"])`
+   - 结果：通过；`100% tests passed, 0 tests failed out of 1`。
+3. `Build_CMakeTools(buildTargets=["dasall_reasoner_action_decision_unit_test","dasall_reasoner_conflict_resolution_unit_test","dasall_cognition_interface_surface_unit_test"])`
+   - 结果：通过。
+4. `RunCtest_CMakeTools(tests=["ReasonerActionDecisionTest","ReasonerConflictResolutionTest","CognitionInterfaceSurfaceTest"])`
+   - 结果：通过；`100% tests passed, 0 tests failed out of 3`。
+
+### 结果
+
+1. `budget_utilization >= 0.8` 的输入现在会在 Reasoner 中显式经 `DirectResponse` / `ConvergeSafe` 收口，不再在高预算压力下继续落回 `ExecuteAction`。
+2. `ActionDecision.diagnostics` 现在能够稳定携带 `budget_pressure_decision_path:*` 审计事实，为后续 Runtime/telemetry 审阅提供可追踪证据，同时不改变共享契约边界。
+3. `<0.8` 的预算压力仍保持既有启发式决策路径，说明这轮修复收敛在目标阈值切片内，没有放大到相邻中预算行为。
+
 ## 记录 #863
 
 - 日期：2026-06-01

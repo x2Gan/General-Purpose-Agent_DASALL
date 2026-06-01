@@ -52,6 +52,7 @@ struct ActionDecision {
   std::optional<DelegateHint> delegate_hint;
   std::optional<ResponseOutline> response_outline;
   std::vector<CandidateDecisionScore> candidate_scores;
+  std::vector<std::string> diagnostics;
 };
 
 }  // namespace dasall::cognition::decision

@@ -445,6 +445,25 @@
   - `ctest --test-dir build-ci -R "BudgetAwareDecisionTest" --output-on-failure`
 - **阻塞 / 解阻**：无。
 
+**Closeout（2026-06-01）**
+
+- 状态：已完成（ActionDecision diagnostics seam、Reasoner 高预算显式分支、focused regression 与文档回链已闭合）。
+- 设计回链：
+  - [docs/architecture/DASALL_cognition子系统详细设计.md](../architecture/DASALL_cognition子系统详细设计.md) 现已把 `ActionDecision.diagnostics` 明确为 cognition owner 内的低基数审计字段，并在 §6.13.2 / §6.16.2 冻结 `budget_pressure_decision_path:<direct_response|converge_safe>` 的高预算显式分支语义。
+  - 本轮保持模块边界不变：`diagnostics` 仅停留在 cognition module-local `ActionDecision`，没有把 budget audit 事实扩张进 shared contracts 或 Runtime 工具执行权。
+- 代码结果：
+  - 更新 [cognition/include/decision/ActionDecision.h](../../cognition/include/decision/ActionDecision.h) 与 [tests/unit/cognition/CognitionInterfaceSurfaceTest.cpp](../../tests/unit/cognition/CognitionInterfaceSurfaceTest.cpp)，为 `ActionDecision` 新增模块内 `diagnostics` 字段并固定公共类型面。
+  - 更新 [cognition/src/reasoning/DecisionProjector.cpp](../../cognition/src/reasoning/DecisionProjector.cpp) 与 [cognition/src/reasoning/Reasoner.cpp](../../cognition/src/reasoning/Reasoner.cpp)，让 `budget_utilization >= 0.8` 在澄清门之后显式经 `DirectResponse` / `ConvergeSafe` 收口，不再落回 `ExecuteAction`，并把实际路径写入 `budget_pressure_decision_path:*` diagnostics。
+  - 更新 [tests/unit/cognition/BudgetAwareDecisionTest.cpp](../../tests/unit/cognition/BudgetAwareDecisionTest.cpp)，新增高预算 `ConvergeSafe` / `DirectResponse` 正例与 `<0.8` 负例，确保显式分支和审计字段都可二值验证。
+- 验证结果：
+  - `Build_CMakeTools(buildTargets=["dasall_budget_aware_decision_unit_test"])`：通过。
+  - `RunCtest_CMakeTools(tests=["BudgetAwareDecisionTest"])`：通过；`100% tests passed, 0 tests failed out of 1`。
+  - `Build_CMakeTools(buildTargets=["dasall_reasoner_action_decision_unit_test","dasall_reasoner_conflict_resolution_unit_test","dasall_cognition_interface_surface_unit_test"])`：通过。
+  - `RunCtest_CMakeTools(tests=["ReasonerActionDecisionTest","ReasonerConflictResolutionTest","CognitionInterfaceSurfaceTest"])`：通过；`100% tests passed, 0 tests failed out of 3`。
+- 结果：
+  - `budget_utilization >= 0.8` 的请求现在不会再静默滑回 `ExecuteAction`；决策路径在 cognition owner 内被显式收敛为 `DirectResponse` 或 `ConvergeSafe`，且可通过 `ActionDecision.diagnostics` 直接审计。
+  - `<0.8` 的预算压力仍保持既有启发式执行路径，不会误写高预算显式分支诊断字段。
+
 ### 7.3 P2 任务（认知质量与扩展）
 
 #### WP-COG-GAP-012 Perception LLM 升级（GAP-P2-A）

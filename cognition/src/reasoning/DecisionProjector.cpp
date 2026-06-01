@@ -62,6 +62,7 @@ decision::ActionDecision DecisionProjector::build_execute_action_decision(
       .delegate_hint = std::nullopt,
       .response_outline = project_response_outline(request, "execute", active_node.objective),
       .candidate_scores = std::move(candidate_scores),
+      .diagnostics = {},
   };
 }
 
@@ -82,6 +83,7 @@ decision::ActionDecision DecisionProjector::build_direct_response_decision(
           request, "direct_response",
           optional_string_or(request.goal_contract.goal_description, "current goal")),
       .candidate_scores = std::move(candidate_scores),
+        .diagnostics = {},
   };
 }
 
@@ -103,6 +105,7 @@ decision::ActionDecision DecisionProjector::build_clarification_decision(
           request, "clarify",
           optional_string_or(request.goal_contract.goal_description, "current goal")),
       .candidate_scores = std::move(candidate_scores),
+        .diagnostics = {},
   };
 }
 
@@ -124,6 +127,7 @@ decision::ActionDecision DecisionProjector::build_converge_safe_decision(
           request, "converge_safe",
           optional_string_or(request.goal_contract.success_criteria, "safe completion")),
       .candidate_scores = std::move(candidate_scores),
+        .diagnostics = {},
   };
 }
 

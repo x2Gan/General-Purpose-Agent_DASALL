@@ -732,6 +732,8 @@ void test_current_supporting_types_remain_module_public() {
                                std::optional<ResponseOutline>>);
   static_assert(std::is_same_v<decltype(ActionDecision{}.candidate_scores),
                                std::vector<CandidateDecisionScore>>);
+  static_assert(std::is_same_v<decltype(ActionDecision{}.diagnostics),
+                               std::vector<std::string>>);
   static_assert(!has_tool_name_member<ActionDecision>::value);
   static_assert(!has_tool_arguments_payload_member<ActionDecision>::value);
   static_assert(!has_response_text_member<ActionDecision>::value);
