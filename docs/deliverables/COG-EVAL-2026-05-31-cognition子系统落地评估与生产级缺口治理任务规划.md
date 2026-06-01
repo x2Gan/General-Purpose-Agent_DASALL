@@ -476,7 +476,26 @@
   - `PerceptionLlmDualPathTest`、`StageOutputValidatorPerceptionInvariantTest`、`CognitionPerceptionStructuredOutputIntegrationTest`。
 - **验收命令**
   - `ctest --test-dir build-ci -R "PerceptionLlm|PerceptionInvariant|CognitionPerceptionStructured" --output-on-failure`
-- **阻塞 / 解阻**：依赖 LLM 子系统支持新 stage canonical key。
+- **阻塞 / 解阻**：已解阻。2026-06-01 已完成前置 BLOCK 原子任务“LLM 子系统支持新 stage canonical key”，shared prompt stage、llm prompt pipeline、baseline prompt 资产与 profile `model_profile.perception` route 已闭合，WP-COG-GAP-012 本体可继续实施。
+
+**BLOCK Closeout（2026-06-01）**
+
+- 状态：已完成（canonical perception stage blocker 已闭合；WP-COG-GAP-012 从 blocked 转为可执行）。
+- 设计回链：
+  - [docs/architecture/DASALL_cognition子系统详细设计.md](../architecture/DASALL_cognition子系统详细设计.md) §6.14.2 已把 llm canonical stage key 集合扩展为 `perception` / `planning` / `execution` / `reflection` / `response`，并移除旧的 `perception -> planning` 私有转换约束。
+  - [docs/architecture/DASALL_llm子系统详细设计.md](../architecture/DASALL_llm子系统详细设计.md) §6.10.3 已同步冻结新的 canonical stage 集合，明确 `perception` 具备独立 prompt release、route 与 schema 治理面。
+- 代码结果：
+  - 更新 [contracts/include/prompt/PromptComposeRequest.h](../../contracts/include/prompt/PromptComposeRequest.h)、[contracts/include/prompt/PromptComposeRequestGuards.h](../../contracts/include/prompt/PromptComposeRequestGuards.h) 与 [contracts/include/prompt/PromptReleaseGuards.h](../../contracts/include/prompt/PromptReleaseGuards.h)，把 shared `CompositionStage` 与 prompt boundary guard 全面放宽到 `Perception`。
+  - 更新 [llm/src/LLMManager.cpp](../../llm/src/LLMManager.cpp)、[llm/src/prompt/PromptAssetRepository.cpp](../../llm/src/prompt/PromptAssetRepository.cpp)、[llm/src/prompt/PromptRegistry.cpp](../../llm/src/prompt/PromptRegistry.cpp) 与 [llm/src/prompt/PromptComposer.cpp](../../llm/src/prompt/PromptComposer.cpp)，让 stage 归一化、manifest 解析、registry 查询与模板渲染都接受 `perception`。
+  - 新增 [llm/assets/prompts/perception/default/manifest.yaml](../../llm/assets/prompts/perception/default/manifest.yaml)、[llm/assets/prompts/perception/default/system.md](../../llm/assets/prompts/perception/default/system.md) 与 [llm/assets/prompts/perception/default/task.md](../../llm/assets/prompts/perception/default/task.md)，提供 baseline perception prompt release。
+  - 更新 [profiles/src/RuntimePolicyProvider.cpp](../../profiles/src/RuntimePolicyProvider.cpp) 与五档 profile runtime policy，把 `model_profile.perception` 作为必需 canonical route 投影进 `stage_routes`。
+  - 更新 [tests/contract/prompt/PromptComposeRequestContractTest.cpp](../../tests/contract/prompt/PromptComposeRequestContractTest.cpp)、[tests/contract/prompt/PromptSpecReleaseContractTest.cpp](../../tests/contract/prompt/PromptSpecReleaseContractTest.cpp)、[tests/unit/llm/PromptAssetPackageParseTest.cpp](../../tests/unit/llm/PromptAssetPackageParseTest.cpp)、[tests/unit/llm/PromptRegistrySelectionTest.cpp](../../tests/unit/llm/PromptRegistrySelectionTest.cpp) 与 [tests/integration/agent_loop/RuntimeProfileCompatibilityTest.cpp](../../tests/integration/agent_loop/RuntimeProfileCompatibilityTest.cpp)，为 shared enum、baseline perception prompt、selection path 与真实 profile route 增加 focused regression。
+- 验证结果：
+  - `cmake --build build/vscode-linux-ninja --target dasall_contract_prompt_compose_request_test dasall_contract_prompt_spec_release_test dasall_prompt_registry_selection_unit_test dasall_prompt_asset_package_parse_unit_test dasall_runtime_profile_compatibility_integration_test`：通过。
+  - `ctest --test-dir build/vscode-linux-ninja --output-on-failure -R 'PromptComposeRequestContractTest|PromptSpecReleaseContractTest|PromptRegistrySelectionTest|PromptAssetPackageParseTest|RuntimeProfileCompatibilityTest'`：通过；`100% tests passed, 0 tests failed out of 5`。
+- 结果：
+  - `perception` 现在已经成为 shared prompt / llm / profile 三侧一致承认的 canonical stage key，WP-COG-GAP-012 不再受 taxonomy blocker 卡住。
+  - 本轮仅做 unblock：五档 perception route 当前与 planning route 对齐；`perception.llm_enabled`、structured schema `cognition.perception.v1` 与 dual-path 行为仍由 WP-COG-GAP-012 主任务继续完成。
 
 #### WP-COG-GAP-013 Planner 多候选 + 候选评估（GAP-P2-B / GAP-P2-D）
 

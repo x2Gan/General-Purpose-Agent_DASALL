@@ -6,6 +6,7 @@
 #include <string>
 
 #include "LLMSubsystemConfig.h"
+#include "prompt/PromptComposeRequest.h"
 #include "support/TestAssertions.h"
 
 #include "../../../llm/src/prompt/PromptAssetRepository.h"
@@ -68,6 +69,7 @@ void create_prompt_package(const std::filesystem::path& root,
 }
 
 void test_repository_loads_repo_baseline_prompt_package() {
+  using dasall::contracts::CompositionStage;
   using dasall::llm::PromptAssetSourceConfig;
   using dasall::llm::prompt::PromptAssetRepository;
   using dasall::tests::support::assert_equal;
@@ -96,6 +98,16 @@ void test_repository_loads_repo_baseline_prompt_package() {
               "task.md content should be loaded into PromptRelease.task_template");
   assert_true(!descriptor->content_hash.empty(),
               "loaded prompt package should expose a deterministic content hash");
+
+  const auto* perception_descriptor = snapshot->find_release("perception", "2026.05.31");
+  assert_true(perception_descriptor != nullptr,
+              "baseline prompt catalog should expose the perception 2026.05.31 release");
+  assert_true(perception_descriptor->release.stage.has_value(),
+              "perception baseline prompt should preserve a parsed stage value");
+  assert_true(*perception_descriptor->release.stage == CompositionStage::Perception,
+              "perception baseline prompt should parse to the canonical Perception stage");
+  assert_true(perception_descriptor->release.task_template->find("perception") != std::string::npos,
+              "perception baseline prompt should load the perception task template body");
 }
 
 void test_repository_updates_content_hash_when_prompt_body_changes() {

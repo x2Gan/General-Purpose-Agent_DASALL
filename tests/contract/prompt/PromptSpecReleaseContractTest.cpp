@@ -67,6 +67,19 @@ void test_valid_prompt_spec_passes_field_rules() {
   assert_true(result.ok, "valid PromptSpec should pass field-rule validation");
 }
 
+void test_prompt_spec_accepts_perception_stage() {
+  auto spec = make_valid_prompt_spec();
+  spec.prompt_id = "prompt.perception.default";
+  spec.stage = CompositionStage::Perception;
+  spec.task_types = std::vector<std::string>{"perception"};
+  spec.output_schema_ref = "schema://prompt/perception/default/v1";
+  spec.tool_hints = std::vector<std::string>{"builtin"};
+  spec.tags = std::vector<std::string>{"perception", "default"};
+
+  const auto result = validate_prompt_spec_field_rules(spec);
+  assert_true(result.ok, "PromptSpec should accept perception as a valid canonical stage");
+}
+
 void test_prompt_spec_missing_prompt_id_is_rejected() {
   auto spec = make_valid_prompt_spec();
   spec.prompt_id = std::nullopt;
@@ -115,6 +128,18 @@ void test_valid_prompt_release_passes_required_fields() {
 void test_valid_prompt_release_passes_field_rules() {
   const auto result = validate_prompt_release_field_rules(make_valid_prompt_release());
   assert_true(result.ok, "valid PromptRelease should pass field-rule validation");
+}
+
+void test_prompt_release_accepts_perception_stage() {
+  auto release = make_valid_prompt_release();
+  release.prompt_id = "prompt.perception.default";
+  release.stage = CompositionStage::Perception;
+  release.task_template = "Classify intent and surface ambiguities before planning.";
+  release.output_schema_ref = "schema://prompt/perception/default/v1";
+  release.tags = std::vector<std::string>{"perception", "canary"};
+
+  const auto result = validate_prompt_release_field_rules(release);
+  assert_true(result.ok, "PromptRelease should accept perception as a valid canonical stage");
 }
 
 void test_prompt_release_missing_version_is_rejected() {
@@ -182,12 +207,14 @@ int main() {
   try {
     test_valid_prompt_spec_passes_required_fields();
     test_valid_prompt_spec_passes_field_rules();
+    test_prompt_spec_accepts_perception_stage();
     test_prompt_spec_missing_prompt_id_is_rejected();
     test_prompt_spec_duplicate_template_slots_are_rejected();
     test_prompt_spec_rejects_release_lifecycle_field();
     test_prompt_spec_rejects_compose_result_field();
     test_valid_prompt_release_passes_required_fields();
     test_valid_prompt_release_passes_field_rules();
+    test_prompt_release_accepts_perception_stage();
     test_prompt_release_missing_version_is_rejected();
     test_prompt_release_out_of_range_eval_status_is_rejected();
     test_prompt_release_rollback_from_self_is_rejected();

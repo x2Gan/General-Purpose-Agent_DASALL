@@ -28,6 +28,10 @@ runtime_budget:
 	max_latency_ms: 6000
 	max_replan_count: 2
 model_profile:
+	perception:
+		route: lan.diagnostic
+		fallback_route: local.small
+		streaming_enabled: false
 	planning:
 		route: lan.diagnostic
 		fallback_route: local.small

@@ -583,6 +583,10 @@ void append_response_tag(dasall::contracts::LLMResponse& response, std::string t
 std::optional<dasall::contracts::CompositionStage> to_composition_stage(
     std::string_view stage) {
   const std::string normalized = to_lower_copy(std::string(stage));
+  if (normalized == "perception") {
+    return dasall::contracts::CompositionStage::Perception;
+  }
+
   if (normalized == "planner" || normalized == "planning") {
     return dasall::contracts::CompositionStage::Planning;
   }

@@ -39,9 +39,12 @@ struct PromptPackageOptions {
   std::string prompt_id = "planner";
   std::string version;
   std::string trusted_source = "profiles";
+  std::string stage = "planning";
+  std::vector<std::string> task_types = {"plan"};
   std::string scene_id;
   std::string persona_id;
   std::vector<std::string> profile_tags;
+  std::vector<std::string> tags = {"planner"};
   bool default_release = false;
 };
 
@@ -85,10 +88,14 @@ void create_prompt_package(const std::filesystem::path& root,
   manifest.append("version: \"");
   manifest.append(options.version);
   manifest.append("\"\n");
-  manifest.append("stage: planning\n");
+  manifest.append("stage: ");
+  manifest.append(options.stage);
+  manifest.push_back('\n');
   manifest.append("eval_status: stable\n");
   manifest.append("release_scope: stable\n");
-  manifest.append("output_schema_ref: schema://planner/default\n");
+  manifest.append("output_schema_ref: schema://");
+  manifest.append(options.prompt_id);
+  manifest.append("/default\n");
   manifest.append("trusted_source: ");
   manifest.append(options.trusted_source);
   manifest.push_back('\n');
@@ -96,10 +103,8 @@ void create_prompt_package(const std::filesystem::path& root,
   manifest.append(options.default_release ? "true\n" : "false\n");
   manifest.append("language: zh-cn\n");
   manifest.append("model_family: openai_compatible\n");
-  manifest.append("task_types:\n");
-  manifest.append("  - plan\n");
-  manifest.append("tags:\n");
-  manifest.append("  - planner\n");
+  append_optional_list(manifest, "task_types", options.task_types);
+  append_optional_list(manifest, "tags", options.tags);
   if (!options.scene_id.empty()) {
     manifest.append("scene_id: ");
     manifest.append(options.scene_id);
@@ -126,6 +131,9 @@ dasall::llm::prompt::PromptRegistry make_registry(const std::filesystem::path& r
   const PromptRegistryConfig config{
     .asset_sources = PromptAssetSourceConfig{
         .baseline_root = root.generic_string(),
+        .deployment_root = std::string(),
+        .snapshot_cache_root = std::string(),
+        .cache_ttl_ms = 0U,
     },
     .trusted_sources = {"profiles"},
   };
@@ -166,10 +174,11 @@ dasall::llm::prompt::PromptRegistry make_registry(const dasall::llm::prompt::Pro
   return registry;
 }
 
-dasall::llm::prompt::PromptQuery make_query() {
+dasall::llm::prompt::PromptQuery make_query(const std::string& stage = "planning",
+                                            const std::string& task_type = "plan") {
   return dasall::llm::prompt::PromptQuery{
-      .stage = "planning",
-      .task_type = "plan",
+      .stage = stage,
+      .task_type = task_type,
       .language = "zh-cn",
       .model_family = "openai_compatible",
       .prompt_release_id = std::string(),
@@ -187,17 +196,27 @@ void test_registry_prefers_explicit_release_over_scene_persona_and_default() {
 
   TempDirectory temp_directory("dasall_prompt_registry_explicit_release");
   create_prompt_package(temp_directory.path(), PromptPackageOptions{
+                             .prompt_id = "planner",
                                                    .version = "2026.04.11",
+                             .trusted_source = "profiles",
+                             .stage = "planning",
+                             .task_types = {"plan"},
                                                    .scene_id = "general",
                                                    .persona_id = "planner",
                                                    .profile_tags = {"desktop_full"},
+                             .tags = {"planner"},
                                                    .default_release = true,
                                                });
   create_prompt_package(temp_directory.path(), PromptPackageOptions{
+                             .prompt_id = "planner",
                                                    .version = "2026.04.12",
+                             .trusted_source = "profiles",
+                             .stage = "planning",
+                             .task_types = {"plan"},
                                                    .scene_id = "operator",
                                                    .persona_id = "operator",
                                                    .profile_tags = {"edge_minimal"},
+                             .tags = {"planner"},
                                                    .default_release = false,
                                                });
 
@@ -226,22 +245,39 @@ void test_registry_selects_scene_persona_then_profile_then_default() {
 
   TempDirectory temp_directory("dasall_prompt_registry_selector_fallbacks");
   create_prompt_package(temp_directory.path(), PromptPackageOptions{
+                             .prompt_id = "planner",
                                                    .version = "2026.04.11",
+                             .trusted_source = "profiles",
+                             .stage = "planning",
+                             .task_types = {"plan"},
                                                    .scene_id = "general",
                                                    .persona_id = "planner",
                                                    .profile_tags = {"desktop_full"},
+                             .tags = {"planner"},
                                                    .default_release = true,
                                                });
   create_prompt_package(temp_directory.path(), PromptPackageOptions{
+                             .prompt_id = "planner",
                                                    .version = "2026.04.12",
+                             .trusted_source = "profiles",
+                             .stage = "planning",
+                             .task_types = {"plan"},
                                                    .scene_id = "operator",
                                                    .persona_id = "operator",
                                                    .profile_tags = {"factory_test"},
+                             .tags = {"planner"},
                                                    .default_release = false,
                                                });
   create_prompt_package(temp_directory.path(), PromptPackageOptions{
+                             .prompt_id = "planner",
                                                    .version = "2026.04.13",
+                             .trusted_source = "profiles",
+                             .stage = "planning",
+                             .task_types = {"plan"},
+                             .scene_id = std::string(),
+                             .persona_id = std::string(),
                                                    .profile_tags = {"cloud_full"},
+                             .tags = {"planner"},
                                                    .default_release = false,
                                                });
 
@@ -288,7 +324,15 @@ void test_registry_rejects_unknown_explicit_release() {
 
   TempDirectory temp_directory("dasall_prompt_registry_missing_release");
   create_prompt_package(temp_directory.path(), PromptPackageOptions{
+                             .prompt_id = "planner",
                                                    .version = "2026.04.11",
+                             .trusted_source = "profiles",
+                             .stage = "planning",
+                             .task_types = {"plan"},
+                             .scene_id = std::string(),
+                             .persona_id = std::string(),
+                             .profile_tags = {},
+                             .tags = {"planner"},
                                                    .default_release = true,
                                                });
 
@@ -306,6 +350,42 @@ void test_registry_rejects_unknown_explicit_release() {
               "PromptRegistry should surface missing explicit releases as validation failures");
 }
 
+void test_registry_selects_perception_stage_release() {
+  using dasall::tests::support::assert_equal;
+  using dasall::tests::support::assert_true;
+
+  TempDirectory temp_directory("dasall_prompt_registry_perception_stage");
+  create_prompt_package(temp_directory.path(), PromptPackageOptions{
+                                                   .prompt_id = "perception",
+                                                   .version = "2026.05.31",
+                                                   .trusted_source = "profiles",
+                                                   .stage = "perception",
+                                                   .task_types = {"perception"},
+                                                   .scene_id = "general",
+                                                   .persona_id = "perception",
+                                                   .profile_tags = {"desktop_full"},
+                                                   .tags = {"perception", "baseline"},
+                                                   .default_release = true,
+                                               });
+
+  auto registry = make_registry(temp_directory.path());
+  auto query = make_query("perception", "perception");
+  query.scene_id = "general";
+  query.persona_id = "perception";
+  query.profile_id = "desktop_full";
+
+  const auto result = registry.select(query);
+
+  assert_true(result.has_consistent_values(),
+              "PromptRegistry should produce a consistent result for perception stage selection");
+  assert_true(result.release.has_value(),
+              "PromptRegistry should return the selected PromptRelease for perception stage queries");
+  assert_equal(std::string("2026.05.31"), result.selected_version,
+               "perception stage selection should resolve the matching release version");
+  assert_equal(std::string("scene_persona_selector"), result.selection_reason,
+               "perception stage selection should still follow the standard selector precedence");
+}
+
 void test_registry_keeps_previous_catalog_after_failed_reinit() {
   using dasall::tests::support::assert_equal;
   using dasall::tests::support::assert_true;
@@ -314,11 +394,27 @@ void test_registry_keeps_previous_catalog_after_failed_reinit() {
   TempDirectory snapshot_root("dasall_prompt_registry_reload_snapshot");
 
   create_prompt_package(baseline_root.path(), PromptPackageOptions{
+                             .prompt_id = "planner",
                                                    .version = "2026.04.11",
+                             .trusted_source = "profiles",
+                             .stage = "planning",
+                             .task_types = {"plan"},
+                             .scene_id = std::string(),
+                             .persona_id = std::string(),
+                             .profile_tags = {},
+                             .tags = {"planner"},
                                                    .default_release = true,
                                                });
   create_prompt_package(snapshot_root.path(), PromptPackageOptions{
+                             .prompt_id = "planner",
                                                    .version = "2026.04.13",
+                             .trusted_source = "profiles",
+                             .stage = "planning",
+                             .task_types = {"plan"},
+                             .scene_id = std::string(),
+                             .persona_id = std::string(),
+                             .profile_tags = {},
+                             .tags = {"planner"},
                                                    .default_release = true,
                                                });
 
@@ -364,6 +460,7 @@ int main() {
     test_registry_prefers_explicit_release_over_scene_persona_and_default();
     test_registry_selects_scene_persona_then_profile_then_default();
     test_registry_rejects_unknown_explicit_release();
+    test_registry_selects_perception_stage_release();
     test_registry_keeps_previous_catalog_after_failed_reinit();
   } catch (const std::exception& ex) {
     std::cerr << ex.what() << std::endl;

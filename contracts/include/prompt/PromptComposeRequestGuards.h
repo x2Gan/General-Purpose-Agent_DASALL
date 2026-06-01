@@ -97,11 +97,12 @@ validate_prompt_compose_request_boundary(const PromptComposeRequest& req) {
   }
 
   // Boundary: stage enum range (WP02-T012 unknown-value guard).
-  // Valid values are Planning(1) through Response(4); 0 is Unspecified
-  // (already rejected by Layer 1) and values > 4 are out of range.
+  // Valid values are Planning(1), Execution(2), Reflection(3),
+  // Response(4), and Perception(5); 0 is Unspecified (already rejected by
+  // Layer 1) and values > 5 are out of range.
   const int raw_stage = static_cast<int>(*req.stage);
   if (raw_stage < static_cast<int>(CompositionStage::Planning) ||
-      raw_stage > static_cast<int>(CompositionStage::Response)) {
+      raw_stage > static_cast<int>(CompositionStage::Perception)) {
     return PromptComposeRequestGuardResult{
         .ok     = false,
         .reason = "stage value is outside the known CompositionStage enum range",

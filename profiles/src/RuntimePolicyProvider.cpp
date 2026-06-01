@@ -108,12 +108,14 @@ template <typename T>
     return std::nullopt;
   }
 
-    const auto planning_route = get_model_route_policy(parsed_yaml, "planning");
-    const auto execution_route = get_model_route_policy(parsed_yaml, "execution");
-    const auto reflection_route = get_model_route_policy(parsed_yaml, "reflection");
-    const auto response_route = get_model_route_policy(parsed_yaml, "response");
-    if (!planning_route.has_value() || !execution_route.has_value() ||
-            !reflection_route.has_value() || !response_route.has_value()) {
+        const auto perception_route = get_model_route_policy(parsed_yaml, "perception");
+        const auto planning_route = get_model_route_policy(parsed_yaml, "planning");
+        const auto execution_route = get_model_route_policy(parsed_yaml, "execution");
+        const auto reflection_route = get_model_route_policy(parsed_yaml, "reflection");
+        const auto response_route = get_model_route_policy(parsed_yaml, "response");
+        if (!perception_route.has_value() || !planning_route.has_value() ||
+            !execution_route.has_value() || !reflection_route.has_value() ||
+            !response_route.has_value()) {
     return std::nullopt;
   }
 
@@ -264,6 +266,7 @@ template <typename T>
       },
       ModelProfile{
           .stage_routes = {
+              {"perception", *perception_route},
               {"planning", *planning_route},
               {"execution", *execution_route},
               {"reflection", *reflection_route},

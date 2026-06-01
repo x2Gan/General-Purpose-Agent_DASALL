@@ -28,6 +28,10 @@ runtime_budget:
 	max_latency_ms: 9000
 	max_replan_count: 4
 model_profile:
+	perception:
+		route: cloud.reasoning
+		fallback_route: lan.general
+		streaming_enabled: false
 	planning:
 		route: cloud.reasoning
 		fallback_route: lan.general

@@ -1,3 +1,39 @@
+## 记录 #865
+
+- 日期：2026-06-01
+- 阶段：cognition / llm canonical perception stage blocker closure
+- 任务：完成 WP-COG-GAP-012 前置 BLOCK“LLM 子系统支持新的 canonical perception stage key”
+- 状态：已完成（shared prompt stage、llm prompt pipeline、baseline perception prompt、profile route 与 focused regression 已闭合）
+
+### 执行前提
+
+1. [docs/deliverables/COG-EVAL-2026-05-31-cognition子系统落地评估与生产级缺口治理任务规划.md](../deliverables/COG-EVAL-2026-05-31-cognition子系统落地评估与生产级缺口治理任务规划.md) 将 `WP-COG-GAP-012` 标记为 P2 任务，并明确其前置阻塞是“依赖 LLM 子系统支持新 stage canonical key”。
+2. [docs/architecture/DASALL_cognition子系统详细设计.md](../architecture/DASALL_cognition子系统详细设计.md) 与 [docs/architecture/DASALL_llm子系统详细设计.md](../architecture/DASALL_llm子系统详细设计.md) 在本轮前仍冻结四键 canonical stage taxonomy：`planning` / `execution` / `reflection` / `response`，并把 `perception` 限定为 `planning.task_type`；这会直接阻断 WP-COG-GAP-012 需要的独立 stage route / prompt / schema 治理面。
+3. 为避免破坏既有 shared enum wire value，本轮 blocker 修复要求在不重排 `Planning` / `Execution` / `Reflection` / `Response` 数值的前提下，引入 `CompositionStage::Perception`，并让 shared contract、llm prompt pipeline、baseline prompt 资产与 profiles route 同步接受该 canonical key。
+
+### 改动
+
+1. 更新 [docs/architecture/DASALL_cognition子系统详细设计.md](../architecture/DASALL_cognition子系统详细设计.md) 与 [docs/architecture/DASALL_llm子系统详细设计.md](../architecture/DASALL_llm子系统详细设计.md)，把 llm canonical stage key 集合统一扩展为 `perception` / `planning` / `execution` / `reflection` / `response`，并移除旧的 `perception -> planning` 私有转换口径。
+2. 更新 [contracts/include/prompt/PromptComposeRequest.h](../contracts/include/prompt/PromptComposeRequest.h)、[contracts/include/prompt/PromptComposeRequestGuards.h](../contracts/include/prompt/PromptComposeRequestGuards.h) 与 [contracts/include/prompt/PromptReleaseGuards.h](../contracts/include/prompt/PromptReleaseGuards.h)，新增 `CompositionStage::Perception` 并放宽 prompt compose/spec/release 边界守卫。
+3. 更新 [llm/src/LLMManager.cpp](../llm/src/LLMManager.cpp)、[llm/src/prompt/PromptAssetRepository.cpp](../llm/src/prompt/PromptAssetRepository.cpp)、[llm/src/prompt/PromptRegistry.cpp](../llm/src/prompt/PromptRegistry.cpp) 与 [llm/src/prompt/PromptComposer.cpp](../llm/src/prompt/PromptComposer.cpp)，让 stage 归一化、manifest 解析、release 选择和模板渲染都能处理 `perception`。
+4. 新增 [llm/assets/prompts/perception/default/manifest.yaml](../llm/assets/prompts/perception/default/manifest.yaml)、[llm/assets/prompts/perception/default/system.md](../llm/assets/prompts/perception/default/system.md) 与 [llm/assets/prompts/perception/default/task.md](../llm/assets/prompts/perception/default/task.md)，提供 canonical perception stage 的 baseline prompt 资产。
+5. 更新 [profiles/src/RuntimePolicyProvider.cpp](../profiles/src/RuntimePolicyProvider.cpp) 以及 [profiles/desktop_full/runtime_policy.yaml](../profiles/desktop_full/runtime_policy.yaml)、[profiles/cloud_full/runtime_policy.yaml](../profiles/cloud_full/runtime_policy.yaml)、[profiles/edge_balanced/runtime_policy.yaml](../profiles/edge_balanced/runtime_policy.yaml)、[profiles/edge_minimal/runtime_policy.yaml](../profiles/edge_minimal/runtime_policy.yaml)、[profiles/factory_test/runtime_policy.yaml](../profiles/factory_test/runtime_policy.yaml)，把 `model_profile.perception` 设为必需 route，并先与各 profile 的 planning route 对齐。
+6. 更新 [tests/contract/prompt/PromptComposeRequestContractTest.cpp](../tests/contract/prompt/PromptComposeRequestContractTest.cpp)、[tests/contract/prompt/PromptSpecReleaseContractTest.cpp](../tests/contract/prompt/PromptSpecReleaseContractTest.cpp)、[tests/unit/llm/PromptAssetPackageParseTest.cpp](../tests/unit/llm/PromptAssetPackageParseTest.cpp)、[tests/unit/llm/PromptRegistrySelectionTest.cpp](../tests/unit/llm/PromptRegistrySelectionTest.cpp) 与 [tests/integration/agent_loop/RuntimeProfileCompatibilityTest.cpp](../tests/integration/agent_loop/RuntimeProfileCompatibilityTest.cpp)，为 shared enum、baseline prompt、registry selection 与真实 profile snapshot 补 perception focused regression。
+7. 更新 [docs/deliverables/COG-EVAL-2026-05-31-cognition子系统落地评估与生产级缺口治理任务规划.md](../deliverables/COG-EVAL-2026-05-31-cognition子系统落地评估与生产级缺口治理任务规划.md) 与 [docs/todos/DASALL_子系统查漏补缺专项记录.md](../todos/DASALL_子系统查漏补缺专项记录.md)，回写 `WP-COG-GAP-012` 的 blocker closeout 与总账状态。
+
+### 验证
+
+1. `cmake --build build/vscode-linux-ninja --target dasall_contract_prompt_compose_request_test dasall_contract_prompt_spec_release_test dasall_prompt_registry_selection_unit_test dasall_prompt_asset_package_parse_unit_test dasall_runtime_profile_compatibility_integration_test`
+   - 结果：通过。
+2. `ctest --test-dir build/vscode-linux-ninja --output-on-failure -R 'PromptComposeRequestContractTest|PromptSpecReleaseContractTest|PromptRegistrySelectionTest|PromptAssetPackageParseTest|RuntimeProfileCompatibilityTest'`
+   - 结果：通过；`100% tests passed, 0 tests failed out of 5`。
+
+### 结果
+
+1. `perception` 现在已经成为 shared prompt、llm prompt pipeline 与 profiles runtime policy 三侧一致承认的 canonical stage key，`WP-COG-GAP-012` 不再受 taxonomy blocker 卡住。
+2. 真实 baseline prompt catalog 已存在 perception release，PromptRegistry 也能按 `stage=perception` / `task_type=perception` 选中对应 release；后续 cognition dual-path 可直接接入现成 prompt 治理面。
+3. 本轮刻意只做 unblock：五档 profile 的 perception route 暂时与 planning route 对齐；`perception.llm_enabled`、`cognition.perception.v1` schema、dual-path 投影与 validator 仍由 `WP-COG-GAP-012` 主任务继续完成。
+
 ## 记录 #864
 
 - 日期：2026-06-01

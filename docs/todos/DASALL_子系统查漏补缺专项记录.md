@@ -1,6 +1,6 @@
 # DASALL 子系统查漏补缺专项记录
 
-最近更新时间：2026-05-27  
+最近更新时间：2026-06-01  
 阶段：System Review -> Subsystem Gap Closure  
 适用范围：按子系统逐项检查详细设计、当前代码、测试证据、跨模块链路与 installed / production 证据边界  
 记录口径：本文件用于集中记录“设计已要求但实现、测试、证据或生产链路仍未完全闭合”的缺口；不替代各子系统专项 TODO、worklog 或 SSOT 矩阵。
@@ -218,6 +218,7 @@ cognition 子系统的实现覆盖度已经很高，当前主要问题不再是 
 2. runtime 非 direct cognition path：`DirectResponse` / `ConvergeSafe` 第一跳映射、timeout isolation、structured output authoritative consumption 与 production telemetry sink 已闭合；这些项后续只需维持回归，不再作为新增补缺任务。
 3. installed production 主链：仍不能宣称 cognition 必经；当前只可记录为 source / integration evidence，L4 installed / qemu / soak positive evidence 仍待独立补证。
 4. 后续查漏补缺优先级：从 cognition owner 内部缺口转向 Gate-COG-12 关联的 repo-wide non-cognition blocker，以及更高层 installed/package 证据链闭合。
+5. 2026-06-01 已完成 `WP-COG-GAP-012` 的前置 BLOCK“LLM 子系统支持新的 canonical perception stage”：shared `CompositionStage`、llm prompt pipeline、baseline perception prompt 与五档 profile `model_profile.perception` route 已落盘，并通过 `PromptComposeRequestContractTest`、`PromptSpecReleaseContractTest`、`PromptAssetPackageParseTest`、`PromptRegistrySelectionTest`、`RuntimeProfileCompatibilityTest`；`WP-COG-GAP-012` 当前已从 blocked 转为可执行。
 
 ## 5. LLM 子系统查漏补缺
 

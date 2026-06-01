@@ -1,0 +1,32 @@
+schema_version: "1"
+min_loader_version: "1"
+package_id: perception.default
+prompt_id: perception
+version: "2026.05.31"
+stage: perception
+eval_status: stable
+release_scope: stable
+output_schema_ref: schema://perception/default
+trusted_source: profiles
+default_release: true
+source_uri: prompt://perception/default
+language: zh-cn
+model_family: openai_compatible
+task_types:
+  - perception
+template_slots:
+  - user_goal
+  - constraints
+tool_hints:
+  - builtin
+tags:
+  - perception
+  - baseline
+profile_tags:
+  - desktop_full
+  - cloud_full
+  - edge_balanced
+  - edge_minimal
+  - factory_test
+scene_id: general
+persona_id: perception

@@ -106,6 +106,10 @@ std::optional<bool> parse_bool(const std::string& raw_value) {
 
 std::optional<dasall::contracts::CompositionStage> parse_stage(const std::string& raw_value) {
   const std::string value = to_lower_copy(raw_value);
+  if (value == "perception") {
+    return dasall::contracts::CompositionStage::Perception;
+  }
+
   if (value == "planning") {
     return dasall::contracts::CompositionStage::Planning;
   }

@@ -24,6 +24,7 @@ enum class CompositionStage {
   Execution   = 2,  // Execution stage: compose Prompt after tool call / action.
   Reflection  = 3,  // Reflection stage: compose Prompt for failure attribution.
   Response    = 4,  // Response stage: compose Prompt for final reply generation.
+  Perception  = 5,  // Perception stage: classify intent and extract entities before planning.
 };
 
 // ---------------------------------------------------------------------------

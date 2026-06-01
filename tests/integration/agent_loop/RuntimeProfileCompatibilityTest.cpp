@@ -86,6 +86,7 @@ void test_runtime_profile_projection_tracks_budget_degrade_and_enablement_matrix
   const auto cloud = load_profile("cloud_full", "linux-x86_64-server");
   const auto edge_balanced = load_profile("edge_balanced", "linux-arm64-embedded");
   const auto edge_minimal = load_profile("edge_minimal", "linux-arm64-embedded");
+  const auto factory_test = load_profile("factory_test", "linux-arm64-factory");
 
   assert_equal(std::string("desktop_full"), desktop.snapshot->effective_profile_id(),
                "runtime profile compatibility should preserve desktop_full as effective profile id");
@@ -95,6 +96,8 @@ void test_runtime_profile_projection_tracks_budget_degrade_and_enablement_matrix
                "runtime profile compatibility should preserve edge_balanced as effective profile id");
   assert_equal(std::string("edge_minimal"), edge_minimal.snapshot->effective_profile_id(),
                "runtime profile compatibility should preserve edge_minimal as effective profile id");
+  assert_equal(std::string("factory_test"), factory_test.snapshot->effective_profile_id(),
+               "runtime profile compatibility should preserve factory_test as effective profile id");
 
   assert_true(desktop.manifest.enables_module("llm_cloud_adapter"),
               "desktop_full should keep llm_cloud_adapter enabled in the build manifest");
@@ -180,6 +183,9 @@ void test_runtime_profile_projection_tracks_budget_degrade_and_enablement_matrix
                "edge_minimal should keep the smallest compression threshold");
 
   assert_equal(std::string("cloud.reasoning"),
+               desktop.snapshot->model_profile().stage_routes.at("perception").route,
+               "desktop_full should route perception traffic to cloud.reasoning");
+  assert_equal(std::string("cloud.reasoning"),
                desktop.snapshot->model_profile().stage_routes.at("planning").route,
                "desktop_full should route planning traffic to cloud.reasoning");
   assert_equal(std::string("cloud.reasoning"),
@@ -191,6 +197,12 @@ void test_runtime_profile_projection_tracks_budget_degrade_and_enablement_matrix
   assert_equal(std::string("cloud.general"),
                desktop.snapshot->model_profile().stage_routes.at("response").route,
                "desktop_full should route response traffic to cloud.general");
+  assert_equal(std::string("cloud.reasoning"),
+               cloud.snapshot->model_profile().stage_routes.at("perception").route,
+               "cloud_full should route perception traffic to cloud.reasoning");
+  assert_equal(std::string("lan.general"),
+               edge_balanced.snapshot->model_profile().stage_routes.at("perception").route,
+               "edge_balanced should route perception traffic to lan.general");
   assert_equal(std::string("lan.general"),
                edge_balanced.snapshot->model_profile().stage_routes.at("planning").route,
                "edge_balanced should route planning traffic to lan.general");
@@ -204,6 +216,9 @@ void test_runtime_profile_projection_tracks_budget_degrade_and_enablement_matrix
                edge_balanced.snapshot->model_profile().stage_routes.at("response").route,
                "edge_balanced should route response traffic to lan.general");
   assert_equal(std::string("local.small"),
+               edge_minimal.snapshot->model_profile().stage_routes.at("perception").route,
+               "edge_minimal should route perception traffic to local.small");
+  assert_equal(std::string("local.small"),
                edge_minimal.snapshot->model_profile().stage_routes.at("planning").route,
                "edge_minimal should route planning traffic to local.small");
   assert_equal(std::string("local.small"),
@@ -215,6 +230,9 @@ void test_runtime_profile_projection_tracks_budget_degrade_and_enablement_matrix
   assert_equal(std::string("local.small"),
                edge_minimal.snapshot->model_profile().stage_routes.at("response").route,
                "edge_minimal should route response traffic to local.small");
+  assert_equal(std::string("lan.diagnostic"),
+               factory_test.snapshot->model_profile().stage_routes.at("perception").route,
+               "factory_test should route perception traffic to lan.diagnostic");
 
   assert_true(!desktop.snapshot->capability_cache_policy().stale_read_allowed,
               "desktop_full should keep stale capability reads disabled");

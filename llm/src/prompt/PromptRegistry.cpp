@@ -29,6 +29,10 @@ std::string to_lower_copy(std::string value) {
 
 std::optional<CompositionStage> parse_stage(std::string_view raw_stage) {
   const std::string stage = to_lower_copy(std::string(raw_stage));
+  if (stage == "perception") {
+    return CompositionStage::Perception;
+  }
+
   if (stage == "planning") {
     return CompositionStage::Planning;
   }

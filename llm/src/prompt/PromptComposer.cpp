@@ -73,6 +73,8 @@ std::string stage_to_string(const std::optional<CompositionStage>& stage) {
       return "reflection";
     case CompositionStage::Response:
       return "response";
+    case CompositionStage::Perception:
+      return "perception";
     case CompositionStage::Unspecified:
       return std::string();
   }

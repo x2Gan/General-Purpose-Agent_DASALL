@@ -28,6 +28,10 @@ runtime_budget:
 	max_latency_ms: 5000
 	max_replan_count: 1
 model_profile:
+	perception:
+		route: local.small
+		fallback_route: builtin_only
+		streaming_enabled: false
 	planning:
 		route: local.small
 		fallback_route: builtin_only

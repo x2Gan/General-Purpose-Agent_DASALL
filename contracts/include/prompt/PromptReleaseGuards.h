@@ -65,7 +65,7 @@ inline PromptSpecGuardResult validate_prompt_spec_boundary(const PromptSpec& spe
 
   const int raw_stage = static_cast<int>(*spec.stage);
   if (raw_stage < static_cast<int>(CompositionStage::Planning) ||
-      raw_stage > static_cast<int>(CompositionStage::Response)) {
+      raw_stage > static_cast<int>(CompositionStage::Perception)) {
     return PromptSpecGuardResult{
         .ok = false,
         .reason = "stage value is outside the known CompositionStage enum range",
@@ -239,7 +239,7 @@ inline PromptReleaseGuardResult validate_prompt_release_boundary(
 
   const int raw_stage = static_cast<int>(*release.stage);
   if (raw_stage < static_cast<int>(CompositionStage::Planning) ||
-      raw_stage > static_cast<int>(CompositionStage::Response)) {
+      raw_stage > static_cast<int>(CompositionStage::Perception)) {
     return PromptReleaseGuardResult{
         .ok = false,
         .reason = "stage value is outside the known CompositionStage enum range",

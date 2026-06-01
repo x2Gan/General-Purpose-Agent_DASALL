@@ -1054,18 +1054,20 @@ RuntimeCognitionLoopSmokeTest 的最小断言：
 
 v1.0 仅描述 cognition 传递"复杂度、推理深度、延迟/SLA 偏好"给 llm，但 StageModelHint 字段未定义，LLM 的 ModelRouter 无法据此做有效路由。
 
-COG-TODO-002 评审结论：`StageModelHint.stage_name` 与
+WP-COG-GAP-012 评审结论：`StageModelHint.stage_name` 与
 `RuntimePolicySnapshot.model_profile.stage_routes` 必须使用同一组 llm canonical stage key：
-`planning`、`execution`、`reflection`、`response`。`perception`、`reasoning`、`planner`、
+`perception`、`planning`、`execution`、`reflection`、`response`。`reasoning`、`planner`、
 `responder` 只能作为 cognition 组件名、task_type 或历史 profile-source alias，不得作为投影后
 `StageModelHint.stage_name` / `stage_routes` key 出现。若需要兼容旧 profile 文件语法，归一化必须发生在
-profile provider / projector 边界，不能藏在 bridge、profile gate 或测试 fixture 内。
+profile provider / projector 边界，不能藏在 bridge、profile gate 或测试 fixture 内。Perception
+不再复用 `planning` stage；它有独立的 prompt release、schema 与 route key，避免“感知分类”与“计划生成”共用
+同一条 llm stage 治理面。
 
 建议 StageModelHint 结构：
 
 ```cpp
 struct StageModelHint {
-  std::string stage_name;          // llm canonical key: planning, execution, reflection, response
+  std::string stage_name;          // llm canonical key: perception, planning, execution, reflection, response
   std::string task_type;           // cognition 语义任务：perception, plan, action_decision, failure_analysis, final_response
   ModelCapabilityTier capability_tier; // enum: lightweight, standard, advanced, reasoning_heavy
   uint32_t max_output_tokens;      // 阶段期望的最大输出 token 数
@@ -1088,7 +1090,7 @@ enum class ModelCapabilityTier : uint8_t {
 
 | cognition 组件 | `StageModelHint.stage_name` / `stage_routes` key | `task_type` 建议 | 默认 capability_tier | 默认 requires_structured_output | 默认 requires_reasoning_trace |
 |---|---|---|---|---|---|
-| Perception | `planning` | `perception` | Lightweight / Standard | true | false |
+| Perception | `perception` | `perception` | Lightweight / Standard | true | false |
 | Planner | `planning` | `plan` / `replan` | Standard / Advanced | true | true（仅 advanced 计划） |
 | Reasoner | `execution` | `action_decision` | Standard | true | false |
 | ReflectionEngine | `reflection` | `failure_analysis` / `replan_advice` | Advanced / ReasoningHeavy | true | true |
@@ -1099,7 +1101,7 @@ enum class ModelCapabilityTier : uint8_t {
 1. StageModelHint 保持 cognition 模块内类型，不进入共享契约。
 2. CognitionLlmBridge 负责把 StageModelHint 投影到 llm 公共接口的 LLMGenerateRequest 对应字段；`stage_name` 直接透传 canonical key，`task_type` 用于保留 cognition 组件语义。
 3. llm 侧的 ModelRouter 有权忽略 hint 并按自有策略路由，hint 只是建议。
-4. bridge / projector / profile compatibility test 不得私有维护 `perception -> planning`、`reasoning -> execution` 或 `planner/responder -> planning/response` 映射表；唯一映射表以本节为准。
+4. bridge / projector / profile compatibility test 不得私有维护 `reasoning -> execution` 或 `planner/responder -> planning/response` 映射表；唯一映射表以本节为准。Perception 现在直接使用 `perception` canonical stage，不再允许 `perception -> planning` 私有转换。
 
 #### 6.14.3 Cognition 错误回流链路
 

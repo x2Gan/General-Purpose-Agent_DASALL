@@ -16,7 +16,8 @@
 //     P1 — Minimal valid request (4 required fields) passes L1 guard.
 //     P2 — Valid request passes L2 boundary guard.
 //     P3 — Valid request with all optional fields passes L3 field rules.
-//     P4 — Each CompositionStage enum value (Planning through Response)
+//     P4 — Each CompositionStage enum value (Planning / Execution /
+//          Reflection / Response / Perception)
 //          is accepted by L2 boundary guard.
 //
 //   Negative (13 cases):
@@ -35,7 +36,7 @@
 //     N13 — Empty tags vector is rejected at L3.
 //
 // Verification command (WP04-T002):
-//   cmake --build build-ci --target dasall_contract_tests && \
+//   cmake --build build-ci --target dasall_contract_tests
 //   ctest --test-dir build-ci -R PromptComposeRequestContractTest --output-on-failure
 // ==========================================================================
 #include <exception>
@@ -119,8 +120,8 @@ void test_valid_full_request_passes_field_rules() {
               "P3: full valid request must pass field-rules guard");
 }
 
-// P4: All four CompositionStage enum values (Planning through Response)
-//     are accepted by the boundary guard.
+// P4: All canonical CompositionStage enum values are accepted by the boundary
+//     guard.
 void test_all_stages_accepted_by_boundary_guard() {
   auto req = make_valid_request();
 
@@ -139,6 +140,10 @@ void test_all_stages_accepted_by_boundary_guard() {
   req.stage = CompositionStage::Response;
   assert_true(validate_prompt_compose_request_boundary(req).ok,
               "P4: Response stage must be accepted");
+
+  req.stage = CompositionStage::Perception;
+  assert_true(validate_prompt_compose_request_boundary(req).ok,
+              "P4: Perception stage must be accepted");
 }
 
 // ===========================================================================
