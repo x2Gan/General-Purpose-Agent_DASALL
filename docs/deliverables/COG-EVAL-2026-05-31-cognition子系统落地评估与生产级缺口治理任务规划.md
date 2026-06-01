@@ -280,6 +280,23 @@
   - `ctest --test-dir build-ci -R "InputBoundaryValidatorTest" --output-on-failure`
 - **阻塞 / 解阻**：无。
 
+**Closeout（2026-06-01）**
+
+- 状态：已完成（独立 `InputBoundaryValidatorTest`、测试发现性与 focused regression 已闭合）。
+- 设计回链：
+  - [docs/architecture/DASALL_cognition子系统详细设计.md](../architecture/DASALL_cognition子系统详细设计.md) 已把 `InputBoundaryValidator` 固定为 cognition owner 内的 module-local input gate；本轮仅补独立测试与发现性，不扩 public request surface。
+- 代码结果：
+  - 新增 [tests/unit/cognition/InputBoundaryValidatorTest.cpp](../../tests/unit/cognition/InputBoundaryValidatorTest.cpp)，独立覆盖完整 decide 输入通过、缺 GoalContract 字段、缺 ContextPacket 字段、缺 BeliefState 字段四条路径。
+  - 更新 [tests/unit/cognition/CMakeLists.txt](../../tests/unit/cognition/CMakeLists.txt)，注册 `InputBoundaryValidatorTest`，并让 cognition unit test helper 显式包含 `cognition/src`，以便 unit tests 合法消费 module-local validator 头文件而不把 `InputBoundaryValidator` 提升为 public header。
+- 验证结果：
+  - `Build_CMakeTools(buildTargets=["dasall_input_boundary_validator_unit_test"])`：通过。
+  - `RunCtest_CMakeTools(tests=["InputBoundaryValidatorTest"])`：通过；`100% tests passed, 0 tests failed out of 1`。
+  - `Build_CMakeTools(buildTargets=["dasall_perception_boundary_validation_unit_test"])`：通过。
+  - `RunCtest_CMakeTools(tests=["PerceptionBoundaryValidationTest"])`：通过；`100% tests passed, 0 tests failed out of 1`。
+- 结果：
+  - `WP-COG-GAP-005` 已补齐独立 validator gate，不再依赖 `PerceptionBoundaryValidationTest` 间接承载输入边界回归。
+  - `WP-COG-GAP-016` 后续可以直接扩展 `InputBoundaryValidatorTest` 覆盖 `input_safety_signal` 的 policy-denied 路径，而不需要先补测试拓扑。
+
 ### 7.2 P1 任务（生产稳定性）
 
 #### WP-COG-GAP-006 reflection.v1 / response.v1 schema 冻结（GAP-P1-A）

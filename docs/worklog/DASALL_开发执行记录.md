@@ -1,3 +1,39 @@
+## 记录 #871
+
+- 日期：2026-06-01
+- 阶段：cognition / input boundary blocker closure
+- 任务：完成 WP-COG-GAP-016 前置 BLOCK“WP-COG-GAP-005 InputBoundaryValidatorTest 独立化”
+- 状态：已完成（独立单测、测试发现性与 focused regression 已闭合）
+
+### 执行前提
+
+1. [docs/deliverables/COG-EVAL-2026-05-31-cognition子系统落地评估与生产级缺口治理任务规划.md](../deliverables/COG-EVAL-2026-05-31-cognition子系统落地评估与生产级缺口治理任务规划.md) 已将 `WP-COG-GAP-005` 定义为 `WP-COG-GAP-016` 的前置依赖，要求先把 `InputBoundaryValidatorTest` 独立注册后，后续入口安全拒绝路径才有稳定回归出口。
+2. 当前 cognition 单测拓扑只有 [tests/unit/cognition/PerceptionBoundaryValidationTest.cpp](../tests/unit/cognition/PerceptionBoundaryValidationTest.cpp) 间接覆盖 `InputBoundaryValidator`，但测试名与任务语义不一致，也不能直接承载后续 `input_safety_signal` 扩展。
+3. [docs/architecture/DASALL_cognition子系统详细设计.md](../architecture/DASALL_cognition子系统详细设计.md) 已把 `InputBoundaryValidator` 固定为 cognition owner 内的 module-local supporting component，因此本轮只能补独立测试与 test helper include seam，不能把 validator 头提升为 public API。
+
+### 改动
+
+1. 新增 [tests/unit/cognition/InputBoundaryValidatorTest.cpp](../tests/unit/cognition/InputBoundaryValidatorTest.cpp)，独立覆盖完整 decide request 正例，以及缺 GoalContract / ContextPacket / BeliefState 字段三类 fail-fast 负例。
+2. 更新 [tests/unit/cognition/CMakeLists.txt](../tests/unit/cognition/CMakeLists.txt)，注册 `InputBoundaryValidatorTest`，并让 cognition unit test helper 显式包含 `cognition/src`，保证 unit test 能合法包含 module-local `validation/InputBoundaryValidator.h` 而不扩 public 头布局。
+3. 更新 [docs/deliverables/COG-EVAL-2026-05-31-cognition子系统落地评估与生产级缺口治理任务规划.md](../deliverables/COG-EVAL-2026-05-31-cognition子系统落地评估与生产级缺口治理任务规划.md)，回写 `WP-COG-GAP-005` closeout 与 focused regression 证据。
+
+### 验证
+
+1. `Build_CMakeTools(buildTargets=["dasall_input_boundary_validator_unit_test"])`
+   - 结果：通过。
+2. `RunCtest_CMakeTools(tests=["InputBoundaryValidatorTest"])`
+   - 结果：通过；`100% tests passed, 0 tests failed out of 1`。
+3. `Build_CMakeTools(buildTargets=["dasall_perception_boundary_validation_unit_test"])`
+   - 结果：通过。
+4. `RunCtest_CMakeTools(tests=["PerceptionBoundaryValidationTest"])`
+   - 结果：通过；`100% tests passed, 0 tests failed out of 1`。
+
+### 结果
+
+1. cognition 现在具备显式命名且可独立发现的 `InputBoundaryValidatorTest`，后续 `ctest -R "InputBoundaryValidatorTest"` 不再依赖 perception 相关测试名的间接匹配。
+2. test helper include seam 已补齐，`InputBoundaryValidator` 继续保持 module-local supporting component，不需要为测试发现性而扩张 public include surface。
+3. `WP-COG-GAP-016` 的第一个 blocker 已闭合，下一步可以直接在 `InputBoundaryValidatorTest` 上扩展入口安全信号拒绝路径。
+
 ## 记录 #870
 
 - 日期：2026-06-01

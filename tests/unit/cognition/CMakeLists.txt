@@ -11,6 +11,11 @@ function(dasall_add_cognition_unit_test target_name source_file test_name)
 			dasall_test_support
 	)
 
+	target_include_directories(${target_name}
+		PRIVATE
+			${CMAKE_SOURCE_DIR}/cognition/src
+	)
+
 	dasall_apply_common_options(${target_name})
 
 	add_test(NAME ${test_name} COMMAND ${target_name})
@@ -57,6 +62,12 @@ dasall_add_cognition_unit_test(
 	dasall_perception_boundary_validation_unit_test
 	PerceptionBoundaryValidationTest.cpp
 	PerceptionBoundaryValidationTest
+)
+
+dasall_add_cognition_unit_test(
+	dasall_input_boundary_validator_unit_test
+	InputBoundaryValidatorTest.cpp
+	InputBoundaryValidatorTest
 )
 
 dasall_add_cognition_unit_test(
