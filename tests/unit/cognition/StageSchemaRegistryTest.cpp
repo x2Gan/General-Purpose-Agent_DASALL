@@ -11,6 +11,7 @@ namespace {
 using dasall::cognition::validation::StageSchemaSpec;
 using dasall::cognition::validation::UnknownFieldPolicy;
 using dasall::cognition::validation::schema_for_execution_action_decision;
+using dasall::cognition::validation::schema_for_perception_result;
 using dasall::cognition::validation::schema_for_planning_plan;
 using dasall::cognition::validation::schema_for_reflection_decision;
 using dasall::cognition::validation::schema_for_response_envelope;
@@ -54,6 +55,27 @@ void test_planning_schema_registry_freezes_plan_baseline() {
               "planning schema should only allow registered extensions");
   assert_true(contains_string(schema.allowed_extension_prefixes, "x_"),
               "planning schema should only allow x_ extension fields");
+}
+
+void test_perception_schema_registry_freezes_result_baseline() {
+  const auto& schema = schema_for_perception_result();
+
+  assert_equal(std::string("perception"), schema.stage_name,
+               "perception schema should declare the perception stage owner");
+  assert_equal(std::string("cognition.perception.v1"), schema.schema_version,
+               "perception schema should freeze cognition.perception.v1");
+  assert_true(contains_string(schema.required_fields, "intent_summary"),
+              "perception schema should require intent_summary");
+  assert_true(contains_string(schema.required_fields, "entities"),
+              "perception schema should require entities");
+  assert_true(contains_string(schema.known_top_level_fields, "constraints_digest"),
+              "perception schema should freeze constraints_digest for unknown-field checks");
+  assert_true(has_enum_constraint(schema, "task_type", "plan"),
+              "perception schema should constrain task_type literals");
+  assert_true(has_enum_constraint(schema, "task_type", "action_decision"),
+              "perception schema should allow action_decision task routing");
+  assert_equal(2, static_cast<int>(schema.numeric_bounds.size()),
+               "perception schema should freeze confidence bounds for the top-level perception score and entity confidences");
 }
 
 void test_execution_schema_registry_freezes_action_baseline() {
@@ -124,6 +146,7 @@ void test_response_schema_registry_freezes_envelope_baseline() {
 int main() {
   try {
     test_planning_schema_registry_freezes_plan_baseline();
+    test_perception_schema_registry_freezes_result_baseline();
     test_execution_schema_registry_freezes_action_baseline();
     test_reflection_schema_registry_freezes_decision_baseline();
     test_response_schema_registry_freezes_envelope_baseline();

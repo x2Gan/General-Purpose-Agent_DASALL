@@ -95,6 +95,12 @@ dasall_add_cognition_unit_test(
 	CognitionFacadeDeadlineCancelPropagationTest
 )
 
+dasall_add_cognition_unit_test(
+	dasall_perception_llm_dual_path_unit_test
+	PerceptionLlmDualPathTest.cpp
+	PerceptionLlmDualPathTest
+)
+
 
 dasall_add_cognition_unit_test(
 	dasall_cognition_facade_degraded_mode_unit_test
@@ -259,6 +265,12 @@ dasall_add_cognition_unit_test(
 )
 
 dasall_add_cognition_unit_test(
+	dasall_stage_output_validator_perception_invariant_unit_test
+	StageOutputValidatorPerceptionInvariantTest.cpp
+	StageOutputValidatorPerceptionInvariantTest
+)
+
+dasall_add_cognition_unit_test(
 	dasall_stage_output_validator_reflection_invariant_unit_test
 	StageOutputValidatorReflectionInvariantTest.cpp
 	StageOutputValidatorReflectionInvariantTest
@@ -402,6 +414,11 @@ target_include_directories(dasall_stage_output_validator_schema_unit_test
 )
 
 target_include_directories(dasall_stage_output_validator_plan_graph_invariant_unit_test
+	PRIVATE
+		${CMAKE_SOURCE_DIR}/cognition/src
+)
+
+target_include_directories(dasall_stage_output_validator_perception_invariant_unit_test
 	PRIVATE
 		${CMAKE_SOURCE_DIR}/cognition/src
 )

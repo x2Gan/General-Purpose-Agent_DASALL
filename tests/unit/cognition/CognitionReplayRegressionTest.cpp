@@ -42,6 +42,7 @@ using dasall::llm::LLMFailureCategory;
 using dasall::tests::mocks::MockCognitionFixture;
 using dasall::tests::mocks::MockCognitionFixtureOptions;
 using dasall::tests::mocks::MockLLMManager;
+using dasall::tests::mocks::StructuredPerceptionPayloadScenario;
 using dasall::tests::mocks::StructuredExecutionPayloadScenario;
 using dasall::tests::mocks::StructuredPlanningPayloadScenario;
 using dasall::tests::support::assert_true;
@@ -130,6 +131,8 @@ void test_decide_replay_trace_matches_golden_direct_response() {
       .selected_node_id = "bridge-plan-node",
       .response_text = "bridge-authored direct response summary",
   });
+  fixture.stage_structured_perception_result(
+      StructuredPerceptionPayloadScenario::ValidActionDecision);
   fixture.stage_structured_planning_result(StructuredPlanningPayloadScenario::Valid);
   fixture.stage_structured_execution_result(
       StructuredExecutionPayloadScenario::ValidDirectResponse);
@@ -155,6 +158,10 @@ void test_decide_replay_trace_matches_golden_direct_response() {
                        "replay.trace.decide.request");
   assert_trace_matches(output_dir,
                        "req-replay-decide-direct",
+                       "perception",
+                       "replay.trace.decide.bridge_payload");
+  assert_trace_matches(output_dir,
+                       "req-replay-decide-direct",
                        "planning",
                        "replay.trace.decide.bridge_payload");
   assert_trace_matches(output_dir,
@@ -174,6 +181,8 @@ void test_decide_replay_trace_matches_golden_planning_fallback() {
       .profile_id = std::string{kReplayProfile},
       .selected_node_id = "fallback-plan-node",
   });
+      fixture.stage_structured_perception_result(
+        StructuredPerceptionPayloadScenario::ValidActionDecision);
   fixture.stage_structured_planning_result(
       StructuredPlanningPayloadScenario::SchemaInvalidActionKindHint);
   fixture.llm_manager()->set_stage_result(
@@ -204,6 +213,10 @@ void test_decide_replay_trace_matches_golden_planning_fallback() {
                        "req-replay-decide-planning-fallback",
                        "execution",
                        "replay.trace.decide.request");
+  assert_trace_matches(output_dir,
+                       "req-replay-decide-planning-fallback",
+                       "perception",
+                       "replay.trace.decide.bridge_payload");
   assert_trace_matches(output_dir,
                        "req-replay-decide-planning-fallback",
                        "planning",

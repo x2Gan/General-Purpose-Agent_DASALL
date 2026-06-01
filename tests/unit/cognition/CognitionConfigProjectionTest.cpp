@@ -18,7 +18,8 @@ using dasall::tests::support::assert_true;
     std::string profile_id = "desktop_full",
     bool allow_budget_degrade = true,
     double trace_sample_ratio = 0.25,
-    bool omit_response_stage = false) {
+  bool omit_response_stage = false,
+  bool omit_perception_stage = false) {
   using dasall::profiles::CapabilityCachePolicy;
   using dasall::profiles::DegradePolicy;
   using dasall::profiles::ExecutionPolicy;
@@ -33,6 +34,10 @@ using dasall::tests::support::assert_true;
 
   ModelProfile model_profile{
       .stage_routes = {
+        {"perception",
+         ModelRoutePolicy{.route = "llm.perception.primary",
+                .fallback_route = "llm.perception.fallback",
+                .streaming_enabled = false}},
           {"planning",
            ModelRoutePolicy{.route = "llm.plan.primary",
                             .fallback_route = "llm.plan.fallback",
@@ -47,6 +52,10 @@ using dasall::tests::support::assert_true;
                             .streaming_enabled = false}},
       },
   };
+
+  if (omit_perception_stage) {
+    model_profile.stage_routes.erase("perception");
+  }
 
   if (!omit_response_stage) {
     model_profile.stage_routes.emplace(
@@ -116,6 +125,8 @@ void test_project_config_uses_runtime_policy_snapshot_as_single_source_of_truth(
                "edge_minimal should tighten the plan node cap instead of disabling cognition");
   assert_equal(2, static_cast<int>(config->max_plan_depth),
                "edge_minimal should tighten planning depth for the lightweight path");
+  assert_true(!config->perception.llm_enabled,
+              "edge_minimal should disable perception llm classification by default");
   assert_true(config->perception.rule_fallback_enabled,
               "degrade policy should project directly into perception rule fallback enablement");
   assert_true(config->response.template_fallback_enabled,
@@ -181,6 +192,26 @@ void test_derive_stage_model_hint_preserves_canonical_stage_keys_and_profile_sha
                "preferred provider should carry the canonical planning route from the runtime policy snapshot");
 }
 
+void test_derive_stage_model_hint_projects_canonical_perception_route() {
+  const auto hint = CognitionConfigProjector::derive_stage_model_hint(
+      make_runtime_policy_snapshot("cloud_full"), "perception", "perception");
+
+  assert_true(hint.has_value(),
+              "canonical perception stage should project a stage model hint once the route exists");
+  assert_equal(std::string("perception"), hint->stage_name,
+               "projector must preserve the canonical perception stage key unchanged");
+  assert_equal(std::string("perception"), hint->task_type,
+               "projector must preserve the perception task_type without folding it into planning");
+  assert_true(hint->capability_tier == ModelCapabilityTier::Standard,
+              "cloud_full perception should default to the standard tier");
+  assert_true(hint->requires_structured_output,
+              "perception stage should require structured output");
+  assert_true(!hint->requires_reasoning_trace,
+              "perception stage should not request reasoning trace by default");
+  assert_equal(std::string("llm.perception.primary"), hint->preferred_provider,
+               "preferred provider should carry the canonical perception route from the runtime policy snapshot");
+}
+
 void test_derive_stage_model_hint_handles_response_and_reflection_defaults() {
   const auto response_hint = CognitionConfigProjector::derive_stage_model_hint(
       make_runtime_policy_snapshot("factory_test"), "response", "final_response");
@@ -203,7 +234,7 @@ void test_derive_stage_model_hint_handles_response_and_reflection_defaults() {
 
 void test_projector_rejects_missing_routes_and_noncanonical_stage_names() {
   const auto missing_route_config = CognitionConfigProjector::project_config(
-      make_runtime_policy_snapshot("desktop_full", true, 0.25, true));
+    make_runtime_policy_snapshot("desktop_full", true, 0.25, false, true));
   const auto legacy_hint = CognitionConfigProjector::derive_stage_model_hint(
       make_runtime_policy_snapshot("desktop_full"), "reasoning", "action_decision");
 
@@ -220,6 +251,7 @@ int main() {
     test_project_config_uses_runtime_policy_snapshot_as_single_source_of_truth();
     test_project_config_projects_profile_specific_response_templates();
     test_derive_stage_model_hint_preserves_canonical_stage_keys_and_profile_shape();
+    test_derive_stage_model_hint_projects_canonical_perception_route();
     test_derive_stage_model_hint_handles_response_and_reflection_defaults();
     test_projector_rejects_missing_routes_and_noncanonical_stage_names();
   } catch (const std::exception& ex) {

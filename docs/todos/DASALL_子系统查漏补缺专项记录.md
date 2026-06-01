@@ -81,18 +81,18 @@
 |---|---|---|---|
 | 公共接口 `ICognitionEngine` / `IResponseBuilder` | 已覆盖 | `decide()`、`reflect()`、`build()` 三入口已落盘；factory overload 支持 config、dependencies、policy snapshot | 无明显接口缺口；仍需避免重新引入旧 `step()` 混合职责 |
 | 支撑类型 | 已覆盖 | `CognitionTypes`、`ActionDecision`、`PlanGraph`、`ReplanResult`、`BeliefUpdateHint`、`BudgetContext`、`ContextSufficiencySignal`、`StageModelHint` 已存在 | supporting types 继续保持 module-local / module-public，不进入 shared contracts |
-| Perception | 已覆盖 | `PerceptionEngine` 支持目标、上下文、观察、歧义、澄清问题与 diagnostics | 当前以规则感知为主，LLM structured perception 未成为主输出来源 |
+| Perception | 已覆盖 | canonical perception 已落盘：`PerceptionEngine` + `CognitionFacade` + `StageSchemaRegistry` + `StageOutputValidator` 形成 LLM structured + 规则双路径，并以 conflict / clarification 收口 | installed/qemu 更高层证据待补；`edge_minimal` 仍以规则路径作为默认兜底 |
 | Planner | 已覆盖 | `PlanGraphBuilder` 支持 plan graph、replan、budget compression、invariant validation | Reflection active plan 生产路径在专项 TODO 中仍有待补强记录 |
 | Reasoner | 已覆盖 | 候选评分、clarification、conflict、budget、direct response / converge safe 决策类型已实现 | Runtime 尚未完整消费所有 terminal decision kind |
 | Reflection | 已覆盖 | `ReflectionEngine` 输出 shared `ReflectionDecision`，保持 suggestion-only | Runtime 对反思建议已有 RecoveryManager 接入，但 installed L4 仍未证明 cognition reflection 必经 |
 | BeliefUpdateHint | 已覆盖 | decide / reflect 路径均可合成 hint；Runtime 有 best-effort writeback 证据 | installed direct path 不证明 cognition belief writeback 已执行 |
-| ResponseBuilder | 已覆盖 | 支持 LLM bridge、observation projection、template fallback、redaction、clamp | Runtime 对 cognition terminal decision 的 response-first 路径未完整闭合 |
-| StagePolicyResolver / profile projection | 基本覆盖 | canonical stage key 为 `planning` / `execution` / `reflection` / `response`；budget-aware plan cap 存在 | 需要持续防止 legacy stage alias 在 bridge / tests 中私有散落 |
-| CognitionLlmBridge | 基本覆盖 | StageModelHint 投影到 LLM request，错误归一化，provider-private redaction | bridge 成功/失败进入 diagnostics，但 LLM structured output 未驱动主链对象生成 |
-| StageOutputValidator | 部分覆盖 | JSON / schema / PlanGraph / ActionDecision / response envelope validator 已实现并有 tests | validator 未完全成为 Facade 解析 LLM structured output 的主链裁决入口 |
-| CognitionTelemetry | 部分覆盖 | stage started/completed/failed、clarification、response degraded、redaction、sink failure isolation 已实现 | production infra sink 未通过 `CognitionRuntimeDependencies` 注入，ResponseBuilder 未明显接 telemetry |
-| 阶段超时隔离 | 部分覆盖 | `deadline_ms` 可从 policy / hint 投影到 bridge request | `CognitionFacade` 未见主动按 `deadline_ms` 中断等待并返回 `cognition.stage_timeout` 的门面级隔离 |
-| Runtime integration | 部分覆盖 | live cognition path 可执行 `ExecuteAction` 工具链、反思、终态 response；interaction contract tests 存在 | `DirectResponse` / `ConvergeSafe` 第一跳缺口；installed production direct path bypass cognition |
+| ResponseBuilder | 已覆盖 | 支持 LLM bridge、observation projection、template fallback、redaction、clamp，且 terminal decision runtime 路径已闭合 | installed direct path 仍不证明 cognition 必经 |
+| StagePolicyResolver / profile projection | 已覆盖 | canonical stage key 为 `perception` / `planning` / `execution` / `reflection` / `response`；`perception.llm_enabled` 与 budget-aware plan cap 已由 profile projector 注入 | 需要持续防止 legacy stage alias 在 bridge / tests 中私有散落 |
+| CognitionLlmBridge | 已覆盖 | StageModelHint 投影到 LLM request，错误归一化、provider-private redaction 与 perception/planning/execution/reflection/response 五阶段 canonical key 已闭合 | installed / qemu provider 证据仍需更高层证明 |
+| StageOutputValidator | 已覆盖 | raw schema + typed invariant 已覆盖 perception / plan / action / reflection / response，并成为 structured output authoritative consumption 裁决入口 | higher-layer installed/package 证据待补 |
+| CognitionTelemetry | 已覆盖 | stage started/completed/failed、clarification、response degraded、token/cost、structured projection 与 replay telemetry 已接入 production sink | installed/qemu/soak 观测证据待补 |
+| 阶段超时隔离 | 已覆盖 | `deadline_ms` 已驱动 Facade stage timeout 与 deadline->abandon propagation，late result 不污染后续请求 | provider / transport 取消仍是 best-effort abandon seam |
+| Runtime integration | 已覆盖 | live cognition path 现可覆盖 `ExecuteAction` 工具链、terminal decision responding、reflection re-entry 与 perception structured dual-path regression | installed production direct path 仍可 bypass cognition，需继续分层陈述 |
 | Memory / Tools / Recovery 边界 | 基本正确 | cognition 不直拉 Memory、不直调 Tools、不执行 Recovery；Runtime 负责写回、ToolRequest、RecoveryManager | installed direct path 仍只证明非 cognition 主链；需分别补 cognition-positive installed evidence |
 
 ### 4.4 关联模块链路判断
@@ -219,6 +219,7 @@ cognition 子系统的实现覆盖度已经很高，当前主要问题不再是 
 3. installed production 主链：仍不能宣称 cognition 必经；当前只可记录为 source / integration evidence，L4 installed / qemu / soak positive evidence 仍待独立补证。
 4. 后续查漏补缺优先级：从 cognition owner 内部缺口转向 Gate-COG-12 关联的 repo-wide non-cognition blocker，以及更高层 installed/package 证据链闭合。
 5. 2026-06-01 已完成 `WP-COG-GAP-012` 的前置 BLOCK“LLM 子系统支持新的 canonical perception stage”：shared `CompositionStage`、llm prompt pipeline、baseline perception prompt 与五档 profile `model_profile.perception` route 已落盘，并通过 `PromptComposeRequestContractTest`、`PromptSpecReleaseContractTest`、`PromptAssetPackageParseTest`、`PromptRegistrySelectionTest`、`RuntimeProfileCompatibilityTest`；`WP-COG-GAP-012` 当前已从 blocked 转为可执行。
+6. 2026-06-01 已完成 `WP-COG-GAP-012` 主任务本体：`CognitionConfigProjector` / `StagePolicyResolver` 现投影 canonical perception stage 与 `perception.llm_enabled`，`StageSchemaRegistry` / `StageOutputValidator` 已冻结并校验 `cognition.perception.v1`，`CognitionFacade` 以 structured perception + rule perception 双路径收口 clarification / conflict / fallback 语义，并通过 `PerceptionLlmDualPathTest`、`CognitionPerceptionStructuredOutputIntegrationTest`、`CognitionReplayRegressionTest`、`CognitionRuntimeInteractionContractTest` 与 broader regression 复验；`GAP-P2-A` 的 cognition owner 缺口已闭合。
 
 ## 5. LLM 子系统查漏补缺
 

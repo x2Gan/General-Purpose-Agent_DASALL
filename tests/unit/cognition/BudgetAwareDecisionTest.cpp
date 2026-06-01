@@ -44,6 +44,10 @@ using dasall::tests::support::assert_true;
                                        .max_latency_ms = 2400U,
                                        .max_replan_count = 2U},
       ModelProfile{.stage_routes = {
+                       {"perception",
+                        ModelRoutePolicy{.route = "llm.perception.primary",
+                                         .fallback_route = "llm.perception.fallback",
+                                         .streaming_enabled = false}},
                        {"planning",
                         ModelRoutePolicy{.route = "llm.plan.primary",
                                          .fallback_route = "llm.plan.fallback",

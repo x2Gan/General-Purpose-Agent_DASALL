@@ -214,6 +214,7 @@ make_true_integration_policy_snapshot(const std::string& profile_id,
                         .streaming_enabled = streaming_enabled,
                 });
     };
+    emplace_stage_route("perception", false);
     emplace_stage_route("planning", false);
     emplace_stage_route("execution", false);
     emplace_stage_route("reflection", false);

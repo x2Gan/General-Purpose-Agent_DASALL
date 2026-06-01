@@ -31,6 +31,7 @@ struct StageExecutionPlan {
   std::uint32_t reflection_round_limit = 2;
   float clarification_threshold = 0.0F;
   bool degraded_mode_active = false;
+  bool perception_llm_enabled = false;
   bool rule_fallback_enabled = false;
   bool template_fallback_enabled = false;
 };

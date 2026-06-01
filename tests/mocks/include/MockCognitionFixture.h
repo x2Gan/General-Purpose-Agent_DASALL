@@ -61,6 +61,15 @@ enum class StructuredPlanningPayloadScenario {
     ProjectionInvalidDuplicateNode,
 };
 
+enum class StructuredPerceptionPayloadScenario {
+    ValidActionDecision,
+    ValidPlan,
+    ValidClarification,
+    MalformedJson,
+    SchemaInvalidTaskType,
+    ProjectionInvalidEmptyEntityName,
+};
+
 enum class StructuredExecutionPayloadScenario {
     ValidDirectResponse,
     ValidExecuteAction,
@@ -503,11 +512,65 @@ class MockCognitionFixture {
         return {};
     }
 
+    [[nodiscard]] std::string make_structured_perception_payload(
+        StructuredPerceptionPayloadScenario scenario =
+            StructuredPerceptionPayloadScenario::ValidActionDecision) const {
+    if (scenario == StructuredPerceptionPayloadScenario::MalformedJson) {
+        return std::string{"{"};
+    }
+
+    const auto task_type = scenario == StructuredPerceptionPayloadScenario::ValidPlan
+                       ? std::string{"plan"}
+                       : scenario == StructuredPerceptionPayloadScenario::SchemaInvalidTaskType
+                           ? std::string{"unknown_task"}
+                           : std::string{"action_decision"};
+    const auto requires_clarification =
+        scenario == StructuredPerceptionPayloadScenario::ValidClarification;
+    const auto entity_name =
+        scenario == StructuredPerceptionPayloadScenario::ProjectionInvalidEmptyEntityName
+            ? std::string{}
+            : std::string{"goal"};
+
+    return std::string{"{"}
+        + "\"schema_version\":\"cognition.perception.v1\"," 
+        + "\"intent_summary\":\"" + options_.goal_summary + "\"," 
+        + "\"task_type\":\"" + task_type + "\"," 
+        + "\"entities\":[{"
+        + "\"name\":\"" + entity_name + "\"," 
+        + "\"value\":\"" + options_.goal_summary + "\"," 
+        + "\"confidence\":0.92,"
+        + "\"evidence_refs\":[\"goal_contract.goal_description\"]}],"
+        + "\"constraints_digest\":{"
+        + "\"hard_constraints\":[\"preserve runtime ownership\"],"
+        + "\"soft_constraints\":[\"prefer the governed cognition path\"],"
+        + "\"policy_refs\":[\"runtime.policy.default\"]},"
+        + "\"ambiguities\":"
+        + (requires_clarification
+               ? std::string{"[{\"ambiguity_id\":\"underspecified_target\",\"description\":\"perception needs more evidence before planning\",\"missing_evidence_refs\":[\"context_packet.user_turn\"],\"severity\":0.76}]"}
+               : std::string{"[]"})
+        + ",\"clarification_questions\":"
+        + (requires_clarification
+               ? std::string{"[{\"question\":\"Which concrete target should cognition confirm before planning continues?\",\"evidence_refs\":[\"context_packet.user_turn\"],\"priority\":0.76}]"}
+               : std::string{"[]"})
+        + ",\"confidence\":"
+        + (requires_clarification ? std::string{"0.44"} : std::string{"0.82"})
+        + ",\"requires_clarification\":"
+        + (requires_clarification ? std::string{"true"} : std::string{"false"})
+        + "}";
+    }
+
     [[nodiscard]] dasall::llm::LLMManagerResult make_structured_planning_stage_result(
             StructuredPlanningPayloadScenario scenario =
                     StructuredPlanningPayloadScenario::Valid) const {
         return MockLLMManager::make_structured_stage_result(
                 "planning", make_structured_planning_payload(scenario), options_.request_id);
+    }
+
+    [[nodiscard]] dasall::llm::LLMManagerResult make_structured_perception_stage_result(
+        StructuredPerceptionPayloadScenario scenario =
+            StructuredPerceptionPayloadScenario::ValidActionDecision) const {
+    return MockLLMManager::make_structured_stage_result(
+        "perception", make_structured_perception_payload(scenario), options_.request_id);
     }
 
     [[nodiscard]] dasall::llm::LLMManagerResult make_structured_execution_stage_result(
@@ -522,6 +585,13 @@ class MockCognitionFixture {
                     StructuredPlanningPayloadScenario::Valid) const {
         llm_manager_->set_stage_result("planning", make_structured_planning_stage_result(scenario));
     }
+
+        void stage_structured_perception_result(
+            StructuredPerceptionPayloadScenario scenario =
+                StructuredPerceptionPayloadScenario::ValidActionDecision) const {
+        llm_manager_->set_stage_result("perception",
+                           make_structured_perception_stage_result(scenario));
+        }
 
     void stage_structured_execution_result(
             StructuredExecutionPayloadScenario scenario =

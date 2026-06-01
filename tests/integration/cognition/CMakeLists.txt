@@ -91,6 +91,13 @@ dasall_add_cognition_integration_test(
 )
 
 dasall_add_cognition_integration_test(
+  dasall_cognition_perception_structured_output_integration_test
+  CognitionPerceptionStructuredOutputIntegrationTest
+  CognitionPerceptionStructuredOutputIntegrationTest.cpp
+  "integration;cognition;structured-output"
+)
+
+dasall_add_cognition_integration_test(
   dasall_cognition_reflection_structured_output_integration_test
   CognitionReflectionStructuredOutputIntegrationTest
   CognitionReflectionStructuredOutputIntegrationTest.cpp

@@ -42,6 +42,10 @@ using dasall::tests::support::assert_true;
                                        .max_latency_ms = 2400U,
                                        .max_replan_count = 2U},
       ModelProfile{.stage_routes = {
+                       {"perception",
+                        ModelRoutePolicy{.route = "llm.perception.primary",
+                                         .fallback_route = "llm.perception.fallback",
+                                         .streaming_enabled = false}},
                        {"planning",
                         ModelRoutePolicy{.route = "llm.plan.primary",
                                          .fallback_route = "llm.plan.fallback",
@@ -142,12 +146,16 @@ void test_resolve_decide_plan_uses_projected_defaults() {
 
   assert_true(plan.has_value(),
               "desktop_full should resolve a decision plan from the projected cognition config");
-  assert_equal(2, static_cast<int>(plan->enabled_stages.size()),
-               "decision plan should keep planning and execution stages enabled");
-  assert_equal(std::string("planning"), plan->enabled_stages.front(),
-               "planning must remain the first stage in the decision chain");
+  assert_equal(3, static_cast<int>(plan->enabled_stages.size()),
+               "desktop_full should keep perception, planning and execution stages enabled");
+  assert_equal(std::string("perception"), plan->enabled_stages.front(),
+               "perception must become the first stage in the decision chain once canonicalized");
+  assert_equal(std::string("planning"), plan->enabled_stages.at(1),
+               "planning must remain the second stage in the decision chain");
   assert_equal(std::string("execution"), plan->enabled_stages.back(),
                "execution must remain the terminal decision stage");
+  assert_true(plan->perception_llm_enabled,
+              "desktop_full should expose perception llm classification in the stage execution plan");
   assert_true(plan->preferred_model_tier == ModelCapabilityTier::Advanced,
               "desktop_full planning path should prefer the advanced tier");
   assert_equal(8, static_cast<int>(plan->max_plan_nodes),

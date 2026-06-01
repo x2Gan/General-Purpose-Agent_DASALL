@@ -17,6 +17,7 @@ using dasall::llm::LLMFailureCategory;
 using dasall::tests::mocks::MockCognitionFixture;
 using dasall::tests::mocks::MockCognitionFixtureOptions;
 using dasall::tests::mocks::MockLLMManager;
+using dasall::tests::mocks::StructuredPerceptionPayloadScenario;
 using dasall::tests::mocks::StructuredPlanningPayloadScenario;
 using dasall::tests::support::assert_equal;
 using dasall::tests::support::assert_true;
@@ -36,6 +37,8 @@ void test_decide_uses_projected_plan_graph_as_reasoner_input() {
   MockCognitionFixture fixture(MockCognitionFixtureOptions{
       .selected_node_id = "bridge-plan-node",
   });
+  fixture.stage_structured_perception_result(
+      StructuredPerceptionPayloadScenario::ValidActionDecision);
   fixture.stage_structured_planning_result(StructuredPlanningPayloadScenario::Valid);
   fixture.llm_manager()->set_stage_result(
       "execution",
@@ -85,6 +88,8 @@ void test_decide_falls_back_to_local_planner_only_on_explicit_planning_projectio
   MockCognitionFixture fixture(MockCognitionFixtureOptions{
     .selected_node_id = "invalid-bridge-node",
   });
+  fixture.stage_structured_perception_result(
+      StructuredPerceptionPayloadScenario::ValidActionDecision);
   fixture.stage_structured_planning_result(
     StructuredPlanningPayloadScenario::SchemaInvalidActionKindHint);
   fixture.llm_manager()->set_stage_result(
@@ -122,6 +127,8 @@ void test_decide_fails_closed_when_planning_depends_on_is_semantically_invalid()
   MockCognitionFixture fixture(MockCognitionFixtureOptions{
       .selected_node_id = "bridge-plan-node",
   });
+  fixture.stage_structured_perception_result(
+      StructuredPerceptionPayloadScenario::ValidActionDecision);
   fixture.llm_manager()->set_structured_stage_payload(
       "planning",
       std::string{"{"}
@@ -160,6 +167,8 @@ void test_decide_fails_closed_when_execution_bridge_provider_failure_has_no_fall
   MockCognitionFixture fixture(MockCognitionFixtureOptions{
       .selected_node_id = "bridge-plan-node",
   });
+  fixture.stage_structured_perception_result(
+      StructuredPerceptionPayloadScenario::ValidActionDecision);
   fixture.stage_structured_planning_result(StructuredPlanningPayloadScenario::Valid);
   fixture.llm_manager()->set_stage_result(
       "execution",

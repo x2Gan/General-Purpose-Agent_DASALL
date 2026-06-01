@@ -95,7 +95,10 @@ std::optional<StageExecutionPlan> StagePolicyResolver::resolve_decide_plan(
   }
 
   StageExecutionPlan plan;
-  plan.enabled_stages = {"planning", "execution"};
+  plan.perception_llm_enabled = config->perception.llm_enabled;
+  plan.enabled_stages = plan.perception_llm_enabled
+                            ? std::vector<std::string>{"perception", "planning", "execution"}
+                            : std::vector<std::string>{"planning", "execution"};
   plan.max_plan_nodes = config->max_plan_nodes;
   plan.max_plan_depth = config->max_plan_depth;
   plan.deadline_ms = derive_deadline_ms(snapshot.timeout_policy().llm.timeout_ms,
@@ -107,7 +110,8 @@ std::optional<StageExecutionPlan> StagePolicyResolver::resolve_decide_plan(
   plan.template_fallback_enabled = false;
   plan.reflection_round_limit = kDefaultReflectionRoundLimit;
 
-  if (!append_stage_hint(plan, snapshot, "planning", "perception") ||
+  if ((plan.perception_llm_enabled &&
+       !append_stage_hint(plan, snapshot, "perception", "perception")) ||
       !append_stage_hint(plan, snapshot, "planning", "plan") ||
       !append_stage_hint(plan, snapshot, "execution", "action_decision")) {
     return std::nullopt;

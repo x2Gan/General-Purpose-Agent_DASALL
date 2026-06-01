@@ -1,3 +1,4 @@
+#include <chrono>
 #include <exception>
 #include <filesystem>
 #include <iostream>
@@ -458,6 +459,21 @@ make_structured_contract_engine(const std::string& profile_id,
   return std::make_shared<StructuredDecisionDelegatingCognitionEngine>(std::move(delegate));
 }
 
+[[nodiscard]] dasall::contracts::AgentRequest make_live_agent_request(
+    std::string request_id,
+    std::string session_id,
+    std::string trace_id,
+    std::string user_input) {
+  auto request = make_agent_request(std::move(request_id),
+                                    std::move(session_id),
+                                    std::move(trace_id),
+                                    std::move(user_input));
+  request.created_at = std::chrono::duration_cast<std::chrono::milliseconds>(
+                           std::chrono::system_clock::now().time_since_epoch())
+                           .count();
+  return request;
+}
+
 void test_action_decision_execute_action_maps_to_runtime_progress() {
   const auto database_path = make_temp_database_path("dasall-cognition-runtime-contract-ok");
   cleanup_database_artifacts(database_path);
@@ -476,7 +492,7 @@ void test_action_decision_execute_action_maps_to_runtime_progress() {
   assert_true(init_result.accepted,
               "interaction contract success case should initialize AgentFacade");
 
-  const auto result = facade.handle(make_agent_request(
+  const auto result = facade.handle(make_live_agent_request(
       "req-027-ok", "session-027-ok", "trace-027-ok", "query interaction contract success"));
 
   assert_true(result.status == dasall::contracts::AgentResultStatus::Completed,
@@ -520,7 +536,7 @@ void test_non_executable_decision_is_rejected_by_runtime_contract() {
   assert_true(init_result.accepted,
               "interaction contract rejection case should initialize AgentFacade");
 
-  const auto result = facade.handle(make_agent_request(
+  const auto result = facade.handle(make_live_agent_request(
       "req-027-reject",
       "session-027-reject",
       "trace-027-reject",
@@ -569,7 +585,7 @@ void test_belief_writeback_failure_does_not_override_completed_result() {
     assert_true(init_result.accepted,
           "writeback failure case should initialize AgentFacade");
 
-    const auto result = facade.handle(make_agent_request(
+    const auto result = facade.handle(make_live_agent_request(
       "req-027-writeback-fail",
       "session-027-writeback-fail",
       "trace-027-writeback-fail",
@@ -621,7 +637,7 @@ void test_belief_writeback_failure_does_not_override_completed_result() {
     assert_true(init_result.accepted,
           "reflection contract case should initialize AgentFacade");
 
-    const auto result = facade.handle(make_agent_request(
+    const auto result = facade.handle(make_live_agent_request(
       "req-027-" + test_case.case_id,
       "session-027-" + test_case.case_id,
       "trace-027-" + test_case.case_id,
@@ -676,7 +692,7 @@ void test_belief_writeback_failure_does_not_override_completed_result() {
   assert_true(init_result.accepted,
           "reflection abort case should initialize AgentFacade");
 
-  const auto result = facade.handle(make_agent_request(
+  const auto result = facade.handle(make_live_agent_request(
       "req-027-reflection-abort",
       "session-027-reflection-abort",
       "trace-027-reflection-abort",
@@ -743,7 +759,7 @@ void test_belief_writeback_failure_does_not_override_completed_result() {
     assert_true(init_result.accepted,
           "terminal decision contract case should initialize AgentFacade");
 
-    const auto result = facade.handle(make_agent_request(
+    const auto result = facade.handle(make_live_agent_request(
       "req-027-" + test_case.case_id,
       "session-027-" + test_case.case_id,
       "trace-027-" + test_case.case_id,
@@ -813,7 +829,7 @@ void test_belief_writeback_failure_does_not_override_completed_result() {
     assert_true(init_result.accepted,
           "no-decision contract case should initialize AgentFacade");
 
-    const auto result = facade.handle(make_agent_request(
+    const auto result = facade.handle(make_live_agent_request(
       "req-027-no-decision",
       "session-027-no-decision",
       "trace-027-no-decision",
@@ -854,6 +870,8 @@ void test_belief_writeback_failure_does_not_override_completed_result() {
         .tool_name = "agent.dataset",
         .response_text = "structured execute action should be post-processed by runtime",
       });
+      fixture.stage_structured_perception_result(
+          dasall::tests::mocks::StructuredPerceptionPayloadScenario::ValidActionDecision);
       fixture.stage_structured_planning_result(StructuredPlanningPayloadScenario::Valid);
       fixture.stage_structured_execution_result(StructuredExecutionPayloadScenario::ValidExecuteAction);
 
@@ -875,7 +893,7 @@ void test_belief_writeback_failure_does_not_override_completed_result() {
       assert_true(init_result.accepted,
             "structured execute action contract case should initialize AgentFacade");
 
-      const auto result = facade.handle(make_agent_request(
+      const auto result = facade.handle(make_live_agent_request(
         "req-027-structured-execute",
         "session-027-structured-execute",
         "trace-027-structured-execute",
@@ -959,6 +977,8 @@ void test_belief_writeback_failure_does_not_override_completed_result() {
         .selected_node_id = "structured-terminal-node",
         .response_text = test_case.expected_summary,
       });
+      fixture.stage_structured_perception_result(
+          dasall::tests::mocks::StructuredPerceptionPayloadScenario::ValidActionDecision);
       fixture.stage_structured_planning_result(StructuredPlanningPayloadScenario::Valid);
       fixture.stage_structured_execution_result(test_case.scenario);
 
@@ -981,7 +1001,7 @@ void test_belief_writeback_failure_does_not_override_completed_result() {
             std::string{"structured terminal contract case should initialize AgentFacade: "} +
               test_case.case_id);
 
-      const auto result = facade.handle(make_agent_request(
+      const auto result = facade.handle(make_live_agent_request(
         "req-027-" + test_case.case_id,
         "session-027-" + test_case.case_id,
         "trace-027-" + test_case.case_id,

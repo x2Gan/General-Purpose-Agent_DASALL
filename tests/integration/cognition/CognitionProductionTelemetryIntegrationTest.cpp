@@ -23,6 +23,7 @@ namespace {
 using dasall::tests::mocks::MockCognitionFixture;
 using dasall::tests::mocks::MockCognitionFixtureOptions;
 using dasall::tests::mocks::MockLLMManager;
+using dasall::tests::mocks::StructuredPerceptionPayloadScenario;
 using dasall::tests::mocks::StructuredExecutionPayloadScenario;
 using dasall::tests::mocks::StructuredPlanningPayloadScenario;
 using dasall::tests::runtime_fixture::make_true_integration_policy_snapshot;
@@ -167,6 +168,8 @@ void test_cognition_production_telemetry_sink_emits_completed_failed_and_degrade
       .trace_id = "trace-cognition-production-telemetry",
       .goal_id = "goal-cognition-production-telemetry",
   });
+    fixture.stage_structured_perception_result(
+      StructuredPerceptionPayloadScenario::ValidActionDecision);
     fixture.stage_structured_planning_result(StructuredPlanningPayloadScenario::Valid);
     fixture.stage_structured_execution_result(
       StructuredExecutionPayloadScenario::ValidDirectResponse);

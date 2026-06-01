@@ -1,0 +1,12 @@
+surface=decide.bridge_payload
+stage=perception
+resolved_route=mock.route.perception
+warning_count=0
+diagnostic_count=6
+diagnostic.0=llm_usage.completion_tokens:8
+diagnostic.1=llm_usage.finish_reason:stop
+diagnostic.2=llm_usage.prompt_tokens:16
+diagnostic.3=route:mock.route.perception
+diagnostic.4=stage:perception
+diagnostic.5=task:perception
+payload={"schema_version":"cognition.perception.v1","intent_summary":"produce a valid cognition-facing request shape","task_type":"action_decision","entities":[{"name":"goal","value":"produce a valid cognition-facing request shape","confidence":0.92,"evidence_refs":["goal_contract.goal_description"]}],"constraints_digest":{"hard_constraints":["preserve runtime ownership"],"soft_constraints":["prefer the governed cognition path"],"policy_refs":["runtime.policy.default"]},"ambiguities":[],"clarification_questions":[],"confidence":0.82,"requires_clarification":false}

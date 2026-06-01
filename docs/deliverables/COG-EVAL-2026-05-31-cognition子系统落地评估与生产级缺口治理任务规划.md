@@ -67,7 +67,7 @@
 
 | 设计 ID | 现状 | 风险 | 关联缺口 |
 |---|---|---|---|
-| COG-V-MB002 / COG-V-CFG007（Perception） | [PerceptionEngine.cpp](../../cognition/src/perception/PerceptionEngine.cpp) 全规则匹配；Facade **不通过 LLM 桥跑 perception** | 多语言/复杂指令准确率低；低 confidence 频繁触发 AskClarification | GAP-P2-A |
+| COG-V-MB002 / COG-V-CFG007（Perception） | [PerceptionEngine.cpp](../../cognition/src/perception/PerceptionEngine.cpp)、[CognitionFacade.cpp](../../cognition/src/CognitionFacade.cpp)、[StageSchemaRegistry.cpp](../../cognition/src/validation/StageSchemaRegistry.cpp) 与 [StageOutputValidator.cpp](../../cognition/src/validation/StageOutputValidator.cpp) 已形成 canonical perception dual-path：structured perception 经 raw schema + typed projection + invariant 校验后可成为 authoritative source，并与规则结果做 conflict / clarification 比对 | 更高层 installed/qemu 证据待补；`edge_minimal` 继续依赖规则兜底 | 已完成（WP-COG-GAP-012） |
 | COG-V-SUP005（Reasoner 决策评分） | [Reasoner.cpp](../../cognition/src/reasoning/Reasoner.cpp) 硬编码权重 0.30/0.35/0.20 | 无校准、无随回归 telemetry 调权 | GAP-P1-D |
 | Reflection 假设失效 / 失败归因 | [ReflectionEngine.cpp](../../cognition/src/reflection/ReflectionEngine.cpp) 关键词字符串匹配；LLM 桥仅"加强"，主路径仍规则 | 失败归因解释力弱；abort_safe 偏保守 | GAP-P2-C |
 | Response template fallback 文案 | [ResponseBuilder.cpp](../../cognition/src/response/ResponseBuilder.cpp) 模板字面量内嵌 | 不便多语言/品牌化 | GAP-P1-E |
@@ -148,7 +148,7 @@
 
 ### P2（认知质量与扩展）
 
-- **GAP-P2-A**：Perception LLM 升级。LLM 充足档位走"LLM 意图分类 + 规则冗余校验"双路径；规则结果分歧时升级 clarification；保留规则做 ARM/factory 兜底。新增 canonical stage `perception`，需要在详设侧追加 schema 与 hint。
+- **GAP-P2-A（已完成，2026-06-01）**：Perception canonical stage、`cognition.perception.v1` schema、`perception.llm_enabled` profile 投影与“LLM 意图分类 + 规则冗余校验”双路径已由 WP-COG-GAP-012 收口；保留规则做 ARM/factory 兜底，并在结果分歧时升级 clarification。
 - **GAP-P2-B**：多候选 Plan。Planner 支持产生 N=2~3 plan candidate，Reasoner 用 budget+confidence 排序。
 - **GAP-P2-C**：Reflection 多轮。对推理错误（非工具错误）开放 1 次 self-refine 循环，预算封顶。
 - **GAP-P2-D**：（与 GAP-P2-B 协同）引入 plan-candidate 评估器（self-consistency vote），不破坏 ADR-007/008 边界。
@@ -496,6 +496,30 @@
 - 结果：
   - `perception` 现在已经成为 shared prompt / llm / profile 三侧一致承认的 canonical stage key，WP-COG-GAP-012 不再受 taxonomy blocker 卡住。
   - 本轮仅做 unblock：五档 perception route 当前与 planning route 对齐；`perception.llm_enabled`、structured schema `cognition.perception.v1` 与 dual-path 行为仍由 WP-COG-GAP-012 主任务继续完成。
+
+**Closeout（2026-06-01）**
+
+- 状态：已完成（canonical perception stage、profile projection、schema/validator、Facade dual-path、replay/broader regression 已闭合）。
+- 设计回链：
+  - [docs/architecture/DASALL_cognition子系统详细设计.md](../architecture/DASALL_cognition子系统详细设计.md) 已补齐 `cognition.perception.v1`、`cognition.perception.llm_enabled`、LLM/rule 分歧升级 clarification 与 perception validator 的 authoritative 语义。
+  - `perception` 继续遵守 ADR-006 / ADR-007 / ADR-008：cognition 只产 perception/result/clarification 建议，不回收 Memory、Recovery 或 ToolRequest owner 权限。
+- 代码结果：
+  - 更新 [cognition/include/CognitionConfig.h](../../cognition/include/CognitionConfig.h)、[cognition/src/config/CognitionConfigProjector.cpp](../../cognition/src/config/CognitionConfigProjector.cpp)、[cognition/src/StagePolicyResolver.h](../../cognition/src/StagePolicyResolver.h) 与 [cognition/src/StagePolicyResolver.cpp](../../cognition/src/StagePolicyResolver.cpp)，把 canonical perception stage、`perception.llm_enabled` 与 `enabled_stages` 的 profile 差异投影进决策计划。
+  - 更新 [cognition/src/validation/StageSchemaRegistry.h](../../cognition/src/validation/StageSchemaRegistry.h)、[cognition/src/validation/StageSchemaRegistry.cpp](../../cognition/src/validation/StageSchemaRegistry.cpp)、[cognition/src/validation/StageOutputValidator.h](../../cognition/src/validation/StageOutputValidator.h) 与 [cognition/src/validation/StageOutputValidator.cpp](../../cognition/src/validation/StageOutputValidator.cpp)，冻结 `cognition.perception.v1` raw schema，并把 ambiguity / clarification / entity invariant 固化为 typed validator。
+  - 更新 [cognition/src/CognitionFacade.cpp](../../cognition/src/CognitionFacade.cpp)、[tests/mocks/include/MockCognitionFixture.h](../../tests/mocks/include/MockCognitionFixture.h) 与 [tests/fixtures/runtime/CognitionRuntimeIntegrationFixture.h](../../tests/fixtures/runtime/CognitionRuntimeIntegrationFixture.h)，接通 structured perception bridge、LLM/rule comparison、clarification early return、conflict early return 与 fail-closed/fallback 语义。
+  - 更新 [tests/unit/cognition/PerceptionLlmDualPathTest.cpp](../../tests/unit/cognition/PerceptionLlmDualPathTest.cpp)、[tests/unit/cognition/StageOutputValidatorPerceptionInvariantTest.cpp](../../tests/unit/cognition/StageOutputValidatorPerceptionInvariantTest.cpp)、[tests/integration/cognition/CognitionPerceptionStructuredOutputIntegrationTest.cpp](../../tests/integration/cognition/CognitionPerceptionStructuredOutputIntegrationTest.cpp)、[tests/unit/cognition/CognitionReplayRegressionTest.cpp](../../tests/unit/cognition/CognitionReplayRegressionTest.cpp) 与 `tests/data/cognition/replay/*perception*` / direct / planning-fallback / reflect goldens，固定 perception-first replay 与集成回归。
+  - 更新 [tests/integration/cognition/CognitionRuntimeInteractionContractTest.cpp](../../tests/integration/cognition/CognitionRuntimeInteractionContractTest.cpp)，让 runtime interaction contract 使用 live request timestamp，消除历史固定 `created_at` 造成的假性 deadline 超时，从而稳定承担本轮 broader regression 守门角色。
+- 验证结果：
+  - `cmake --build build/vscode-linux-ninja --target dasall_cognition_config_projection_unit_test dasall_stage_policy_resolver_unit_test dasall_stage_policy_resolver_profile_diff_unit_test` + `ctest --test-dir build/vscode-linux-ninja --output-on-failure -R 'CognitionConfigProjectionTest|StagePolicyResolverTest|StagePolicyResolverProfileDiffTest'`：通过，3/3。
+  - `cmake --build build/vscode-linux-ninja --target dasall_stage_schema_registry_unit_test dasall_stage_output_validator_perception_invariant_unit_test dasall_stage_output_validator_reflection_invariant_unit_test` + `ctest --test-dir build/vscode-linux-ninja --output-on-failure -R 'StageSchemaRegistryTest|StageOutputValidatorPerceptionInvariantTest|StageOutputValidatorReflectionInvariantTest'`：通过，3/3。
+  - `ctest --test-dir build/vscode-linux-ninja --output-on-failure -R 'PerceptionLlmDualPathTest|CognitionPerceptionStructuredOutputIntegrationTest|CognitionFacadeStageTimeoutTest|CognitionFacadeDeadlineCancelPropagationTest|BudgetAwareDecisionTest|CognitionInterfaceSurfaceTest|ReasonerCandidateWeightProjectionTest'`：通过，7/7。
+  - `ctest --test-dir build/vscode-linux-ninja --output-on-failure -R 'CognitionReplayRegressionTest'`：通过，1/1。
+  - `cmake --build build/vscode-linux-ninja --target dasall_cognition_runtime_interaction_contract_integration_test` + `ctest --test-dir build/vscode-linux-ninja --output-on-failure -R 'CognitionRuntimeInteractionContractTest'`：通过，1/1。
+  - `ctest --test-dir build/vscode-linux-ninja --output-on-failure -R 'MockCognitionFixtureSurfaceTest|CognitionReplayRegressionTest|CognitionProductionLoggingIntegrationTest|CognitionProductionTelemetryIntegrationTest|CognitionRuntimeInteractionContractTest|KeySubsystemProductionLoggingE2ETest'`：通过，6/6。
+- 结果：
+  - perception 现在已成为 cognition 决策主链的 canonical first stage；desktop/cloud/balanced 档位可消费 authoritative structured perception，`edge_minimal` 仍可仅走规则路径但不再绕过 canonical stage key。
+  - `cognition.perception.v1` 的 raw schema、typed invariant 与 replay goldens 已冻结，后续 perception 回归不再依赖临时 diff 或手工比对。
+  - `WP-COG-GAP-012` 的 cognition owner 缺口已闭合；后续若继续扩展 perception 质量，只剩更高层 installed / qemu / soak 证据或新的质量增强任务，而非当前 dual-path 主链本身。
 
 #### WP-COG-GAP-013 Planner 多候选 + 候选评估（GAP-P2-B / GAP-P2-D）
 

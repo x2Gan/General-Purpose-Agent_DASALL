@@ -10,7 +10,8 @@
 namespace dasall::cognition::config {
 namespace {
 
-constexpr std::array<std::string_view, 4> kCanonicalStageNames = {
+constexpr std::array<std::string_view, 5> kCanonicalStageNames = {
+  "perception",
     "planning",
     "execution",
     "reflection",
@@ -117,6 +118,7 @@ void apply_response_templates(std::string_view profile_id,
     const profiles::RuntimePolicySnapshot& snapshot) {
   CognitionConfig config;
   config.enabled = true;
+  config.perception.llm_enabled = profile_id != "edge_minimal";
   config.perception.rule_fallback_enabled = degrade_allowed(snapshot);
   config.response.template_fallback_enabled = degrade_allowed(snapshot);
   config.reasoner.allow_delegate_hint = false;
@@ -144,12 +146,12 @@ void apply_response_templates(std::string_view profile_id,
 [[nodiscard]] ModelCapabilityTier derive_capability_tier(std::string_view profile_id,
                                                          std::string_view stage_name,
                                                          std::string_view task_type) {
-  if (stage_name == "planning") {
-    if (task_type == "perception") {
-      return profile_id == "edge_minimal" ? ModelCapabilityTier::Lightweight
-                                           : ModelCapabilityTier::Standard;
-    }
+  if (stage_name == "perception") {
+    return profile_id == "edge_minimal" ? ModelCapabilityTier::Lightweight
+                                         : ModelCapabilityTier::Standard;
+  }
 
+  if (stage_name == "planning") {
     if (task_type == "replan") {
       return (profile_id == "desktop_full" || profile_id == "cloud_full")
                  ? ModelCapabilityTier::Advanced
@@ -181,13 +183,13 @@ void apply_response_templates(std::string_view profile_id,
 }
 
 [[nodiscard]] bool requires_reasoning_trace(std::string_view stage_name,
-                                            std::string_view task_type,
+                                            std::string_view,
                                             ModelCapabilityTier capability_tier) {
   if (stage_name == "reflection") {
     return true;
   }
 
-  if (stage_name == "planning" && task_type != "perception") {
+  if (stage_name == "planning") {
     return capability_tier >= ModelCapabilityTier::Advanced;
   }
 

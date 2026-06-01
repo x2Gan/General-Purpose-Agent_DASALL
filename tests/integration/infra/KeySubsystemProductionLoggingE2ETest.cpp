@@ -350,6 +350,8 @@ void test_key_subsystem_production_logging_e2e_persists_redacted_queryable_event
       .user_turn = "user_turn=cognition-secret-input",
       .goal_summary = "goal_summary=cognition-secret-goal",
   });
+  cognition_fixture.stage_structured_perception_result(
+      dasall::tests::mocks::StructuredPerceptionPayloadScenario::ValidActionDecision);
   cognition_fixture.stage_structured_planning_result(StructuredPlanningPayloadScenario::Valid);
   cognition_fixture.stage_structured_execution_result(
       StructuredExecutionPayloadScenario::ValidDirectResponse);

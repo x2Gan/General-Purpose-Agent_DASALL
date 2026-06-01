@@ -26,6 +26,7 @@ namespace fs = std::filesystem;
 using dasall::tests::mocks::MockCognitionFixture;
 using dasall::tests::mocks::MockCognitionFixtureOptions;
 using dasall::tests::mocks::MockLLMManager;
+using dasall::tests::mocks::StructuredPerceptionPayloadScenario;
 using dasall::tests::mocks::StructuredExecutionPayloadScenario;
 using dasall::tests::mocks::StructuredPlanningPayloadScenario;
 using dasall::tests::runtime_fixture::make_true_integration_policy_snapshot;
@@ -96,6 +97,8 @@ void test_cognition_production_logging_live_composition_persists_redacted_events
       .trace_id = "trace-cognition-production-logging",
       .goal_id = "goal-cognition-production-logging",
   });
+    fixture.stage_structured_perception_result(
+      StructuredPerceptionPayloadScenario::ValidActionDecision);
   fixture.stage_structured_planning_result(StructuredPlanningPayloadScenario::Valid);
   fixture.stage_structured_execution_result(
       StructuredExecutionPayloadScenario::ValidDirectResponse);
@@ -167,6 +170,8 @@ void test_cognition_production_logging_live_composition_persists_redacted_events
       .trace_id = "trace-cognition-bridge-failure",
       .goal_id = "goal-cognition-bridge-failure",
     });
+    bridge_failure_fixture.stage_structured_perception_result(
+      StructuredPerceptionPayloadScenario::ValidActionDecision);
     bridge_failure_fixture.stage_structured_planning_result(StructuredPlanningPayloadScenario::Valid);
     bridge_failure_fixture.llm_manager()->set_stage_result(
       "execution",
@@ -198,6 +203,8 @@ void test_cognition_production_logging_live_composition_persists_redacted_events
       .trace_id = "trace-cognition-schema-fallback",
       .goal_id = "goal-cognition-schema-fallback",
     });
+    schema_fallback_fixture.stage_structured_perception_result(
+      StructuredPerceptionPayloadScenario::ValidActionDecision);
     schema_fallback_fixture.stage_structured_planning_result(
       StructuredPlanningPayloadScenario::SchemaInvalidActionKindHint);
       schema_fallback_fixture.llm_manager()->set_stage_result(

@@ -35,6 +35,10 @@ using dasall::tests::support::assert_true;
 
   ModelProfile model_profile{
       .stage_routes = {
+        {"perception",
+         ModelRoutePolicy{.route = "llm.perception.primary",
+                .fallback_route = "llm.perception.fallback",
+                .streaming_enabled = false}},
           {"planning",
            ModelRoutePolicy{.route = "llm.plan.primary",
                             .fallback_route = "llm.plan.fallback",
@@ -151,6 +155,14 @@ void test_profile_diff_changes_planning_cap_and_model_tier() {
                "edge_minimal should tighten max_plan_nodes instead of disabling cognition");
   assert_equal(8, static_cast<int>(cloud_plan->max_plan_nodes),
                "cloud_full should retain the full planning cap");
+  assert_true(!edge_plan->perception_llm_enabled,
+              "edge_minimal should disable perception llm classification by default");
+  assert_true(cloud_plan->perception_llm_enabled,
+              "cloud_full should keep perception llm classification enabled");
+  assert_equal(2, static_cast<int>(edge_plan->enabled_stages.size()),
+               "edge_minimal should keep decision planning on the local rule path without a perception stage");
+  assert_equal(3, static_cast<int>(cloud_plan->enabled_stages.size()),
+               "cloud_full should include the canonical perception stage in the decision chain");
   assert_true(edge_plan->preferred_model_tier == ModelCapabilityTier::Standard,
               "edge_minimal should keep the lighter planning tier");
   assert_true(cloud_plan->preferred_model_tier == ModelCapabilityTier::Advanced,

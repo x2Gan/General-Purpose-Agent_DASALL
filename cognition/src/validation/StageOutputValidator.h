@@ -10,6 +10,7 @@
 #include "decision/ActionDecision.h"
 #include "error/ErrorInfo.h"
 #include "llm/CognitionLlmBridge.h"
+#include "perception/PerceptionResult.h"
 #include "plan/PlanGraph.h"
 #include "response/ResponseBuildResult.h"
 #include "validation/StageSchemaRegistry.h"
@@ -27,6 +28,7 @@ enum class ValidationIssueCode : std::uint8_t {
   MalformedJson = 7,
   UnknownField = 8,
   ReflectionDecisionInvariant = 9,
+  PerceptionInvariant = 10,
 };
 
 struct ValidationIssue {
@@ -61,6 +63,8 @@ class StageOutputValidator {
   [[nodiscard]] ValidationResult validate_action_decision_invariants(
       const decision::ActionDecision& action_decision,
       const plan::PlanGraph* active_plan = nullptr) const;
+  [[nodiscard]] ValidationResult validate_perception_invariants(
+      const perception::PerceptionResult& perception_result) const;
     [[nodiscard]] ValidationResult validate_reflection_decision_invariants(
       const contracts::ReflectionDecision& reflection_decision) const;
   [[nodiscard]] ValidationResult validate_response_envelope(

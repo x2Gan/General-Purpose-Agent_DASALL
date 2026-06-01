@@ -12,6 +12,7 @@ struct CognitionThresholds {
 };
 
 struct CognitionPerceptionPolicy {
+  bool llm_enabled = true;
   bool rule_fallback_enabled = true;
 };
 

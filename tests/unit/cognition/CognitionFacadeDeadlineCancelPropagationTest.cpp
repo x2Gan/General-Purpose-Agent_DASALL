@@ -46,6 +46,10 @@ using dasall::tests::support::assert_true;
                                        .max_latency_ms = 2400U,
                                        .max_replan_count = 2U},
       ModelProfile{.stage_routes = {
+                       {"perception",
+                        ModelRoutePolicy{.route = "llm.perception.primary",
+                                         .fallback_route = "llm.perception.fallback",
+                                         .streaming_enabled = false}},
                        {"planning",
                         ModelRoutePolicy{.route = "llm.plan.primary",
                                          .fallback_route = "llm.plan.fallback",
@@ -126,6 +130,22 @@ void test_deadline_timeout_invokes_abandon_call_without_waiting_for_completion()
   std::atomic<int> abandon_calls{0};
   fixture.llm_manager()->set_generate_handler(
       [slow_generate_delay](const dasall::llm::LLMGenerateRequest& request) {
+        if (request.stage == "perception") {
+          return MockLLMManager::make_structured_stage_result(
+              "perception",
+              std::string{"{"}
+                  + "\"schema_version\":\"cognition.perception.v1\","
+                  + "\"intent_summary\":\"stabilize cognition-facing runtime fixtures\","
+                  + "\"task_type\":\"action_decision\","
+                  + "\"entities\":[{\"name\":\"goal\",\"value\":\"stabilize cognition-facing runtime fixtures\",\"confidence\":0.92,\"evidence_refs\":[\"goal_contract.goal_description\"]}],"
+                  + "\"constraints_digest\":{\"hard_constraints\":[],\"soft_constraints\":[],\"policy_refs\":[]},"
+                  + "\"ambiguities\":[],"
+                  + "\"clarification_questions\":[],"
+                  + "\"confidence\":0.82,"
+                  + "\"requires_clarification\":false}",
+              request.request.request_id);
+        }
+
         if (request.stage == "planning") {
           std::this_thread::sleep_for(slow_generate_delay);
         }

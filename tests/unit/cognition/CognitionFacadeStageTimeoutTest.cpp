@@ -78,6 +78,10 @@ using dasall::tests::support::assert_true;
                                        .max_latency_ms = 2400U,
                                        .max_replan_count = 2U},
       ModelProfile{.stage_routes = {
+                       {"perception",
+                        ModelRoutePolicy{.route = "llm.perception.primary",
+                                         .fallback_route = "llm.perception.fallback",
+                                         .streaming_enabled = false}},
                        {"planning",
                         ModelRoutePolicy{.route = "llm.plan.primary",
                                          .fallback_route = "llm.plan.fallback",
@@ -143,6 +147,10 @@ void test_decide_returns_stage_timeout_and_discards_late_planning_bridge_results
   fixture.llm_manager()->set_generate_handler(
       [&fixture, &planning_calls, slow_stage_delay](
           const dasall::llm::LLMGenerateRequest& request) {
+        if (request.stage == "perception") {
+          return fixture.make_structured_perception_stage_result();
+        }
+
         if (request.stage == "planning" && planning_calls.fetch_add(1) == 0) {
           std::this_thread::sleep_for(slow_stage_delay);
         }

@@ -17,6 +17,7 @@ using dasall::cognition::decision::ActionDecisionKind;
 using dasall::contracts::ResultCode;
 using dasall::tests::mocks::MockCognitionFixture;
 using dasall::tests::mocks::MockCognitionFixtureOptions;
+using dasall::tests::mocks::StructuredPerceptionPayloadScenario;
 using dasall::tests::mocks::StructuredExecutionPayloadScenario;
 using dasall::tests::mocks::StructuredPlanningPayloadScenario;
 using dasall::tests::runtime_fixture::make_true_integration_policy_snapshot;
@@ -66,6 +67,8 @@ void test_decide_projects_structured_plan_and_action_on_snapshot_backed_path() {
       .selected_node_id = "structured-integration-node",
       .response_text = "bridge-authored direct response summary",
   });
+  fixture.stage_structured_perception_result(
+      StructuredPerceptionPayloadScenario::ValidActionDecision);
   fixture.stage_structured_planning_result(StructuredPlanningPayloadScenario::Valid);
   fixture.stage_structured_execution_result(
       StructuredExecutionPayloadScenario::ValidDirectResponse);
@@ -109,6 +112,8 @@ void test_decide_explicitly_falls_back_when_planning_payload_is_malformed() {
       .selected_node_id = "structured-fallback-node",
       .response_text = "fallback path still accepts structured execution output",
   });
+  fixture.stage_structured_perception_result(
+      StructuredPerceptionPayloadScenario::ValidActionDecision);
   fixture.stage_structured_planning_result(StructuredPlanningPayloadScenario::MalformedJson);
   fixture.stage_structured_execution_result(
       StructuredExecutionPayloadScenario::ValidDirectResponse);
@@ -140,6 +145,8 @@ void test_decide_explicitly_falls_back_when_planning_payload_is_malformed() {
       .selected_node_id = "structured-provider-leak-node",
       .response_text = "execution payload remains authoritative after planning provider leakage",
     });
+    fixture.stage_structured_perception_result(
+      StructuredPerceptionPayloadScenario::ValidActionDecision);
     fixture.llm_manager()->set_structured_stage_payload(
       "planning",
       std::string{"{"}
@@ -189,6 +196,8 @@ void test_decide_fails_closed_when_execution_projection_is_invalid_without_fallb
       .selected_node_id = "structured-failfast-node",
       .response_text = "this response should never be emitted",
   });
+  fixture.stage_structured_perception_result(
+      StructuredPerceptionPayloadScenario::ValidActionDecision);
   fixture.stage_structured_planning_result(StructuredPlanningPayloadScenario::Valid);
   fixture.stage_structured_execution_result(
       StructuredExecutionPayloadScenario::ProjectionInvalidToolIntentOnDirectResponse);
@@ -223,6 +232,8 @@ void test_decide_fails_closed_when_execution_payload_overreaches_tool_arguments(
       .selected_node_id = "structured-overreach-node",
       .response_text = "this response should never be emitted",
   });
+  fixture.stage_structured_perception_result(
+      StructuredPerceptionPayloadScenario::ValidActionDecision);
   fixture.stage_structured_planning_result(StructuredPlanningPayloadScenario::Valid);
   fixture.llm_manager()->set_structured_stage_payload(
       "execution",

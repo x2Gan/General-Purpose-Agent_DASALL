@@ -304,9 +304,11 @@ void append_structured_projection_value(std::vector<std::string>& diagnostics,
     const std::vector<std::string>& diagnostics) {
   StructuredProjectionTelemetry structured_projection;
   structured_projection.enabled =
+    has_structured_projection_flag(diagnostics, "enabled", "perception") ||
       has_structured_projection_flag(diagnostics, "enabled", "planning") ||
       has_structured_projection_flag(diagnostics, "enabled", "execution");
   structured_projection.required =
+    has_structured_projection_flag(diagnostics, "required", "perception") ||
       has_structured_projection_flag(diagnostics, "required", "planning") ||
       has_structured_projection_flag(diagnostics, "required", "execution");
   structured_projection.schema_version =
@@ -315,17 +317,29 @@ void append_structured_projection_value(std::vector<std::string>& diagnostics,
     structured_projection.schema_version =
         find_structured_projection_value(diagnostics, "schema_version", "planning");
   }
+  if (!structured_projection.schema_version.has_value()) {
+  structured_projection.schema_version =
+    find_structured_projection_value(diagnostics, "schema_version", "perception");
+  }
   structured_projection.source =
       find_structured_projection_value(diagnostics, "source", "execution");
   if (!structured_projection.source.has_value()) {
     structured_projection.source =
         find_structured_projection_value(diagnostics, "source", "planning");
   }
+  if (!structured_projection.source.has_value()) {
+  structured_projection.source =
+    find_structured_projection_value(diagnostics, "source", "perception");
+  }
   structured_projection.failure_code =
       find_structured_projection_value(diagnostics, "failure_code", "execution");
   if (!structured_projection.failure_code.has_value()) {
     structured_projection.failure_code =
         find_structured_projection_value(diagnostics, "failure_code", "planning");
+  }
+  if (!structured_projection.failure_code.has_value()) {
+  structured_projection.failure_code =
+    find_structured_projection_value(diagnostics, "failure_code", "perception");
   }
   structured_projection.projected_node_count =
       find_structured_projection_count(diagnostics, "projected_node_count", "planning");
@@ -943,6 +957,64 @@ void emit_reflection_bridge_checkpoint(
   return decision;
 }
 
+[[nodiscard]] bool perception_results_disagree(
+    const perception::PerceptionResult& authoritative_perception,
+    const perception::PerceptionResult& rule_perception) {
+  return authoritative_perception.task_type != rule_perception.task_type ||
+         authoritative_perception.requires_clarification !=
+             rule_perception.requires_clarification;
+}
+
+void apply_perception_context(CognitionDecisionResult& result,
+                              const perception::PerceptionResult& perception_result) {
+  result.context_sufficiency.context_sufficient = !perception_result.requires_clarification;
+  result.context_sufficiency.context_confidence = perception_result.confidence;
+  result.context_sufficiency.missing_evidence_hints =
+      collect_missing_evidence(perception_result);
+  result.context_sufficiency.recommend_context_reload =
+      perception_result.requires_clarification ||
+      should_recommend_context_reload(perception_result.confidence);
+}
+
+[[nodiscard]] ActionDecision make_perception_clarification_decision(
+    const CognitionStepRequest& request,
+    const perception::PerceptionResult& perception_result,
+    std::string rationale) {
+  auto decision = make_clarification_fallback(request, std::move(rationale));
+  if (!perception_result.clarification_questions.empty()) {
+    decision.clarification_question =
+        perception_result.clarification_questions.front().question;
+  }
+  if (decision.response_outline.has_value() && !perception_result.intent_summary.empty()) {
+    decision.response_outline->summary = perception_result.intent_summary;
+  }
+  return decision;
+}
+
+void apply_perception_clarification_result(
+    CognitionDecisionResult& result,
+    const CognitionStepRequest& request,
+    const perception::PerceptionResult& perception_result,
+    std::string rationale,
+    std::string diagnostic) {
+  apply_perception_context(result, perception_result);
+  result.action_decision = make_perception_clarification_decision(
+      request, perception_result, std::move(rationale));
+  result.context_sufficiency.context_sufficient = false;
+  result.context_sufficiency.recommend_context_reload = true;
+  if (result.context_sufficiency.missing_evidence_hints.empty()) {
+    append_unique(result.context_sufficiency.missing_evidence_hints,
+                  "context_packet.user_turn");
+  }
+
+  belief::BeliefUpdateHint belief_update_hint;
+  belief_update_hint.missing_evidence_refs = result.context_sufficiency.missing_evidence_hints;
+  belief_update_hint.confidence_hint = perception_result.confidence;
+  belief_update_hint.merge_mode = belief::BeliefMergeMode::Merge;
+  result.belief_update_hint = std::move(belief_update_hint);
+  append_unique(result.diagnostics, std::move(diagnostic));
+}
+
 void apply_invalid_decide_result(
     CognitionDecisionResult& result,
     const InputBoundaryValidationResult& validation_result) {
@@ -984,6 +1056,274 @@ void apply_decision_failure(
 
   return validation::StructuredPayloadView::parse_structured_payload(
       *bridge_result.response->content_payload);
+}
+
+struct PerceptionProjectionResult {
+  bool ok = false;
+  std::optional<perception::PerceptionResult> perception_result;
+  std::optional<contracts::ErrorInfo> error_info;
+};
+
+[[nodiscard]] contracts::ErrorInfo make_perception_projection_error(
+    std::string field_path,
+    std::string message) {
+  return contracts::ErrorInfo{
+      .failure_type =
+          contracts::classify_result_code(contracts::ResultCode::ValidationFieldMissing),
+      .retryable = false,
+      .safe_to_replan = false,
+      .details = contracts::ErrorDetails{
+          .code = static_cast<int>(contracts::ResultCode::ValidationFieldMissing),
+          .message = std::move(message),
+          .stage = "perception",
+      },
+      .source_ref = contracts::ErrorSourceRefMinimal{
+          .ref_type = "cognition.perception_structured_projector",
+          .ref_id = std::move(field_path),
+      },
+  };
+}
+
+[[nodiscard]] PerceptionProjectionResult project_perception_result(
+    const validation::StructuredPayloadView& payload_view) {
+  PerceptionProjectionResult result;
+
+  const auto intent_summary = payload_view.read_string("intent_summary");
+  if (!intent_summary.has_value()) {
+    result.error_info = make_perception_projection_error(
+        "intent_summary",
+        "perception structured payload must encode intent_summary as a string");
+    return result;
+  }
+
+  const auto task_type = payload_view.read_string("task_type");
+  if (!task_type.has_value()) {
+    result.error_info = make_perception_projection_error(
+        "task_type",
+        "perception structured payload must encode task_type as a string");
+    return result;
+  }
+
+  const auto entities_view = payload_view.read_list("entities");
+  if (!entities_view.has_value()) {
+    result.error_info = make_perception_projection_error(
+        "entities",
+        "perception structured payload must encode entities as an object list");
+    return result;
+  }
+
+  const auto constraints_view = payload_view.read_object("constraints_digest");
+  if (!constraints_view.has_value()) {
+    result.error_info = make_perception_projection_error(
+        "constraints_digest",
+        "perception structured payload must encode constraints_digest as an object");
+    return result;
+  }
+
+  const auto ambiguities_view = payload_view.read_list("ambiguities");
+  if (!ambiguities_view.has_value()) {
+    result.error_info = make_perception_projection_error(
+        "ambiguities",
+        "perception structured payload must encode ambiguities as an object list");
+    return result;
+  }
+
+  const auto clarification_view = payload_view.read_list("clarification_questions");
+  if (!clarification_view.has_value()) {
+    result.error_info = make_perception_projection_error(
+        "clarification_questions",
+        "perception structured payload must encode clarification_questions as an object list");
+    return result;
+  }
+
+  const auto confidence = payload_view.read_number("confidence");
+  if (!confidence.has_value()) {
+    result.error_info = make_perception_projection_error(
+        "confidence",
+        "perception structured payload must encode confidence as a number");
+    return result;
+  }
+
+  const auto requires_clarification = payload_view.read_bool("requires_clarification");
+  if (!requires_clarification.has_value()) {
+    result.error_info = make_perception_projection_error(
+        "requires_clarification",
+        "perception structured payload must encode requires_clarification as a boolean");
+    return result;
+  }
+
+  const auto project_string_list = [](const validation::StructuredPayloadView& object_view,
+                                      std::string_view field_path)
+      -> std::optional<std::vector<std::string>> {
+    const auto token = object_view.field_token(field_path);
+    if (!token.has_value() || token->kind == validation::JsonTokenKind::Null) {
+      return std::vector<std::string>{};
+    }
+
+    const auto list_view = object_view.read_list(field_path);
+    if (!list_view.has_value()) {
+      return std::nullopt;
+    }
+
+    std::vector<std::string> values;
+    values.reserve(list_view->size());
+    for (std::size_t index = 0; index < list_view->size(); ++index) {
+      const auto value = list_view->read_string(index);
+      if (!value.has_value()) {
+        return std::nullopt;
+      }
+      values.push_back(*value);
+    }
+    return values;
+  };
+
+  perception::PerceptionResult perception_result;
+  perception_result.intent_summary = *intent_summary;
+  perception_result.task_type = *task_type;
+  perception_result.confidence = static_cast<float>(*confidence);
+  perception_result.requires_clarification = *requires_clarification;
+
+  perception_result.entities.reserve(entities_view->size());
+  for (std::size_t index = 0; index < entities_view->size(); ++index) {
+    const auto entity_view = entities_view->read_object(index);
+    if (!entity_view.has_value()) {
+      result.error_info = make_perception_projection_error(
+          "entities",
+          "perception entities must remain objects");
+      return result;
+    }
+
+    const auto entity_name = entity_view->read_string("name");
+    const auto entity_value = entity_view->read_string("value");
+    const auto entity_confidence = entity_view->read_number("confidence");
+    if (!entity_name.has_value() || !entity_value.has_value() ||
+        !entity_confidence.has_value()) {
+      result.error_info = make_perception_projection_error(
+          "entities",
+          "perception entities must encode name, value and confidence fields");
+      return result;
+    }
+
+    auto evidence_refs = project_string_list(*entity_view, "evidence_refs");
+    if (!evidence_refs.has_value()) {
+      result.error_info = make_perception_projection_error(
+          "entities.evidence_refs",
+          "perception entities must encode evidence_refs as a string list when present");
+      return result;
+    }
+
+    perception_result.entities.push_back(perception::EntityCandidate{
+        .name = *entity_name,
+        .value = *entity_value,
+        .confidence = static_cast<float>(*entity_confidence),
+        .evidence_refs = std::move(*evidence_refs),
+    });
+  }
+
+  if (const auto hard_constraints = project_string_list(*constraints_view, "hard_constraints");
+      hard_constraints.has_value()) {
+    perception_result.constraints_digest.hard_constraints = std::move(*hard_constraints);
+  } else {
+    result.error_info = make_perception_projection_error(
+        "constraints_digest.hard_constraints",
+        "constraints_digest.hard_constraints must remain a string list when present");
+    return result;
+  }
+
+  if (const auto soft_constraints = project_string_list(*constraints_view, "soft_constraints");
+      soft_constraints.has_value()) {
+    perception_result.constraints_digest.soft_constraints = std::move(*soft_constraints);
+  } else {
+    result.error_info = make_perception_projection_error(
+        "constraints_digest.soft_constraints",
+        "constraints_digest.soft_constraints must remain a string list when present");
+    return result;
+  }
+
+  if (const auto policy_refs = project_string_list(*constraints_view, "policy_refs");
+      policy_refs.has_value()) {
+    perception_result.constraints_digest.policy_refs = std::move(*policy_refs);
+  } else {
+    result.error_info = make_perception_projection_error(
+        "constraints_digest.policy_refs",
+        "constraints_digest.policy_refs must remain a string list when present");
+    return result;
+  }
+
+  perception_result.ambiguities.reserve(ambiguities_view->size());
+  for (std::size_t index = 0; index < ambiguities_view->size(); ++index) {
+    const auto ambiguity_view = ambiguities_view->read_object(index);
+    if (!ambiguity_view.has_value()) {
+      result.error_info = make_perception_projection_error(
+          "ambiguities",
+          "perception ambiguities must remain objects");
+      return result;
+    }
+
+    const auto ambiguity_id = ambiguity_view->read_string("ambiguity_id");
+    const auto ambiguity_description = ambiguity_view->read_string("description");
+    const auto ambiguity_severity = ambiguity_view->read_number("severity");
+    if (!ambiguity_id.has_value() || !ambiguity_description.has_value() ||
+        !ambiguity_severity.has_value()) {
+      result.error_info = make_perception_projection_error(
+          "ambiguities",
+          "perception ambiguities must encode ambiguity_id, description and severity fields");
+      return result;
+    }
+
+    auto missing_evidence_refs = project_string_list(*ambiguity_view, "missing_evidence_refs");
+    if (!missing_evidence_refs.has_value()) {
+      result.error_info = make_perception_projection_error(
+          "ambiguities.missing_evidence_refs",
+          "perception ambiguities must encode missing_evidence_refs as a string list when present");
+      return result;
+    }
+
+    perception_result.ambiguities.push_back(perception::AmbiguityMarker{
+        .ambiguity_id = *ambiguity_id,
+        .description = *ambiguity_description,
+        .missing_evidence_refs = std::move(*missing_evidence_refs),
+        .severity = static_cast<float>(*ambiguity_severity),
+    });
+  }
+
+  perception_result.clarification_questions.reserve(clarification_view->size());
+  for (std::size_t index = 0; index < clarification_view->size(); ++index) {
+    const auto question_view = clarification_view->read_object(index);
+    if (!question_view.has_value()) {
+      result.error_info = make_perception_projection_error(
+          "clarification_questions",
+          "perception clarification_questions must remain objects");
+      return result;
+    }
+
+    const auto question_text = question_view->read_string("question");
+    const auto question_priority = question_view->read_number("priority");
+    if (!question_text.has_value() || !question_priority.has_value()) {
+      result.error_info = make_perception_projection_error(
+          "clarification_questions",
+          "perception clarification_questions must encode question and priority fields");
+      return result;
+    }
+
+    auto evidence_refs = project_string_list(*question_view, "evidence_refs");
+    if (!evidence_refs.has_value()) {
+      result.error_info = make_perception_projection_error(
+          "clarification_questions.evidence_refs",
+          "perception clarification_questions must encode evidence_refs as a string list when present");
+      return result;
+    }
+
+    perception_result.clarification_questions.push_back(perception::ClarificationCandidate{
+        .question = *question_text,
+        .evidence_refs = std::move(*evidence_refs),
+        .priority = static_cast<float>(*question_priority),
+    });
+  }
+
+  result.ok = true;
+  result.perception_result = std::move(perception_result);
+  return result;
 }
 
 struct ReflectionDecisionProjectionResult {
@@ -1504,11 +1844,20 @@ class CognitionFacade final : public ICognitionEngine {
     const auto* planning_hint = decision_plan.has_value()
                                     ? find_stage_model_hint(*decision_plan, "planning", "plan")
                                     : nullptr;
+    const auto perception_llm_enabled = decision_plan.has_value()
+                        ? decision_plan->perception_llm_enabled
+                        : config_.perception.llm_enabled;
+    const auto* perception_hint =
+      (decision_plan.has_value() && perception_llm_enabled)
+        ? find_stage_model_hint(*decision_plan, "perception", "perception")
+        : nullptr;
     const auto* execution_hint = decision_plan.has_value()
                                      ? find_stage_model_hint(
                                            *decision_plan, "execution", "action_decision")
                                      : nullptr;
-    if (decision_plan.has_value() && (planning_hint == nullptr || execution_hint == nullptr)) {
+    if (decision_plan.has_value() &&
+      ((perception_llm_enabled && perception_hint == nullptr) || planning_hint == nullptr ||
+       execution_hint == nullptr)) {
       apply_decision_failure(
           result,
           contracts::ResultCode::PolicyDenied,
@@ -1552,6 +1901,10 @@ class CognitionFacade final : public ICognitionEngine {
           .key = "fallback_allowed",
           .value = rule_fallback_enabled ? "true" : "false",
         },
+        TelemetryField{
+          .key = "perception_llm_enabled",
+          .value = perception_llm_enabled ? "true" : "false",
+        },
       });
 
     const auto perception_result = run_stage_with_deadline(
@@ -1592,8 +1945,9 @@ class CognitionFacade final : public ICognitionEngine {
       return result;
     }
 
+    std::optional<perception::PerceptionResult> rule_perception;
     if (!perception_result.value->has_value()) {
-      if (rule_fallback_enabled) {
+      if (!perception_llm_enabled && rule_fallback_enabled) {
         result.action_decision = make_clarification_fallback(
             request,
             "decision pipeline degraded to clarification because perception produced no safe output");
@@ -1633,6 +1987,11 @@ class CognitionFacade final : public ICognitionEngine {
         return result;
       }
 
+      if (perception_llm_enabled) {
+        append_unique(result.diagnostics, "decision_pipeline.perception_shadow_unavailable");
+      }
+
+      if (!perception_llm_enabled) {
         emit_pipeline_checkpoint(
           telemetry_,
           make_stage_context(request,
@@ -1649,49 +2008,244 @@ class CognitionFacade final : public ICognitionEngine {
               .value = std::to_string(perception_result.elapsed_ms),
             },
           });
-      apply_decision_failure(
-          result,
-          contracts::ResultCode::RuntimeRetryExhausted,
-          make_error_info(contracts::ResultCode::RuntimeRetryExhausted,
-                          "cognition.decide.perception",
-                          "perception engine could not derive a safe cognition result",
-                          "cognition::perception::PerceptionEngine"),
-          "decision_pipeline.perception_unavailable");
+        apply_decision_failure(
+            result,
+            contracts::ResultCode::RuntimeRetryExhausted,
+            make_error_info(contracts::ResultCode::RuntimeRetryExhausted,
+                            "cognition.decide.perception",
+                            "perception engine could not derive a safe cognition result",
+                            "cognition::perception::PerceptionEngine"),
+            "decision_pipeline.perception_unavailable");
+        return result;
+      }
+    } else {
+      rule_perception = perception_result.value->value();
+    }
+
+    std::optional<perception::PerceptionResult> authoritative_perception = rule_perception;
+    bool perception_from_llm = false;
+    const auto perception_fallback_allowed =
+        rule_fallback_enabled && rule_perception.has_value();
+
+    if (perception_llm_enabled) {
+      append_structured_projection_flag(result.diagnostics, "enabled", "perception");
+      append_structured_projection_flag(result.diagnostics, "required", "perception");
+      append_structured_projection_value(
+          result.diagnostics, "schema_version", "perception", "cognition.perception.v1");
+
+      const auto perception_bridge_result = consume_decision_bridge_stage(request,
+                                                                          "perception",
+                                                                          "perception",
+                                                                          ModelCapabilityTier::Standard,
+                                                                          true,
+                                                                          384U,
+                                                                          perception_fallback_allowed,
+                                                                          result,
+                                                                          perception_hint);
+      if (result.error_info.has_value()) {
+        return result;
+      }
+
+      if (perception_bridge_result.has_value()) {
+        const auto schema_validation = validator_.validate_stage_output(
+            *perception_bridge_result,
+            validation::schema_for_perception_result());
+        append_unique(result.diagnostics, schema_validation.diagnostics);
+        if (!schema_validation.ok) {
+          if (!fallback_or_fail_structured_stage(telemetry_,
+                                                 request,
+                                                 result,
+                                                 perception_fallback_allowed,
+                                                 contracts::ResultCode::ValidationFieldMissing,
+                                                 *schema_validation.error_info,
+                                                 "perception",
+                                                 "structured_projection.schema_violation:perception",
+                                                 "schema")) {
+            return result;
+          }
+        } else {
+          append_unique(result.diagnostics,
+                        "structured_projection.bridge_payload_valid:perception");
+          const auto payload_view = parse_bridge_payload_view(*perception_bridge_result);
+          if (!payload_view.has_value()) {
+            if (!fallback_or_fail_structured_stage(
+                    telemetry_,
+                    request,
+                    result,
+                    perception_fallback_allowed,
+                    contracts::ResultCode::ValidationFieldMissing,
+                    make_error_info(contracts::ResultCode::ValidationFieldMissing,
+                                    "perception",
+                                    "perception bridge payload could not be reparsed for projection",
+                                    "cognition::perception::PerceptionStructuredProjector"),
+                    "perception",
+                    "structured_projection.projection_failed:perception",
+                    "projection")) {
+              return result;
+            }
+          } else {
+            const auto projected_perception = project_perception_result(*payload_view);
+            if (!projected_perception.ok || !projected_perception.perception_result.has_value()) {
+              if (!fallback_or_fail_structured_stage(
+                      telemetry_,
+                      request,
+                      result,
+                      perception_fallback_allowed,
+                      contracts::ResultCode::ValidationFieldMissing,
+                      projected_perception.error_info.value_or(
+                          make_error_info(contracts::ResultCode::ValidationFieldMissing,
+                                          "perception",
+                                          "perception structured projector could not produce a perception result",
+                                          "cognition::perception::PerceptionStructuredProjector")),
+                      "perception",
+                      "structured_projection.projection_failed:perception",
+                      "projection")) {
+                return result;
+              }
+            } else {
+              const auto perception_validation = validator_.validate_perception_invariants(
+                  *projected_perception.perception_result);
+              append_unique(result.diagnostics, perception_validation.diagnostics);
+              if (!perception_validation.ok) {
+                if (!fallback_or_fail_structured_stage(telemetry_,
+                                                       request,
+                                                       result,
+                                                       perception_fallback_allowed,
+                                                       contracts::ResultCode::ValidationFieldMissing,
+                                                       *perception_validation.error_info,
+                                                       "perception",
+                                                       "structured_projection.invariant_failed:perception",
+                                                       "invariant")) {
+                  return result;
+                }
+              } else {
+                authoritative_perception = *projected_perception.perception_result;
+                perception_from_llm = true;
+                append_unique(result.diagnostics,
+                              "structured_projection.projected_perception_result");
+                append_structured_projection_value(
+                    result.diagnostics, "source", "perception", "llm_bridge");
+                append_structured_projection_value(
+                    result.diagnostics,
+                    "projected_entity_count",
+                    "perception",
+                    std::to_string(authoritative_perception->entities.size()));
+              }
+            }
+          }
+        }
+      }
+    }
+
+    if (!authoritative_perception.has_value()) {
       return result;
     }
 
-      const auto& perception = perception_result.value->value();
+    if (perception_from_llm) {
+      append_unique(result.diagnostics, authoritative_perception->diagnostics);
+    } else if (rule_perception.has_value()) {
+      append_unique(result.diagnostics, rule_perception->diagnostics);
+    }
 
-      result.context_sufficiency.context_sufficient = !perception.requires_clarification;
-      result.context_sufficiency.context_confidence = perception.confidence;
-      result.context_sufficiency.missing_evidence_hints =
-        collect_missing_evidence(perception);
-    result.context_sufficiency.recommend_context_reload =
-        perception.requires_clarification ||
-        should_recommend_context_reload(perception.confidence);
-      append_unique(result.diagnostics, perception.diagnostics);
+    const auto& perception = *authoritative_perception;
 
+    apply_perception_context(result, perception);
+
+    const auto perception_source = perception_from_llm
+                                       ? std::string{"llm_bridge"}
+                                       : find_structured_projection_value(
+                                               result.diagnostics,
+                                               "source",
+                                               "perception")
+                                             .value_or(std::string{"perception_engine"});
+
+    if (perception_from_llm && perception.requires_clarification) {
+      apply_perception_clarification_result(
+          result,
+          request,
+          perception,
+          "decision pipeline requested clarification because perception required more evidence before planning",
+          "decision_pipeline.perception_clarification_required");
       emit_pipeline_checkpoint(
-        telemetry_,
-        make_stage_context(request, "execution", false),
-        "decision",
-        "perception",
-        "completed",
-        {
-          TelemetryField{.key = "source", .value = "perception_engine"},
-          TelemetryField{
-            .key = "elapsed_ms",
-            .value = std::to_string(perception_result.elapsed_ms),
-          },
-          TelemetryField{
-            .key = "missing_evidence_count",
-            .value = std::to_string(result.context_sufficiency.missing_evidence_hints.size()),
-          },
-          TelemetryField{
-            .key = "diagnostic_count",
-            .value = std::to_string(result.diagnostics.size()),
-          },
-        });
+          telemetry_,
+          make_stage_context(request, "execution", false),
+          "decision",
+          "perception",
+          "clarification",
+          {
+              TelemetryField{.key = "source", .value = perception_source},
+              TelemetryField{
+                  .key = "elapsed_ms",
+                  .value = std::to_string(perception_result.elapsed_ms),
+              },
+              TelemetryField{
+                  .key = "missing_evidence_count",
+                  .value = std::to_string(result.context_sufficiency.missing_evidence_hints.size()),
+              },
+              TelemetryField{
+                  .key = "diagnostic_count",
+                  .value = std::to_string(result.diagnostics.size()),
+              },
+          });
+      return result;
+    }
+
+        if (perception_from_llm && rule_perception.has_value() &&
+          perception_results_disagree(perception, *rule_perception)) {
+          apply_perception_clarification_result(
+            result,
+            request,
+            perception,
+            "decision pipeline requested clarification because perception llm and rule paths disagreed",
+            "decision_pipeline.perception_conflict");
+          emit_pipeline_checkpoint(
+            telemetry_,
+            make_stage_context(request, "execution", false),
+            "decision",
+            "perception",
+            "clarification",
+            {
+              TelemetryField{.key = "source", .value = perception_source},
+              TelemetryField{
+                .key = "elapsed_ms",
+                .value = std::to_string(perception_result.elapsed_ms),
+              },
+              TelemetryField{
+                .key = "missing_evidence_count",
+                .value = std::to_string(result.context_sufficiency.missing_evidence_hints.size()),
+              },
+              TelemetryField{
+                .key = "diagnostic_count",
+                .value = std::to_string(result.diagnostics.size()),
+              },
+            });
+          return result;
+        }
+
+    emit_pipeline_checkpoint(
+      telemetry_,
+      make_stage_context(request,
+               "execution",
+               has_diagnostic(result.diagnostics, "decision_pipeline.degraded")),
+      "decision",
+      "perception",
+      has_diagnostic(result.diagnostics, "decision_pipeline.degraded") ? "degraded"
+                                                                        : "completed",
+      {
+        TelemetryField{.key = "source", .value = perception_source},
+        TelemetryField{
+          .key = "elapsed_ms",
+          .value = std::to_string(perception_result.elapsed_ms),
+        },
+        TelemetryField{
+          .key = "missing_evidence_count",
+          .value = std::to_string(result.context_sufficiency.missing_evidence_hints.size()),
+        },
+        TelemetryField{
+          .key = "diagnostic_count",
+          .value = std::to_string(result.diagnostics.size()),
+        },
+      });
 
     std::optional<plan::PlanGraph> active_plan_graph;
     append_structured_projection_flag(result.diagnostics, "enabled", "planning");

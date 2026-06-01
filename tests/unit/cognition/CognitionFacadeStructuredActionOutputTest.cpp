@@ -15,6 +15,7 @@ using dasall::cognition::CognitionConfig;
 using dasall::cognition::decision::ActionDecisionKind;
 using dasall::tests::mocks::MockCognitionFixture;
 using dasall::tests::mocks::MockCognitionFixtureOptions;
+using dasall::tests::mocks::StructuredPerceptionPayloadScenario;
 using dasall::tests::mocks::StructuredExecutionPayloadScenario;
 using dasall::tests::mocks::StructuredPlanningPayloadScenario;
 using dasall::tests::support::assert_equal;
@@ -36,6 +37,8 @@ void test_decide_uses_projected_action_decision_as_authoritative_result() {
       .selected_node_id = "bridge-plan-node",
       .response_text = "bridge-authored direct response summary",
   });
+  fixture.stage_structured_perception_result(
+      StructuredPerceptionPayloadScenario::ValidActionDecision);
   fixture.stage_structured_planning_result(StructuredPlanningPayloadScenario::Valid);
   fixture.stage_structured_execution_result(
       StructuredExecutionPayloadScenario::ValidDirectResponse);
@@ -77,6 +80,8 @@ void test_decide_fails_closed_when_invalid_execution_projection_has_no_fallback(
     .selected_node_id = "bridge-plan-node",
     .response_text = "bridge-authored direct response summary",
   });
+  fixture.stage_structured_perception_result(
+      StructuredPerceptionPayloadScenario::ValidActionDecision);
   fixture.stage_structured_planning_result(StructuredPlanningPayloadScenario::Valid);
   fixture.stage_structured_execution_result(
     StructuredExecutionPayloadScenario::ProjectionInvalidToolIntentOnDirectResponse);
@@ -108,6 +113,8 @@ void test_decide_fails_closed_when_execution_selects_node_outside_projected_plan
       .selected_node_id = "bridge-plan-node",
       .response_text = "bridge-authored direct response summary",
   });
+  fixture.stage_structured_perception_result(
+      StructuredPerceptionPayloadScenario::ValidActionDecision);
   fixture.stage_structured_planning_result(StructuredPlanningPayloadScenario::Valid);
   fixture.llm_manager()->set_structured_stage_payload(
       "execution",
@@ -151,6 +158,8 @@ void test_decide_fails_closed_when_execution_projection_returns_no_decision() {
       .selected_node_id = "bridge-plan-node",
       .response_text = "bridge-authored direct response summary",
   });
+  fixture.stage_structured_perception_result(
+      StructuredPerceptionPayloadScenario::ValidActionDecision);
   fixture.stage_structured_planning_result(StructuredPlanningPayloadScenario::Valid);
   fixture.llm_manager()->set_structured_stage_payload(
       "execution",

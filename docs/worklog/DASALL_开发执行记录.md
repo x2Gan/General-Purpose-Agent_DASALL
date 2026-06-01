@@ -1,3 +1,51 @@
+## 记录 #866
+
+- 日期：2026-06-01
+- 阶段：cognition / perception dual-path closure
+- 任务：完成 WP-COG-GAP-012 Perception LLM 升级（GAP-P2-A）
+- 状态：已完成（canonical perception stage、schema/invariant、Facade dual-path、replay 与 broader regression 已闭合）
+
+### 执行前提
+
+1. [docs/deliverables/COG-EVAL-2026-05-31-cognition子系统落地评估与生产级缺口治理任务规划.md](../deliverables/COG-EVAL-2026-05-31-cognition子系统落地评估与生产级缺口治理任务规划.md) 已将 `WP-COG-GAP-012` 定义为 P2 任务，并在 `WP-COG-GAP-012` 条目中明确要求：canonical `perception` stage、`cognition.perception.v1` schema、`perception.llm_enabled` profile 投影，以及“LLM 意图分类 + 规则冗余校验”双路径。
+2. [docs/architecture/DASALL_cognition子系统详细设计.md](../architecture/DASALL_cognition子系统详细设计.md) 与本轮前置 BLOCK closeout 已把 `perception` 固定为独立 canonical stage，因此本轮必须在 cognition owner 内闭合 dual-path，而不能再把感知语义折回 `planning.task_type` 私有 alias。
+3. broader regression 中的 [tests/integration/cognition/CognitionReplayRegressionTest.cpp](../tests/unit/cognition/CognitionReplayRegressionTest.cpp) 与 [tests/integration/cognition/CognitionRuntimeInteractionContractTest.cpp](../tests/integration/cognition/CognitionRuntimeInteractionContractTest.cpp) 分别暴露了 perception-first trace 漂移和历史固定 `created_at` 导致的假性 deadline 超时；主任务 closeout 需要一并把这两类守门回归收口，否则无法给出稳定验收证据。
+
+### 改动
+
+1. 更新 [cognition/include/CognitionConfig.h](../cognition/include/CognitionConfig.h)、[cognition/src/config/CognitionConfigProjector.cpp](../cognition/src/config/CognitionConfigProjector.cpp)、[cognition/src/StagePolicyResolver.h](../cognition/src/StagePolicyResolver.h) 与 [cognition/src/StagePolicyResolver.cpp](../cognition/src/StagePolicyResolver.cpp)，把 canonical perception stage、`perception.llm_enabled`、`perception_llm_enabled` 与 `enabled_stages` 的 profile 差异投影进 cognition 决策计划。
+2. 更新 [cognition/src/validation/StageSchemaRegistry.h](../cognition/src/validation/StageSchemaRegistry.h)、[cognition/src/validation/StageSchemaRegistry.cpp](../cognition/src/validation/StageSchemaRegistry.cpp)、[cognition/src/validation/StageOutputValidator.h](../cognition/src/validation/StageOutputValidator.h) 与 [cognition/src/validation/StageOutputValidator.cpp](../cognition/src/validation/StageOutputValidator.cpp)，冻结 `cognition.perception.v1` raw schema，并新增 perception typed invariant：entity、ambiguity、clarification 与 `requires_clarification` 一致性。
+3. 更新 [cognition/src/CognitionFacade.cpp](../cognition/src/CognitionFacade.cpp)，接通 structured perception bridge、authoritative perception 选择、LLM/rule disagreement clarification、authoritative clarification early return，以及 invalid bridge payload 下的 fail-closed / local fallback 语义。
+4. 更新 [tests/mocks/include/MockCognitionFixture.h](../tests/mocks/include/MockCognitionFixture.h)、[tests/fixtures/runtime/CognitionRuntimeIntegrationFixture.h](../tests/fixtures/runtime/CognitionRuntimeIntegrationFixture.h)、[tests/unit/cognition/CognitionFacadeStructuredPlanOutputTest.cpp](../tests/unit/cognition/CognitionFacadeStructuredPlanOutputTest.cpp)、[tests/unit/cognition/CognitionFacadeStructuredActionOutputTest.cpp](../tests/unit/cognition/CognitionFacadeStructuredActionOutputTest.cpp) 与 [tests/integration/cognition/CognitionStructuredOutputIntegrationTest.cpp](../tests/integration/cognition/CognitionStructuredOutputIntegrationTest.cpp)，让 perception 成为所有 structured cognition fixture 的前置 canonical stage。
+5. 新增或更新 [tests/unit/cognition/PerceptionLlmDualPathTest.cpp](../tests/unit/cognition/PerceptionLlmDualPathTest.cpp)、[tests/unit/cognition/StageOutputValidatorPerceptionInvariantTest.cpp](../tests/unit/cognition/StageOutputValidatorPerceptionInvariantTest.cpp)、[tests/integration/cognition/CognitionPerceptionStructuredOutputIntegrationTest.cpp](../tests/integration/cognition/CognitionPerceptionStructuredOutputIntegrationTest.cpp)、[tests/unit/cognition/CognitionReplayRegressionTest.cpp](../tests/unit/cognition/CognitionReplayRegressionTest.cpp) 及 `tests/data/cognition/replay/` 中 direct / planning-fallback / reflect goldens，固定 perception-first replay 与新 diagnostics truth。
+6. 更新 [tests/integration/cognition/CognitionRuntimeInteractionContractTest.cpp](../tests/integration/cognition/CognitionRuntimeInteractionContractTest.cpp)，新增 `make_live_agent_request(...)`，用实时 `created_at` 消除历史固定时间戳导致的工具轮次即时超时，使该 broader regression 真正回到 contract 守门角色。
+7. 更新 [docs/architecture/DASALL_cognition子系统详细设计.md](../architecture/DASALL_cognition子系统详细设计.md)、[docs/deliverables/COG-EVAL-2026-05-31-cognition子系统落地评估与生产级缺口治理任务规划.md](../deliverables/COG-EVAL-2026-05-31-cognition子系统落地评估与生产级缺口治理任务规划.md) 与 [docs/todos/DASALL_子系统查漏补缺专项记录.md](../todos/DASALL_子系统查漏补缺专项记录.md)，回写 `cognition.perception.v1`、`perception.llm_enabled`、GAP-P2-A closeout 与 cognition 总账状态。
+
+### 验证
+
+1. `cmake --build build/vscode-linux-ninja --target dasall_cognition_config_projection_unit_test dasall_stage_policy_resolver_unit_test dasall_stage_policy_resolver_profile_diff_unit_test`
+   - 结果：通过。
+2. `ctest --test-dir build/vscode-linux-ninja --output-on-failure -R 'CognitionConfigProjectionTest|StagePolicyResolverTest|StagePolicyResolverProfileDiffTest'`
+   - 结果：通过；`100% tests passed, 0 tests failed out of 3`。
+3. `cmake --build build/vscode-linux-ninja --target dasall_stage_schema_registry_unit_test dasall_stage_output_validator_perception_invariant_unit_test dasall_stage_output_validator_reflection_invariant_unit_test`
+   - 结果：通过。
+4. `ctest --test-dir build/vscode-linux-ninja --output-on-failure -R 'StageSchemaRegistryTest|StageOutputValidatorPerceptionInvariantTest|StageOutputValidatorReflectionInvariantTest'`
+   - 结果：通过；`100% tests passed, 0 tests failed out of 3`。
+5. `ctest --test-dir build/vscode-linux-ninja --output-on-failure -R 'PerceptionLlmDualPathTest|CognitionPerceptionStructuredOutputIntegrationTest|CognitionFacadeStageTimeoutTest|CognitionFacadeDeadlineCancelPropagationTest|BudgetAwareDecisionTest|CognitionInterfaceSurfaceTest|ReasonerCandidateWeightProjectionTest'`
+   - 结果：通过；`100% tests passed, 0 tests failed out of 7`。
+6. `ctest --test-dir build/vscode-linux-ninja --output-on-failure -R 'CognitionReplayRegressionTest'`
+   - 结果：通过；`100% tests passed, 0 tests failed out of 1`。
+7. `cmake --build build/vscode-linux-ninja --target dasall_cognition_runtime_interaction_contract_integration_test && ctest --test-dir build/vscode-linux-ninja --output-on-failure -R 'CognitionRuntimeInteractionContractTest'`
+   - 结果：通过；`100% tests passed, 0 tests failed out of 1`。
+8. `ctest --test-dir build/vscode-linux-ninja --output-on-failure -R 'MockCognitionFixtureSurfaceTest|CognitionReplayRegressionTest|CognitionProductionLoggingIntegrationTest|CognitionProductionTelemetryIntegrationTest|CognitionRuntimeInteractionContractTest|KeySubsystemProductionLoggingE2ETest'`
+   - 结果：通过；`100% tests passed, 0 tests failed out of 6`。
+
+### 结果
+
+1. perception 现在已成为 cognition 决策主链的 canonical first stage；desktop/cloud/balanced 档位可消费 authoritative structured perception，并在 LLM/rule 分歧时优先升级 clarification，而不是静默择优。
+2. `cognition.perception.v1` raw schema、typed invariant、replay goldens 与 broader regression 已冻结，后续 perception 回归可直接以 focused tests + replay traces 复验，不再依赖临时 diff。
+3. `WP-COG-GAP-012` 的 cognition owner 缺口已闭合；当前残余只剩更高层 installed / qemu / soak 证据与后续新质量增强任务，不再是 perception dual-path 主链本身。
+
 ## 记录 #865
 
 - 日期：2026-06-01

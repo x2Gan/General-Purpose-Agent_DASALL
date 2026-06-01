@@ -595,6 +595,101 @@ ValidationResult StageOutputValidator::validate_action_decision_invariants(
   return finalize_result(std::move(issue_set), "execution", std::move(diagnostics));
 }
 
+ValidationResult StageOutputValidator::validate_perception_invariants(
+    const perception::PerceptionResult& perception_result) const {
+  ValidationIssueSet issue_set;
+  std::vector<std::string> diagnostics;
+
+  if (perception_result.intent_summary.empty()) {
+    issue_set.add(ValidationIssueCode::PerceptionInvariant,
+                  "intent_summary",
+                  "perception results must carry a non-empty intent_summary");
+  }
+
+  if (perception_result.task_type.empty()) {
+    issue_set.add(ValidationIssueCode::PerceptionInvariant,
+                  "task_type",
+                  "perception results must carry a non-empty task_type");
+  }
+
+  if (perception_result.entities.empty()) {
+    issue_set.add(ValidationIssueCode::PerceptionInvariant,
+                  "entities",
+                  "perception results must include at least one entity candidate");
+  }
+
+  if (perception_result.confidence < 0.0F || perception_result.confidence > 1.0F) {
+    issue_set.add(ValidationIssueCode::PerceptionInvariant,
+                  "confidence",
+                  "perception confidence must remain within [0,1]");
+  }
+
+  for (const auto& entity : perception_result.entities) {
+    if (entity.name.empty()) {
+      issue_set.add(ValidationIssueCode::PerceptionInvariant,
+                    "entities.name",
+                    "perception entities must carry a non-empty name");
+    }
+    if (entity.value.empty()) {
+      issue_set.add(ValidationIssueCode::PerceptionInvariant,
+                    "entities.value",
+                    "perception entities must carry a non-empty value");
+    }
+    if (entity.confidence < 0.0F || entity.confidence > 1.0F) {
+      issue_set.add(ValidationIssueCode::PerceptionInvariant,
+                    "entities.confidence",
+                    "perception entity confidence must remain within [0,1]");
+    }
+  }
+
+  for (const auto& ambiguity : perception_result.ambiguities) {
+    if (ambiguity.ambiguity_id.empty()) {
+      issue_set.add(ValidationIssueCode::PerceptionInvariant,
+                    "ambiguities.ambiguity_id",
+                    "perception ambiguities must carry a non-empty ambiguity_id");
+    }
+    if (ambiguity.description.empty()) {
+      issue_set.add(ValidationIssueCode::PerceptionInvariant,
+                    "ambiguities.description",
+                    "perception ambiguities must carry a non-empty description");
+    }
+    if (ambiguity.severity < 0.0F || ambiguity.severity > 1.0F) {
+      issue_set.add(ValidationIssueCode::PerceptionInvariant,
+                    "ambiguities.severity",
+                    "perception ambiguity severity must remain within [0,1]");
+    }
+  }
+
+  for (const auto& question : perception_result.clarification_questions) {
+    if (question.question.empty()) {
+      issue_set.add(ValidationIssueCode::PerceptionInvariant,
+                    "clarification_questions.question",
+                    "perception clarification questions must carry non-empty text");
+    }
+    if (question.priority < 0.0F || question.priority > 1.0F) {
+      issue_set.add(ValidationIssueCode::PerceptionInvariant,
+                    "clarification_questions.priority",
+                    "perception clarification priorities must remain within [0,1]");
+    }
+  }
+
+  if (perception_result.requires_clarification &&
+      perception_result.clarification_questions.empty()) {
+    issue_set.add(ValidationIssueCode::PerceptionInvariant,
+                  "clarification_questions",
+                  "perception results that require clarification must include at least one question");
+  }
+
+  if (!perception_result.requires_clarification &&
+      !perception_result.clarification_questions.empty()) {
+    issue_set.add(ValidationIssueCode::PerceptionInvariant,
+                  "requires_clarification",
+                  "perception clarification questions must not be present when requires_clarification is false");
+  }
+
+  return finalize_result(std::move(issue_set), "perception", std::move(diagnostics));
+}
+
 [[nodiscard]] std::string reflection_issue_field_path(std::string_view reason) {
   if (reason.find("request_id") != std::string_view::npos) {
     return "request_id";

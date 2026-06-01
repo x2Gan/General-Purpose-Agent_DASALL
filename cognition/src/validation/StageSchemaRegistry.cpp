@@ -3,6 +3,61 @@
 namespace dasall::cognition::validation {
 namespace {
 
+const StageSchemaSpec kPerceptionResultSchema = {
+    .stage_name = "perception",
+    .schema_version = "cognition.perception.v1",
+    .known_top_level_fields = {
+        "schema_version",
+        "intent_summary",
+        "task_type",
+        "entities",
+        "constraints_digest",
+        "ambiguities",
+        "clarification_questions",
+        "confidence",
+        "requires_clarification",
+    },
+    .required_fields = {
+        "schema_version",
+        "intent_summary",
+        "task_type",
+        "entities",
+        "constraints_digest",
+        "ambiguities",
+        "clarification_questions",
+        "confidence",
+        "requires_clarification",
+        "entities.name",
+        "entities.value",
+        "entities.confidence",
+    },
+    .enum_constraints = {
+        EnumConstraint{.field_path = "schema_version",
+                       .allowed_values = {"cognition.perception.v1"}},
+        EnumConstraint{.field_path = "task_type",
+                       .allowed_values = {
+                           "plan",
+                           "action_decision",
+                           "final_response",
+                       }},
+    },
+    .numeric_bounds = {
+        NumericConstraint{.field_path = "confidence", .min_value = 0.0, .max_value = 1.0},
+        NumericConstraint{.field_path = "entities.confidence",
+                          .min_value = 0.0,
+                          .max_value = 1.0},
+    },
+    .list_constraints = {
+        ListConstraint{.field_path = "entities", .min_items = 1U, .max_items = std::nullopt},
+    },
+    .stage_specific_invariants = {
+        "perception.entity_shape",
+        "perception.clarification_consistency",
+    },
+    .unknown_field_policy = UnknownFieldPolicy::AllowRegisteredExtensions,
+    .allowed_extension_prefixes = {"x_"},
+};
+
 const StageSchemaSpec kPlanningPlanSchema = {
     .stage_name = "planning",
     .schema_version = "cognition.plan.v1",
@@ -198,6 +253,10 @@ const StageSchemaSpec kResponseEnvelopeSchema = {
 };
 
 }  // namespace
+
+const StageSchemaSpec& schema_for_perception_result() {
+    return kPerceptionResultSchema;
+}
 
 const StageSchemaSpec& schema_for_planning_plan() {
   return kPlanningPlanSchema;
