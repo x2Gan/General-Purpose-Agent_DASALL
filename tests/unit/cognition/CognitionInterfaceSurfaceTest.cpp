@@ -371,6 +371,8 @@ void test_decide_and_reflect_request_result_family_freezes_fields() {
   static_assert(std::is_same_v<decltype(StageExecutionHints{}.risk_tolerance), float>);
   static_assert(std::is_same_v<decltype(StageExecutionHints{}.profile_variant_hint),
                                std::optional<std::string>>);
+  static_assert(std::is_same_v<decltype(StageExecutionHints{}.input_safety_signal),
+                               std::optional<dasall::contracts::InputSafetySignal>>);
   static_assert(!has_retry_after_member<StageExecutionHints>::value);
 
   static_assert(std::is_same_v<decltype(CognitionStepRequest{}.caller_domain), std::string>);

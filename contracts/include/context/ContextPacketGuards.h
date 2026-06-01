@@ -228,6 +228,14 @@ inline ContextPacketGuardResult validate_context_packet_field_rules(
     };
   }
 
+  if (pkt.input_safety_signal.has_value() &&
+      !pkt.input_safety_signal->has_consistent_values()) {
+    return ContextPacketGuardResult{
+        .ok = false,
+        .reason = "input_safety_signal reason_codes must not contain empty strings",
+    };
+  }
+
   // -----------------------------------------------------------------------
   // O6-rule: token_budget_report — if present, must be non-empty.
   // -----------------------------------------------------------------------

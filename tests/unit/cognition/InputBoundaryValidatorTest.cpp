@@ -149,6 +149,28 @@ void test_validate_decide_request_rejects_missing_belief_state_fields() {
               "belief boundary validation should report missing confidence");
 }
 
+void test_validate_decide_request_rejects_injection_detected_input_safety_signal() {
+  auto request = make_decide_request();
+  request.execution_hints.input_safety_signal = dasall::contracts::InputSafetySignal{
+      .injection_detected = true,
+      .pii_detected = false,
+      .reason_codes = std::vector<std::string>{"prompt_injection_phrase_detected"},
+  };
+
+  const auto validation_result = InputBoundaryValidator::validate_decide_request(request);
+
+  assert_true(!validation_result.ok(),
+              "injection-detected safety signals should fail closed at decide validation");
+  assert_true(validation_result.error_info.has_value(),
+              "policy-denied boundary failures should surface ErrorInfo");
+  assert_equal(static_cast<int>(dasall::contracts::ResultCode::PolicyDenied),
+               validation_result.error_info->details.code.value_or(0),
+               "input safety denial should use the canonical policy-denied result code");
+  assert_true(validation_result.error_info->details.message.find(
+                      "execution_hints.input_safety_signal") != std::string::npos,
+              "policy-denied boundary failures should identify the blocking safety signal");
+}
+
 }  // namespace
 
 int main() {
@@ -157,6 +179,7 @@ int main() {
     test_validate_decide_request_rejects_missing_goal_contract_fields();
     test_validate_decide_request_rejects_missing_context_packet_fields();
     test_validate_decide_request_rejects_missing_belief_state_fields();
+    test_validate_decide_request_rejects_injection_detected_input_safety_signal();
   } catch (const std::exception& ex) {
     std::cerr << ex.what() << '\n';
     return 1;

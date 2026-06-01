@@ -79,6 +79,11 @@ void test_p2_full_optional() {
       "Deployment #55 succeeded with zero errors.";
   pkt.active_tools = std::vector<std::string>{"deploy_tool", "log_tool"};
   pkt.policy_digest = "Max 5 tool calls per turn.";
+  pkt.input_safety_signal = dasall::contracts::InputSafetySignal{
+      .injection_detected = false,
+      .pii_detected = true,
+      .reason_codes = std::vector<std::string>{"pii_email_detected"},
+    };
   pkt.token_budget_report = "goal:200 history:600 evidence:300 tools:100";
   pkt.belief_state_summary = "Confirmed: deployment #55 stable.";
   pkt.created_at = 1710000011000;

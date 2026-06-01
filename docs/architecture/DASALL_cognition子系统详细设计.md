@@ -438,6 +438,14 @@ std::unique_ptr<IResponseBuilder> create_response_builder(
 #### 6.6.2 支撑请求与结果对象建议
 
 ```cpp
+struct StageExecutionHints {
+  bool low_latency_preferred = false;
+  bool degraded_path_allowed = true;
+  float risk_tolerance = 0.0F;
+  std::optional<std::string> profile_variant_hint;
+  std::optional<dasall::contracts::InputSafetySignal> input_safety_signal;
+};
+
 struct CognitionStepRequest {
   std::string caller_domain;
   std::string request_id;
@@ -1045,6 +1053,7 @@ Runtime↔Cognition caller fixture 最小形状：
 | `belief_state` | 必填 | 必填 | 缺失时 InputBoundaryValidator fail-fast，不退化为 recent-history only |
 | `latest_observation` | 可选 | 必填 | decide 可处理首轮空 Observation；reflect 必须由 Runtime 提供外部结果 |
 | `budget_context` | 建议必填 | 建议必填 | 用于 plan cap、direct response / clarification threshold 与超预算降级 |
+| `execution_hints.input_safety_signal` | 可选 | 可选 | Runtime 从 `ContextPacket.input_safety_signal` 投影；当 `injection_detected=true` 时 InputBoundaryValidator 必须返回 `cognition.policy_denied`，而不是继续进入 planning / reasoning |
 
 RuntimeCognitionLoopSmokeTest 的最小断言：
 

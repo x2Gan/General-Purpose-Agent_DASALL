@@ -547,7 +547,7 @@ MEM-TODO-023 冻结结论：
 
 | 类型 | 主要字段 | 用途 | 是否进入 contracts |
 |---|---|---|---|
-| MemoryContextRequest | request_id、session_id、stage、goal_summary、constraints_summary、latest_observation_digest_summary、visible_tools、token_budget_hint、latency_budget_ms、external_evidence | runtime 发起上下文装配请求 | 否 |
+| MemoryContextRequest | request_id、session_id、trace_id、stage、user_turn、goal_summary、constraints_summary、latest_observation_digest_summary、visible_tools、token_budget_hint、latency_budget_ms、external_evidence | runtime 发起上下文装配请求 | 否 |
 | ContextAssemblyResult | result_code、context_packet、dropped_sections、compression_notes、warnings、degraded | prepare_context 的 facade 返回 | 否 |
 | MemoryWritebackRequest | session_id、turn payload、tool refs、observation refs、summary candidates、fact candidates、experience candidates、side_effect_report_ref | runtime 发起写回请求 | 否 |
 | WritebackResult | persisted_turn_id、summary_id、fact_ids、experience_ids、conflicts、warnings、degraded、retryable_storage_failure | 写回结果与降级信号 | 否 |
@@ -1291,7 +1291,7 @@ struct MemoryManagerDeps {
 1. **职责**：作为语义上下文装配的编排核心，协调 CandidateCollector、BudgetAllocator、CompressionCoordinator 三个子组件完成从候选收集→预算分配→压缩裁剪→ContextPacket 组装的完整管线。
 2. **非职责边界**：不直接访问 SQLite 或任何仓储层（由 CandidateCollector 代理）；不持久化任何数据；不做 Prompt 渲染；不决定调用时机（由 runtime 通过 MemoryManager 触发）。
 3. **核心数据定义**：
-   - 消费：`MemoryContextRequest`（含 session_id、stage、goal_summary、constraints_summary、token_budget_hint、latency_budget_ms、external_evidence）。
+  - 消费：`MemoryContextRequest`（含 session_id、stage、user_turn、goal_summary、constraints_summary、token_budget_hint、latency_budget_ms、external_evidence）。
    - 内部中间产物：`CandidateSet`、`BudgetPlan`、`CompressionInput`/`CompressionOutput`。
    - 产出：`ContextAssemblyResult`（含 `ContextPacket`、`dropped_sections`、`compression_notes`、`warnings`、`degraded`）。
 4. **公共/内部接口**：
@@ -1336,7 +1336,7 @@ private:
 | ContextPacket 槽位 | 数据来源 | 映射逻辑 |
 |---|---|---|
 | `request_id` | `MemoryContextRequest.request_id` | 直接透传 |
-| `user_turn` | `CandidateSet.session_bundle.recent_turns[0].user_input` | 取最新 Turn 的用户输入 |
+| `user_turn` | `MemoryContextRequest.user_turn` + `CandidateSet.session_bundle.recent_turns[0].user_input` | 优先取 runtime 透传的当前 `user_turn`；若当前轮未提供，再回退到已持久化的最近 Turn 用户输入 |
 | `current_goal_summary` | `MemoryContextRequest.goal_summary` | 直接透传；若为空则从 WorkingMemory goal slot 提取 |
 | `recent_history` | `CandidateSet.session_bundle.recent_turns` | 按 BudgetPlan 中 recent_history slot 额度截断后，序列化为 `[role: content]` 字符串列表 |
 | `summary_memory` | `CandidateSet.latest_summary.summary_text` | 若压缩产生了新 SummaryMemory 则用新的；否则用已有的；无则为 nullopt |
@@ -1344,11 +1344,13 @@ private:
 | `latest_observation_digest_summary` | `MemoryContextRequest.latest_observation_digest_summary` | 直接透传（由 runtime 在调用前填充） |
 | `active_tools` | `MemoryContextRequest.visible_tools` | 直接透传（由 runtime 在调用前填充） |
 | `policy_digest` | `MemoryContextRequest.constraints_summary` | 直接透传（由 runtime 在调用前填充） |
+| `input_safety_signal` | `MemoryContextRequest.user_turn` | 对归一化入口 `user_turn` 执行 deterministic PII / injection scan，并把 `injection_detected` / `pii_detected` / `reason_codes` 作为 additive supporting signal 投影到 `ContextPacket` |
 | `token_budget_report` | `BudgetPlan` | 将 BudgetPlan 按 "slot_name: allocated/used" 格式序列化 |
 | `belief_state_summary` | `CandidateSet.relevant_facts` | 将有效 MemoryFact 列表投影为自然语言摘要："已确认事实：[fact_text (confidence%)]…"；若无事实则为 nullopt |
 
 映射说明：
 - `latest_observation_digest_summary`、`active_tools`、`policy_digest` 的原始数据不在 memory 内部产生，而是由 runtime 在 MemoryContextRequest 中传入，ContextOrchestrator 负责透传并纳入预算管控。
+- `input_safety_signal` 属于 ContextOrchestrator 的 normalized semantic signal：它只消费 runtime 透传的 `user_turn` 文本，不携带 access 协议头或 provider-private 安全 payload。
 - `belief_state_summary` 的投影逻辑在 `build_packet()` 内部完成，将 MemoryFact 列表按 confidence_score 降序排列后拼接为简洁的文本投影，不是简单序列化。
 
 ##### CandidateCollector

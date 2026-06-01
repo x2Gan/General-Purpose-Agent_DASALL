@@ -27,6 +27,7 @@ struct StageExecutionHints {
   bool degraded_path_allowed = true;
   float risk_tolerance = 0.0F;
   std::optional<std::string> profile_variant_hint;
+  std::optional<contracts::InputSafetySignal> input_safety_signal;
 };
 
 enum class ModelCapabilityTier : std::uint8_t {

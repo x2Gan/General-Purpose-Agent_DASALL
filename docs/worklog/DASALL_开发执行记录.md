@@ -1,3 +1,41 @@
+## 记录 #872
+
+- 日期：2026-06-01
+- 阶段：cognition / input safety signal closure
+- 任务：完成 WP-COG-GAP-016“入口 PII / injection 扫描信号（GAP-P3-A）”
+- 状态：已完成（memory→runtime→cognition input safety signal 链路、PolicyDenied fail-closed 与 focused regression 已闭合）
+
+### 执行前提
+
+1. [docs/deliverables/COG-EVAL-2026-05-31-cognition子系统落地评估与生产级缺口治理任务规划.md](../deliverables/COG-EVAL-2026-05-31-cognition子系统落地评估与生产级缺口治理任务规划.md) 已将 `WP-COG-GAP-016` 定义为入口 PII / injection 扫描信号任务，并要求 `InputBoundaryValidator` 在 `injection_detected=true` 时收口到 `cognition.policy_denied`。
+2. [docs/architecture/DASALL_memory子系统详细设计.md](../architecture/DASALL_memory子系统详细设计.md)、[docs/architecture/DASALL_cognition子系统详细设计.md](../architecture/DASALL_cognition子系统详细设计.md) 与 [docs/architecture/DASALL_access子系统详细设计.md](../architecture/DASALL_access子系统详细设计.md) 已明确 owner boundary：access 只处理协议层 injection，memory 负责语义上下文装配，cognition 负责输入边界 fail-fast；因此本轮不能把 access sidecar 直接抬升到 shared `AgentRequest`。
+3. 前置 blocker `WP-COG-GAP-005` 已完成，`InputBoundaryValidatorTest` 与 cognition unit test topology 已具备独立回归出口，可以直接承接 `input_safety_signal` 的 policy-denied 路径。
+
+### 改动
+
+1. 新增 [contracts/include/context/InputSafetySignal.h](../../contracts/include/context/InputSafetySignal.h)，并更新 [contracts/include/context/ContextPacket.h](../../contracts/include/context/ContextPacket.h)、[contracts/include/context/ContextPacketGuards.h](../../contracts/include/context/ContextPacketGuards.h)、[memory/include/context/MemoryContextRequest.h](../../memory/include/context/MemoryContextRequest.h) 与 [cognition/include/CognitionTypes.h](../../cognition/include/CognitionTypes.h)，冻结 `user_turn` / `input_safety_signal` supporting surface。
+2. 更新 [memory/src/context/ContextOrchestrator.cpp](../../memory/src/context/ContextOrchestrator.cpp)，优先采用 runtime 透传的 `MemoryContextRequest.user_turn`，并对入口文本执行 deterministic prompt-injection / PII 扫描，把 `injection_detected`、`pii_detected` 与低基数 reason codes 投影到 `ContextPacket.input_safety_signal`。
+3. 更新 [runtime/src/AgentOrchestrator.cpp](../../runtime/src/AgentOrchestrator.cpp)、[cognition/src/validation/InputBoundaryValidator.cpp](../../cognition/src/validation/InputBoundaryValidator.cpp) 与 [cognition/src/CognitionFacade.cpp](../../cognition/src/CognitionFacade.cpp)，让 runtime 把 `ContextPacket.input_safety_signal` 投影到 decide / reflect `execution_hints`，并在 `injection_detected=true` 时 fail-fast 返回 `PolicyDenied`，同时保留 deny 语义到最终 runtime `AgentResult.error_info`。
+4. 更新 [tests/unit/cognition/InputBoundaryValidatorTest.cpp](../../tests/unit/cognition/InputBoundaryValidatorTest.cpp)、[tests/unit/memory/ContextOrchestratorTest.cpp](../../tests/unit/memory/ContextOrchestratorTest.cpp)、[tests/integration/cognition/CognitionRuntimeInteractionContractTest.cpp](../../tests/integration/cognition/CognitionRuntimeInteractionContractTest.cpp)，并补 [tests/unit/cognition/CognitionInterfaceSurfaceTest.cpp](../../tests/unit/cognition/CognitionInterfaceSurfaceTest.cpp)、[tests/unit/memory/MemoryInterfaceCompileTest.cpp](../../tests/unit/memory/MemoryInterfaceCompileTest.cpp)、[tests/contract/context/ContextPacketFieldContractTest.cpp](../../tests/contract/context/ContextPacketFieldContractTest.cpp) 的 supporting surface 锁定。
+5. 更新 deliverable 与三份详细设计回链文档，固定 `input_safety_signal` 的 owner boundary、字段路径与 fail-closed 语义。
+
+### 验证
+
+1. `Build_CMakeTools(buildTargets=["dasall_contract_context_packet_field_test","dasall_memory_interface_compile_unit_test","dasall_cognition_interface_surface_unit_test"])`
+   - 结果：通过。
+2. `RunCtest_CMakeTools(tests=["ContextPacketFieldContractTest","MemoryInterfaceCompileTest","CognitionInterfaceSurfaceTest"])`
+   - 结果：通过；`100% tests passed, 0 tests failed out of 3`。
+3. `Build_CMakeTools(buildTargets=["dasall_input_boundary_validator_unit_test","dasall_memory_context_orchestrator_unit_test","dasall_cognition_runtime_interaction_contract_integration_test"])`
+   - 结果：通过。
+4. `RunCtest_CMakeTools(tests=["InputBoundaryValidatorTest","ContextOrchestratorTest","CognitionRuntimeInteractionContractTest"])`
+   - 结果：通过；`100% tests passed, 0 tests failed out of 3`。
+
+### 结果
+
+1. runtime 当前轮 `user_input` 现在会稳定进入 `MemoryContextRequest.user_turn`，并被 `ContextOrchestrator` 投影为 `ContextPacket.input_safety_signal`，再由 runtime 传给 cognition `execution_hints`，没有突破既有 owner boundary。
+2. cognition 输入边界现在会在 `injection_detected=true` 时 fail-closed 到 `PolicyDenied`；runtime 不再把这类错误折叠成通用 non-executable failure，因此 tool handoff 会在真正的 deny 语义前停止。
+3. `WP-COG-GAP-016` 已闭合；后续如果需要更细的 PII taxonomy 或 provider-level safety signal，只需扩展 memory scanner 与 downstream policy 消费，不需要再改 runtime public seam。
+
 ## 记录 #871
 
 - 日期：2026-06-01

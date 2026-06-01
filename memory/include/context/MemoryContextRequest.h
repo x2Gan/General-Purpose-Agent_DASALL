@@ -12,6 +12,7 @@ struct MemoryContextRequest {
   std::string session_id;
   std::string trace_id;
   std::string stage;
+  std::string user_turn;
   std::string goal_summary;
   std::string constraints_summary;
   std::string latest_observation_digest_summary;

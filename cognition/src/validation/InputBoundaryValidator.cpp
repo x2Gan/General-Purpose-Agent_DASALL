@@ -133,6 +133,55 @@ void validate_observation(const contracts::Observation& observation,
   };
 }
 
+[[nodiscard]] contracts::ErrorInfo make_input_safety_policy_error(
+    const contracts::InputSafetySignal& signal,
+    const char* stage_name) {
+  std::string message =
+      "input safety signal denied cognition entry: execution_hints.input_safety_signal.injection_detected";
+  if (!signal.reason_codes.empty()) {
+    message.append(" (");
+    for (std::size_t index = 0; index < signal.reason_codes.size(); ++index) {
+      if (index > 0U) {
+        message.append(", ");
+      }
+      message.append(signal.reason_codes[index]);
+    }
+    message.push_back(')');
+  }
+
+  return contracts::ErrorInfo{
+      .failure_type = contracts::classify_result_code(
+          contracts::ResultCode::PolicyDenied),
+      .retryable = false,
+      .safe_to_replan = false,
+      .details = contracts::ErrorDetails{
+          .code = static_cast<int>(contracts::ResultCode::PolicyDenied),
+          .message = std::move(message),
+          .stage = stage_name,
+      },
+      .source_ref = contracts::ErrorSourceRefMinimal{
+          .ref_type = "cognition",
+          .ref_id = "execution_hints.input_safety_signal",
+      },
+  };
+}
+
+template <typename TRequest>
+[[nodiscard]] std::optional<contracts::ErrorInfo> detect_input_safety_policy_error(
+    const TRequest& request,
+    const char* stage_name) {
+  if (!request.execution_hints.input_safety_signal.has_value()) {
+    return std::nullopt;
+  }
+
+  if (!request.execution_hints.input_safety_signal->injection_detected) {
+    return std::nullopt;
+  }
+
+  return make_input_safety_policy_error(*request.execution_hints.input_safety_signal,
+                                        stage_name);
+}
+
 [[nodiscard]] InputBoundaryValidationResult finalize_validation(
     std::vector<std::string> missing_fields,
     const char* stage_name) {
@@ -158,6 +207,16 @@ InputBoundaryValidationResult InputBoundaryValidator::validate_decide_request(
     validate_observation(*request.latest_observation, missing_fields, "latest_observation");
   }
 
+  if (missing_fields.empty()) {
+    if (const auto policy_error =
+            detect_input_safety_policy_error(request, "cognition.decide.validation");
+        policy_error.has_value()) {
+      InputBoundaryValidationResult result;
+      result.error_info = std::move(policy_error);
+      return result;
+    }
+  }
+
   return finalize_validation(std::move(missing_fields), "cognition.decide.validation");
 }
 
@@ -170,6 +229,16 @@ InputBoundaryValidationResult InputBoundaryValidator::validate_reflection_reques
   validate_context_packet(request.context_packet, missing_fields);
   validate_belief_state(request.belief_state, missing_fields);
   validate_observation(request.latest_observation, missing_fields, "latest_observation");
+
+  if (missing_fields.empty()) {
+    if (const auto policy_error =
+            detect_input_safety_policy_error(request, "cognition.reflect.validation");
+        policy_error.has_value()) {
+      InputBoundaryValidationResult result;
+      result.error_info = std::move(policy_error);
+      return result;
+    }
+  }
 
   return finalize_validation(std::move(missing_fields), "cognition.reflect.validation");
 }

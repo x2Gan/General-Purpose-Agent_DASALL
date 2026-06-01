@@ -1545,7 +1545,7 @@ Access 的输入验证分为三层，各层职责不可替代：
    - HTTP header injection（CR/LF）：ProtocolAdapter 层拒绝。
    - Path traversal：Access 不做文件寻址，路径输入仅作为 domain_context 字符串。
    - SQL injection：Access 不直接操作数据库；若 infra/audit 需要持久化，由 infra 负责参数化存储。
-   - Prompt injection：Access 不做 prompt 组装；`user_input` 原样传递给 Runtime，prompt 安全由 cognition/llm 层负责。
+  - Prompt injection：Access 不做 prompt 组装；`user_input` 原样传递给 Runtime，语义级 prompt/PII 扫描信号由 downstream `MemoryContextRequest.user_turn -> ContextOrchestrator -> ContextPacket.input_safety_signal -> cognition.execution_hints` 链路承接。
 
 ### 6.17 错误码 taxonomy 与协议映射
 

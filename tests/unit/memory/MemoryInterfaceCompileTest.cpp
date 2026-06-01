@@ -114,6 +114,8 @@ void test_memory_context_supporting_types_compile_and_expose_expected_defaults()
   static_assert(std::is_same_v<decltype(MemoryContextRequest{}.visible_tools),
                                std::vector<std::string>>,
                 "MemoryContextRequest should expose visible_tools as string identifiers");
+     static_assert(std::is_same_v<decltype(MemoryContextRequest{}.user_turn), std::string>,
+                                        "MemoryContextRequest should expose the normalized entry user_turn");
   static_assert(std::is_same_v<decltype(ContextAssemblyResult{}.context_packet),
                                dasall::contracts::ContextPacket>,
                 "ContextAssemblyResult should carry the contracts ContextPacket payload");
@@ -123,6 +125,7 @@ void test_memory_context_supporting_types_compile_and_expose_expected_defaults()
   request.session_id = "session-001";
   request.trace_id = "trace-001";
   request.stage = "plan";
+     request.user_turn = "Summarize the last deployment incident";
   request.goal_summary = "Produce a stable prompt packet";
   request.constraints_summary = "Stay within token budget";
   request.latest_observation_digest_summary = "No prior observation";
@@ -137,6 +140,8 @@ void test_memory_context_supporting_types_compile_and_expose_expected_defaults()
                                     "memory context request should expose distributed trace correlation");
   assert_equal("plan", request.stage,
                "memory context request should expose the orchestration stage");
+     assert_equal("Summarize the last deployment incident", request.user_turn,
+                                    "memory context request should expose the normalized entry user turn");
   assert_equal(4096, MemoryContextRequest{}.token_budget_hint,
                "memory context request should default to the detailed-design token budget hint");
   assert_equal(0, MemoryContextRequest{}.latency_budget_ms,

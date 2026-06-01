@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cctype>
 #include <limits>
 #include <optional>
 #include <sstream>
@@ -61,6 +62,104 @@ std::string join_strings(const std::vector<std::string>& values,
     stream << values[index];
   }
   return stream.str();
+}
+
+std::string ascii_lower_copy(std::string_view text) {
+  std::string lowered;
+  lowered.reserve(text.size());
+  for (const char ch : text) {
+    lowered.push_back(static_cast<char>(
+        std::tolower(static_cast<unsigned char>(ch))));
+  }
+  return lowered;
+}
+
+bool contains_any_phrase(const std::string& lowered_text,
+                         std::initializer_list<std::string_view> phrases) {
+  return std::any_of(phrases.begin(), phrases.end(),
+                     [&lowered_text](const std::string_view phrase) {
+                       return lowered_text.find(phrase) != std::string::npos;
+                     });
+}
+
+bool has_email_like_pattern(std::string_view text) {
+  for (std::size_t index = 1; index + 2U < text.size(); ++index) {
+    if (text[index] != '@') {
+      continue;
+    }
+
+    const auto dot_index = text.find('.', index + 1U);
+    if (dot_index != std::string_view::npos &&
+        dot_index > index + 1U && dot_index + 1U < text.size()) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+bool has_long_digit_run(std::string_view text) {
+  int digit_run = 0;
+  bool saw_digit = false;
+  for (const char ch : text) {
+    if (std::isdigit(static_cast<unsigned char>(ch)) != 0) {
+      ++digit_run;
+      saw_digit = true;
+      if (digit_run >= 11) {
+        return true;
+      }
+      continue;
+    }
+
+    if (saw_digit && (ch == ' ' || ch == '-' || ch == '(' || ch == ')' || ch == '+')) {
+      continue;
+    }
+
+    digit_run = 0;
+    saw_digit = false;
+  }
+
+  return false;
+}
+
+std::optional<contracts::InputSafetySignal> make_input_safety_signal(
+    std::string_view user_turn) {
+  if (user_turn.empty()) {
+    return std::nullopt;
+  }
+
+  contracts::InputSafetySignal signal;
+  const auto lowered_text = ascii_lower_copy(user_turn);
+
+  if (contains_any_phrase(
+          lowered_text,
+          {"ignore previous instructions",
+           "ignore all previous instructions",
+           "reveal the system prompt",
+           "reveal your hidden prompt",
+           "developer message",
+           "prompt injection",
+           "jailbreak",
+           "忽略之前的指令",
+           "请忽略之前的指令",
+           "泄露系统提示词",
+           "开发者消息",
+           "越狱提示词"})) {
+    signal.injection_detected = true;
+    append_unique(signal.reason_codes, "prompt_injection_phrase_detected");
+  }
+
+  if (has_email_like_pattern(user_turn)) {
+    signal.pii_detected = true;
+    append_unique(signal.reason_codes, "pii_email_detected");
+  }
+
+  if (has_long_digit_run(user_turn)) {
+    signal.pii_detected = true;
+    append_unique(signal.reason_codes, "pii_long_number_detected");
+  }
+
+  return signal;
 }
 
 std::vector<contracts::Turn> make_chronological_turns(
@@ -183,6 +282,10 @@ std::optional<std::string> latest_user_turn(
 
 std::string fallback_user_turn(const CandidateSet& candidates,
                                const MemoryContextRequest& request) {
+  if (!request.user_turn.empty()) {
+    return request.user_turn;
+  }
+
   const auto candidate = latest_user_turn(candidates);
   if (candidate.has_value() && !candidate->empty()) {
     return *candidate;
@@ -362,8 +465,10 @@ std::vector<contracts::Turn> trim_recent_turns_after_compression(
 contracts::ContextPacket make_minimal_packet(const MemoryContextRequest& request) {
   contracts::ContextPacket packet;
   packet.request_id = request.request_id.empty() ? "context-request" : request.request_id;
-  packet.user_turn = !request.goal_summary.empty() ? request.goal_summary
-                                                   : std::string{"context unavailable"};
+  packet.user_turn = !request.user_turn.empty()
+                         ? request.user_turn
+                         : (!request.goal_summary.empty() ? request.goal_summary
+                                                          : std::string{"context unavailable"});
   packet.current_goal_summary = !request.goal_summary.empty()
                                     ? request.goal_summary
                                     : std::string{"goal unavailable"};
@@ -383,6 +488,8 @@ contracts::ContextPacket make_minimal_packet(const MemoryContextRequest& request
   if (!request.constraints_summary.empty()) {
     packet.policy_digest = request.constraints_summary;
   }
+  packet.input_safety_signal =
+      make_input_safety_signal(packet.user_turn.value_or(std::string{}));
   packet.token_budget_report = build_minimal_budget_report(request);
   packet.created_at = current_time_ms();
   packet.tags = std::vector<std::string>{"memory", "context"};
@@ -691,7 +798,7 @@ ContextAssemblyResult ContextOrchestrator::assemble(
     append_unique(result.warnings, dropped_section + "_trimmed");
   }
 
-  if (latest_user_turn(candidates) == std::nullopt) {
+  if (latest_user_turn(candidates) == std::nullopt && request.user_turn.empty()) {
     append_unique(result.warnings, "user_turn_fallback_goal_summary");
   }
   if (request.goal_summary.empty() &&
@@ -740,6 +847,8 @@ contracts::ContextPacket ContextOrchestrator::build_packet(
   packet.request_id = request.request_id.empty() ? "context-request" : request.request_id;
   packet.user_turn = fallback_user_turn(candidates, request);
   packet.current_goal_summary = fallback_goal_summary(candidates, request);
+  packet.input_safety_signal =
+      make_input_safety_signal(packet.user_turn.value_or(std::string{}));
   packet.recent_history = trim_vector_to_token_limit(
       projection.recent_history,
       effective_slot_limit(plan, "recent_history"),

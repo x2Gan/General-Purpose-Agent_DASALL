@@ -5,6 +5,7 @@
 #include <string>
 #include <vector>
 
+#include "context/InputSafetySignal.h"
 #include "context/RetrievalEvidenceRef.h"
 
 namespace dasall::contracts {
@@ -41,6 +42,9 @@ namespace dasall::contracts {
 //
 // INT-TODO-008 adds RetrievalEvidenceRef[] as a supporting contract for slot 5
 // without changing the original 10-slot semantic taxonomy.
+// COG-GAP-016 adds InputSafetySignal as an additive entry-safety signal for
+// slot 1/slot 8 consumers without promoting protocol-private access metadata
+// into ContextPacket.
 //
 // What ContextPacket is NOT (WP03-T010 frozen, ADR-006 §6.1/§8):
 //   - NOT a prompt message: final_messages, rendered_prompt, provider_payload
@@ -151,6 +155,12 @@ struct ContextPacket {
   // constraints are active.
   // Architecture 3.8.5 item 8, ADR-006 §6.1 item 8.
   std::optional<std::string> policy_digest;
+
+  // Additive + optional entry-safety scan signal derived from user_turn.
+  // Carries only normalized prompt-injection / PII detection facts and
+  // low-cardinality reason codes; does not expose protocol headers or
+  // provider-private safety payloads.
+  std::optional<InputSafetySignal> input_safety_signal;
 
   // Token budget allocation report. Records how ContextOrchestrator
   // distributed the available token budget across semantic slots,

@@ -913,6 +913,7 @@ void append_retrieval_evidence_ref(
   context_request.session_id = request.session_id.value_or(std::string{"session-live-unary"});
   context_request.trace_id = request.trace_id.value_or(std::string{});
   context_request.stage = "reasoning";
+  context_request.user_turn = request.user_input.value_or(std::string{});
   context_request.goal_summary = request.user_input.value_or(goal_id);
   context_request.constraints_summary = composition.default_audit_summary;
   context_request.latest_observation_digest_summary = std::string{};
@@ -1463,6 +1464,8 @@ void append_retrieval_evidence_ref(
       .context_was_truncated = false,
       .near_budget_limit = false,
   };
+  cognition_request.execution_hints.input_safety_signal =
+      context_packet.input_safety_signal;
   return cognition_request;
 }
 
@@ -1552,6 +1555,8 @@ void append_retrieval_evidence_ref(
       .tags = std::vector<std::string>{"runtime", "reflection", "true-integration"},
   };
   reflection_request.latest_observation = latest_observation;
+  reflection_request.execution_hints.input_safety_signal =
+      context_packet.input_safety_signal;
   return reflection_request;
 }
 
@@ -3341,17 +3346,24 @@ OrchestratorRunResult AgentOrchestrator::run_once(const contracts::AgentRequest&
                  main_loop_before,
                  fsm->current_state(),
                  true,
-                 "cognition did not choose an executable action on the live unary path");
+             cognition_result.error_info.has_value() &&
+                 !cognition_result.error_info->details.message.empty()
+               ? cognition_result.error_info->details.message
+               : "cognition did not choose an executable action on the live unary path");
+        const auto non_executable_error = cognition_result.error_info.value_or(
+          make_runtime_error(kRuntimeOrchestratorLiveUnaryFailedCode,
+                   "cognition returned a non-executable decision",
+                   orchestrator_stage_name(OrchestratorStage::MainLoop),
+                   RuntimeState::Failed));
       run_result.agent_result = make_result(
           normalized_request,
           RuntimeState::Failed,
           contracts::AgentResultStatus::Failed,
           kRuntimeOrchestratorLiveUnaryFailedCode,
-          "runtime live unary path requires cognition to select an executable action",
-          make_runtime_error(kRuntimeOrchestratorLiveUnaryFailedCode,
-                             "cognition returned a non-executable decision",
-                             orchestrator_stage_name(OrchestratorStage::MainLoop),
-                             RuntimeState::Failed),
+          non_executable_error.details.message.empty()
+            ? std::string{"runtime live unary path requires cognition to select an executable action"}
+            : non_executable_error.details.message,
+          non_executable_error,
           std::nullopt,
           goal_id);
       run_result.final_state = RuntimeState::Failed;

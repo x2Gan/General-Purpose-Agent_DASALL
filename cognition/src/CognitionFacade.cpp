@@ -1018,19 +1018,31 @@ void apply_perception_clarification_result(
 void apply_invalid_decide_result(
     CognitionDecisionResult& result,
     const InputBoundaryValidationResult& validation_result) {
-  result.result_code = contracts::ResultCode::ValidationFieldMissing;
+  const auto result_code =
+      validation_result.error_info.has_value() &&
+              validation_result.error_info->details.code.has_value()
+          ? static_cast<contracts::ResultCode>(
+                validation_result.error_info->details.code.value())
+          : contracts::ResultCode::ValidationFieldMissing;
+  result.result_code = result_code;
   result.error_info = validation_result.error_info;
   result.context_sufficiency.context_sufficient = false;
   result.context_sufficiency.context_confidence = 0.0F;
   result.context_sufficiency.missing_evidence_hints = validation_result.missing_fields;
-  result.context_sufficiency.recommend_context_reload = true;
+  result.context_sufficiency.recommend_context_reload =
+      result_code == contracts::ResultCode::ValidationFieldMissing;
   result.diagnostics.push_back("invalid_input");
 }
 
 void apply_invalid_reflection_result(
     CognitionReflectionResult& result,
     const InputBoundaryValidationResult& validation_result) {
-  result.result_code = contracts::ResultCode::ValidationFieldMissing;
+  result.result_code =
+      validation_result.error_info.has_value() &&
+              validation_result.error_info->details.code.has_value()
+          ? static_cast<contracts::ResultCode>(
+                validation_result.error_info->details.code.value())
+          : contracts::ResultCode::ValidationFieldMissing;
   result.error_info = validation_result.error_info;
   result.diagnostics.push_back("invalid_input");
 }
@@ -1809,8 +1821,7 @@ class CognitionFacade final : public ICognitionEngine {
     if (!validation_result.ok()) {
       CognitionDecisionResult result;
       apply_invalid_decide_result(result, validation_result);
-      telemetry_context.result_code =
-          static_cast<int>(contracts::ResultCode::ValidationFieldMissing);
+      telemetry_context.result_code = static_cast<int>(*result.result_code);
       telemetry_context.latency_ms = elapsed_ms_since(started_at);
       ignore_emit_result(telemetry_.emit_stage_failed(telemetry_context, *result.error_info));
       return result;
@@ -1866,8 +1877,7 @@ class CognitionFacade final : public ICognitionEngine {
     if (!validation_result.ok()) {
       CognitionReflectionResult result;
       apply_invalid_reflection_result(result, validation_result);
-      telemetry_context.result_code =
-          static_cast<int>(contracts::ResultCode::ValidationFieldMissing);
+      telemetry_context.result_code = static_cast<int>(*result.result_code);
       telemetry_context.latency_ms = elapsed_ms_since(started_at);
       ignore_emit_result(telemetry_.emit_stage_failed(telemetry_context, *result.error_info));
       return result;
