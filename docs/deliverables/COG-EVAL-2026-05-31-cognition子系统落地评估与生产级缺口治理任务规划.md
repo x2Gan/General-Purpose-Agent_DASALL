@@ -385,6 +385,26 @@
   - `ctest --test-dir build-ci -R "ReasonerCandidateWeight" --output-on-failure`
 - **阻塞 / 解阻**：无。
 
+**Closeout（2026-06-01）**
+
+- 状态：已完成（reasoner candidate weight 配置面、profile 投影、focused regression 与文档回链已闭合）。
+- 设计回链：
+  - [docs/architecture/DASALL_cognition子系统详细设计.md](../architecture/DASALL_cognition子系统详细设计.md) §6.10 已补 `cognition.reasoner.candidate_weights.{tool_call,direct_response,clarification,converge_safe}` 的中性默认值与 profile 倾向说明。
+  - 同文档 §6.13.2 已补 reasoner 在阈值裁定前必须先经过 `reasoner.candidate_weights` 做 profile bias 校准，并把 `ReasonerCandidateWeightProjectionTest` 纳入建议验收出口。
+- 代码结果：
+  - 更新 [cognition/include/CognitionConfig.h](../../cognition/include/CognitionConfig.h)，在 `CognitionReasonerPolicy` 下新增 `candidate_weights`，把 tool_call / direct_response / clarification / converge_safe 四类候选权重显式外置，默认保持 `1.00` 中性值。
+  - 更新 [cognition/src/config/CognitionConfigProjector.cpp](../../cognition/src/config/CognitionConfigProjector.cpp)，为 desktop_full / cloud_full / edge_balanced / edge_minimal / factory_test 五档 profile 投影不同的 reasoner candidate weight 表。
+  - 更新 [cognition/src/reasoning/Reasoner.cpp](../../cognition/src/reasoning/Reasoner.cpp)，让 `score_candidates()` 在现有 heuristic 分数之上统一乘以配置权重，再进入既有 threshold / fallback 决策路径。
+  - 新增 [tests/unit/cognition/ReasonerCandidateWeightProjectionTest.cpp](../../tests/unit/cognition/ReasonerCandidateWeightProjectionTest.cpp)，并更新 [tests/unit/cognition/CMakeLists.txt](../../tests/unit/cognition/CMakeLists.txt) 与 [tests/unit/cognition/CognitionInterfaceSurfaceTest.cpp](../../tests/unit/cognition/CognitionInterfaceSurfaceTest.cpp)，固定 profile 差异投影与 `CognitionConfig{}` 中性默认值。
+- 验证结果：
+  - `Build_CMakeTools(buildTargets=["dasall_reasoner_action_decision_unit_test","dasall_reasoner_clarification_threshold_unit_test","dasall_reasoner_conflict_resolution_unit_test"])`：通过。
+  - `RunCtest_CMakeTools(tests=["ReasonerActionDecisionTest","ReasonerClarificationThresholdTest","ReasonerConflictResolutionTest"])`：通过；`100% tests passed, 0 tests failed out of 3`。
+  - `Build_CMakeTools(buildTargets=["dasall_reasoner_candidate_weight_projection_unit_test","dasall_cognition_interface_surface_unit_test"])`：通过。
+  - `RunCtest_CMakeTools(tests=["ReasonerCandidateWeightProjectionTest","CognitionInterfaceSurfaceTest"])`：通过；`100% tests passed, 0 tests failed out of 2`。
+- 结果：
+  - reasoner 现在不再把候选偏置硬编码死在实现里；同一条边界输入会在不同 profile 投影下从 `ExecuteAction` 与 `DirectResponse` 之间稳定分流。
+  - `CognitionConfig{}` 仍保持中性默认值，profile 投影才负责把设备/成本倾向注入 reasoner，为后续离线校准保留单一 seam。
+
 #### WP-COG-GAP-010 Response template 文案外置（GAP-P1-E）
 
 - **代码目标**

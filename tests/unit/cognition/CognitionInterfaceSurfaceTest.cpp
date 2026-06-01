@@ -272,6 +272,14 @@ void test_cognition_config_defaults_match_profile_projection_table() {
               "response template fallback should be enabled by default");
   assert_true(!config.reasoner.allow_delegate_hint,
               "delegate hints should stay disabled by default");
+  assert_true(config.reasoner.candidate_weights.tool_call == 1.00F,
+              "default tool-call weight should remain neutral before profile projection");
+  assert_true(config.reasoner.candidate_weights.direct_response == 1.00F,
+              "default direct-response weight should remain neutral before profile projection");
+  assert_true(config.reasoner.candidate_weights.clarification == 1.00F,
+              "default clarification weight should remain neutral before profile projection");
+  assert_true(config.reasoner.candidate_weights.converge_safe == 1.00F,
+              "default converge-safe weight should remain neutral before profile projection");
   assert_true(config.observability.emit_stage_spans,
               "stage span emission should be enabled by default");
   assert_true(config.observability.redact_context_payload,

@@ -18,8 +18,16 @@ struct CognitionResponsePolicy {
   bool template_fallback_enabled = true;
 };
 
+struct CognitionReasonerCandidateWeights {
+  float tool_call = 1.0F;
+  float direct_response = 1.0F;
+  float clarification = 1.0F;
+  float converge_safe = 1.0F;
+};
+
 struct CognitionReasonerPolicy {
   bool allow_delegate_hint = false;
+  CognitionReasonerCandidateWeights candidate_weights;
 };
 
 struct CognitionObservabilityPolicy {

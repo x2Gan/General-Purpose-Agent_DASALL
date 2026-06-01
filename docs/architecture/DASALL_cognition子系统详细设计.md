@@ -681,6 +681,7 @@ sequenceDiagram
 | cognition.perception.rule_fallback_enabled | true | llm 不可用时允许规则感知降级 | 工程可实现性要求 |
 | cognition.response.template_fallback_enabled | true | response stage 支持模板降级 | 质量门要求 |
 | cognition.reasoner.allow_delegate_hint | false | 首版默认不把多 Agent delegate 作为主路径 | ADR-008 风险收敛 |
+| cognition.reasoner.candidate_weights.{tool_call,direct_response,clarification,converge_safe} | 1.00 | 对四类候选路径施加 profile bias；中性默认值不改变本地 heuristic 基线 | GAP-P1-D；后续离线校准 seam |
 | cognition.observability.emit_stage_spans | true | 每阶段 trace span 开关 | infra 观测一致性 |
 | cognition.observability.redact_context_payload | true | 禁止日志输出 raw context/prompt/provider private 字段 | ADR-006、llm 详细设计 |
 
@@ -688,11 +689,11 @@ sequenceDiagram
 
 | Profile | 认知策略 | 说明 |
 |---|---|---|
-| desktop_full | 五段全开；planner/reflection 允许高 reasoning；response 优先 llm | 面向完整开发与验证环境 |
-| cloud_full | 五段全开；planning/response 都允许高质量 route | 云模型主路径 |
-| edge_balanced | 五段逻辑保留；感知与 response 允许紧凑模式；plan 节点数收紧 | 资源受限但仍保留语义完整性 |
-| edge_minimal | 五段逻辑保留；Perception、Planner、Reasoner 可共享轻量模型档位；response 默认开启模板降级 | 不能关 cognition，只能降级实现 |
-| factory_test | 五段逻辑保留；观测增强；response 可模板优先 | 强调诊断与联调 |
+| desktop_full | 五段全开；planner/reflection 允许高 reasoning；response 优先 llm；reasoner 轻微上调 tool_call、轻微下调 direct_response | 面向完整开发与验证环境 |
+| cloud_full | 五段全开；planning/response 都允许高质量 route；reasoner 默认与 desktop_full 同步偏向 tool_call | 云模型主路径 |
+| edge_balanced | 五段逻辑保留；感知与 response 允许紧凑模式；plan 节点数收紧；reasoner 轻微偏向 direct_response / clarification / safe converge | 资源受限但仍保留语义完整性 |
+| edge_minimal | 五段逻辑保留；Perception、Planner、Reasoner 可共享轻量模型档位；response 默认开启模板降级；reasoner 显式下调 tool_call、上调 direct_response / converge_safe | 不能关 cognition，只能降级实现 |
+| factory_test | 五段逻辑保留；观测增强；response 可模板优先；reasoner 偏向 clarification / safe converge 以利诊断 | 强调诊断与联调 |
 
 ### 6.11 可观测性设计
 
@@ -834,9 +835,9 @@ sequenceDiagram
 2. 非职责边界：不生成 ToolRequest；不直接调用 tools；不自行修改 PlanGraph 结构；不直接执行 replan；不提交最终 AgentResult。
 3. 核心数据定义：围绕 ReasoningRequest、ReasoningFrame、CandidateDecisionScore、ActionDecision、DecisionConfidenceBand 建模；ActionDecision 至少显式表达 decision_kind、selected_node_id、rationale、confidence、clarification_needed、clarification_question、tool_intent_hint、delegate_hint、response_outline。
 4. 公共/内部接口：公共面保持 IReasoner::decide()；内部建议具备 score_candidates()、evaluate_clarification_need()、build_direct_response_decision()、build_delegate_hint()、project_response_outline()、validate_decision_thresholds()。
-5. 关键执行流：先读取当前活动节点与 plan open questions；若 PerceptionResult 或 PlanGraph 显示信息不足，则优先走 AskClarification；否则结合 latest Observation、BeliefState 和 GoalContract 成功判据，对“执行当前节点”“直接回复”“提示委派”“终止收敛”等候选路径评分，按 clarification_threshold、direct_response_threshold、delegate gate 做裁定，并输出包含 rationale 和 response_outline 的 ActionDecision。
+5. 关键执行流：先读取当前活动节点与 plan open questions；若 PerceptionResult 或 PlanGraph 显示信息不足，则优先走 AskClarification；否则结合 latest Observation、BeliefState 和 GoalContract 成功判据，对“执行当前节点”“直接回复”“提示委派”“终止收敛”等候选路径评分；原始 heuristic 分数在阈值裁定前必须经过 `reasoner.candidate_weights` 的 profile bias 校准，再按 clarification_threshold、direct_response_threshold、delegate gate 做裁定，并输出包含 rationale 和 response_outline 的 ActionDecision。
 6. 失败与降级语义：候选分数冲突或 Observation 与计划前提严重矛盾时，优先返回 AskClarification 或 cognition.reasoning_conflict；llm 不可用时允许退化到规则式阈值决策，但只能输出保守动作，例如 clarification 或 direct_response，不得伪造复杂工具意图。
-7. 测试与验收出口：建议单测为 tests/unit/cognition/ReasonerActionDecisionTest.cpp、tests/unit/cognition/ReasonerClarificationThresholdTest.cpp、tests/unit/cognition/ReasonerConflictResolutionTest.cpp；建议验收命令为 ctest --test-dir build-ci -R "Reasoner(ActionDecision|ClarificationThreshold|ConflictResolution)Test" --output-on-failure。
+7. 测试与验收出口：建议单测为 tests/unit/cognition/ReasonerActionDecisionTest.cpp、tests/unit/cognition/ReasonerClarificationThresholdTest.cpp、tests/unit/cognition/ReasonerConflictResolutionTest.cpp、tests/unit/cognition/ReasonerCandidateWeightProjectionTest.cpp；建议验收命令为 ctest --test-dir build-ci -R "Reasoner(ActionDecision|ClarificationThreshold|ConflictResolution|CandidateWeightProjection)Test" --output-on-failure。
 
 决策主链关键数据流如下：
 

@@ -42,6 +42,40 @@ constexpr std::array<std::string_view, 4> kCanonicalStageNames = {
          !snapshot.degrade_policy().fallback_chain.empty();
 }
 
+void apply_reasoner_candidate_weights(std::string_view profile_id,
+                                      CognitionConfig& config) {
+  if (profile_id == "desktop_full" || profile_id == "cloud_full") {
+    config.reasoner.candidate_weights.tool_call = 1.05F;
+    config.reasoner.candidate_weights.direct_response = 0.95F;
+    config.reasoner.candidate_weights.clarification = 1.00F;
+    config.reasoner.candidate_weights.converge_safe = 0.95F;
+    return;
+  }
+
+  if (profile_id == "edge_balanced") {
+    config.reasoner.candidate_weights.tool_call = 0.95F;
+    config.reasoner.candidate_weights.direct_response = 1.05F;
+    config.reasoner.candidate_weights.clarification = 1.05F;
+    config.reasoner.candidate_weights.converge_safe = 1.05F;
+    return;
+  }
+
+  if (profile_id == "edge_minimal") {
+    config.reasoner.candidate_weights.tool_call = 0.90F;
+    config.reasoner.candidate_weights.direct_response = 1.10F;
+    config.reasoner.candidate_weights.clarification = 1.05F;
+    config.reasoner.candidate_weights.converge_safe = 1.10F;
+    return;
+  }
+
+  if (profile_id == "factory_test") {
+    config.reasoner.candidate_weights.tool_call = 0.95F;
+    config.reasoner.candidate_weights.direct_response = 1.00F;
+    config.reasoner.candidate_weights.clarification = 1.10F;
+    config.reasoner.candidate_weights.converge_safe = 1.10F;
+  }
+}
+
 [[nodiscard]] CognitionConfig merge_profile_defaults(
     std::string_view profile_id,
     const profiles::RuntimePolicySnapshot& snapshot) {
@@ -64,6 +98,8 @@ constexpr std::array<std::string_view, 4> kCanonicalStageNames = {
     config.max_plan_nodes = 6U;
     config.max_plan_depth = 4U;
   }
+
+  apply_reasoner_candidate_weights(profile_id, config);
 
   return config;
 }

@@ -1,3 +1,41 @@
+## 记录 #862
+
+- 日期：2026-06-01
+- 阶段：cognition / reasoner candidate weight closure
+- 任务：完成 WP-COG-GAP-009 Reasoner 权重外置
+- 状态：已完成（candidate weight 配置面、profile 投影、focused regression 与文档回链已闭合）
+
+### 执行前提
+
+1. [docs/deliverables/COG-EVAL-2026-05-31-cognition子系统落地评估与生产级缺口治理任务规划.md](../deliverables/COG-EVAL-2026-05-31-cognition子系统落地评估与生产级缺口治理任务规划.md) 将 `WP-COG-GAP-009` 定义为 P1 稳定性缺口：需要把 reasoner 的候选偏置从实现中的硬编码评分迁到 `CognitionConfig.reasoner.candidate_weights`，并让 profile 投影提供默认值表。
+2. [docs/architecture/DASALL_cognition子系统详细设计.md](../architecture/DASALL_cognition子系统详细设计.md) 的 owner 边界要求 cognition 只能在本模块内调节启发式决策，不得借此把 runtime/tool 执行权重新拉回 cognition；因此本轮只外置候选分值 bias，不扩张 ActionDecision / ToolRequest 边界。
+3. DSPy 概览强调 LLM 程序应当保持 modular、maintainable、optimizable，并通过 modules / optimizers 在固定任务接口上调参而不是把行为偏置写死在实现里；本轮据此把 reasoner candidate bias 收敛到配置与 profile 投影 seam，给后续离线校准预留稳定入口。
+
+### 改动
+
+1. 更新 [cognition/include/CognitionConfig.h](../cognition/include/CognitionConfig.h)，在 `CognitionReasonerPolicy` 下新增 `candidate_weights`，显式承载 `tool_call`、`direct_response`、`clarification`、`converge_safe` 四类候选权重；`CognitionConfig{}` 默认保持 `1.00` 中性值。
+2. 更新 [cognition/src/config/CognitionConfigProjector.cpp](../cognition/src/config/CognitionConfigProjector.cpp)，为 desktop_full / cloud_full / edge_balanced / edge_minimal / factory_test 五档 profile 投影不同的 reasoner candidate weight 表，让设备/成本倾向通过 projector 注入，而不是散落在调用侧。
+3. 更新 [cognition/src/reasoning/Reasoner.cpp](../cognition/src/reasoning/Reasoner.cpp)，让 `score_candidates()` 在现有 heuristic 分数之上统一乘以配置权重，再进入既有 threshold / fallback 裁定，保持 explainability 与阈值路径不变。
+4. 新增 [tests/unit/cognition/ReasonerCandidateWeightProjectionTest.cpp](../tests/unit/cognition/ReasonerCandidateWeightProjectionTest.cpp)，并更新 [tests/unit/cognition/CMakeLists.txt](../tests/unit/cognition/CMakeLists.txt) 与 [tests/unit/cognition/CognitionInterfaceSurfaceTest.cpp](../tests/unit/cognition/CognitionInterfaceSurfaceTest.cpp)，固定 profile 差异投影、同输入异决策，以及 `CognitionConfig{}` 中性默认值。
+5. 更新 [docs/architecture/DASALL_cognition子系统详细设计.md](../docs/architecture/DASALL_cognition子系统详细设计.md) 与 [docs/deliverables/COG-EVAL-2026-05-31-cognition子系统落地评估与生产级缺口治理任务规划.md](../deliverables/COG-EVAL-2026-05-31-cognition子系统落地评估与生产级缺口治理任务规划.md)，回写配置键、profile 倾向、验收出口与 closeout 证据。
+
+### 验证
+
+1. `Build_CMakeTools(buildTargets=["dasall_reasoner_action_decision_unit_test","dasall_reasoner_clarification_threshold_unit_test","dasall_reasoner_conflict_resolution_unit_test"])`
+   - 结果：通过。
+2. `RunCtest_CMakeTools(tests=["ReasonerActionDecisionTest","ReasonerClarificationThresholdTest","ReasonerConflictResolutionTest"])`
+   - 结果：通过；`100% tests passed, 0 tests failed out of 3`。
+3. `Build_CMakeTools(buildTargets=["dasall_reasoner_candidate_weight_projection_unit_test","dasall_cognition_interface_surface_unit_test"])`
+   - 结果：通过。
+4. `RunCtest_CMakeTools(tests=["ReasonerCandidateWeightProjectionTest","CognitionInterfaceSurfaceTest"])`
+   - 结果：通过；`100% tests passed, 0 tests failed out of 2`。
+
+### 结果
+
+1. reasoner 现在具备单一的 candidate weight 配置 seam；同一条边界请求会在不同 profile 的投影权重下稳定分流到 `ExecuteAction` 或 `DirectResponse`。
+2. `CognitionConfig{}` 仍然保持中性默认值，避免 profile 倾向倒灌到公共默认构造；只有 projector 才负责按设备/成本约束注入 bias。
+3. `WP-COG-GAP-009` 的代码、focused regression、详细设计回链与交付 closeout 已闭合；后续 `WP-COG-GAP-011` 可以直接复用这条 reasoner 配置 seam 做 budget-pressure 显式分支。
+
 ## 记录 #861
 
 - 日期：2026-06-01

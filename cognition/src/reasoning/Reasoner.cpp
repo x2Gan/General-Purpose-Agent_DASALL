@@ -17,6 +17,10 @@ constexpr std::string_view kConvergeSafeCandidate = "converge_safe";
   return std::clamp(value, 0.0F, 0.95F);
 }
 
+[[nodiscard]] float apply_candidate_weight(float score, float weight) {
+  return clamp_score(score * std::max(weight, 0.0F));
+}
+
 [[nodiscard]] bool text_has_conflict_signal(std::string_view payload) {
   return payload.find("contradict") != std::string_view::npos ||
          payload.find("incomplete") != std::string_view::npos ||
@@ -109,7 +113,8 @@ std::vector<decision::CandidateDecisionScore> Reasoner::score_candidates(
   if (near_budget_limit) {
     execute_score -= 0.15F;
   }
-  execute_score = clamp_score(execute_score);
+  execute_score = apply_candidate_weight(execute_score,
+                                         config_.reasoner.candidate_weights.tool_call);
 
   float direct_response_score = 0.10F;
   if (prefer_direct) {
@@ -131,7 +136,8 @@ std::vector<decision::CandidateDecisionScore> Reasoner::score_candidates(
   if (conflicting_observation) {
     direct_response_score -= 0.15F;
   }
-  direct_response_score = clamp_score(direct_response_score);
+  direct_response_score = apply_candidate_weight(
+      direct_response_score, config_.reasoner.candidate_weights.direct_response);
 
   float clarification_score = 0.12F;
   if (clarification_needed) {
@@ -144,7 +150,8 @@ std::vector<decision::CandidateDecisionScore> Reasoner::score_candidates(
       request.budget_context->context_was_truncated) {
     clarification_score += 0.05F;
   }
-  clarification_score = clamp_score(clarification_score);
+  clarification_score = apply_candidate_weight(
+      clarification_score, config_.reasoner.candidate_weights.clarification);
 
   float converge_safe_score = 0.10F;
   if (near_budget_limit) {
@@ -157,7 +164,8 @@ std::vector<decision::CandidateDecisionScore> Reasoner::score_candidates(
       !request.latest_observation->success.value_or(true)) {
     converge_safe_score += 0.10F;
   }
-  converge_safe_score = clamp_score(converge_safe_score);
+  converge_safe_score = apply_candidate_weight(
+      converge_safe_score, config_.reasoner.candidate_weights.converge_safe);
 
   return {
       decision::CandidateDecisionScore{.candidate_name = std::string(kExecuteCandidate),
