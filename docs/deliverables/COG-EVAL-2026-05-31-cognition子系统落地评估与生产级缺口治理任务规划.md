@@ -591,7 +591,7 @@
   - `ReasonerToolCandidateFilteringTest`：断言大工具空间下输出收敛到 K。
 - **验收命令**
   - `ctest --test-dir build-ci -R "ReasonerToolCandidateFilteringTest" --output-on-failure`
-- **阻塞 / 解阻**：依赖 ToolDescriptor 接入路径（Runtime 提供）。
+- **阻塞 / 解阻**：已于 2026-06-01 解阻，见下方 BLOCK Closeout。
 
 **BLOCK Closeout（2026-06-01）**
 
@@ -610,6 +610,22 @@
 - 结果：
   - runtime 现在不再只向 cognition 暴露 `visible_tools` 名字列表，而是同步提供与本轮可见工具面一致的 `ToolDescriptor` 集合。
   - `WP-COG-GAP-015` 后续可以直接在现有 Reasoner / DecisionProjector seam 上实现 top-K 候选预筛，而不需要先补新的 runtime/tool catalog 基础设施。
+
+**Closeout（2026-06-01）**
+
+- 状态：已完成（rule-based tool candidate prefilter、focused regression 与 deliverable/worklog 追溯已闭合）。
+- 设计回链：
+  - [docs/architecture/DASALL_cognition子系统详细设计.md](../architecture/DASALL_cognition子系统详细设计.md) 已补 execute-action 路径的 deterministic rule prefilter 语义：基于 `tool_name`、`display_name`、`tags`、perception tool entity 与 goal/objective 关键词做 top-K 收敛，只把首候选映射到 `tool_intent_hint.tool_name`，候选规模仅通过低基数 diagnostics 暴露。
+- 代码结果：
+  - 更新 [cognition/src/reasoning/DecisionProjector.h](../../cognition/src/reasoning/DecisionProjector.h) 与 [cognition/src/reasoning/DecisionProjector.cpp](../../cognition/src/reasoning/DecisionProjector.cpp)，在 execute-action 分支新增 deterministic descriptor ranking / top-K 截断，并把 `tool_candidate_prefilter:applied`、`tool_candidate_prefilter_count:<K>` 等低基数 diagnostics 回写到 `ActionDecision`。
+  - 新增 [tests/unit/cognition/ReasonerToolCandidateFilteringTest.cpp](../../tests/unit/cognition/ReasonerToolCandidateFilteringTest.cpp)，覆盖“大工具空间收敛到 K=3”与“descriptor 缺席时回退旧路径”两个切面；更新 [tests/unit/cognition/CMakeLists.txt](../../tests/unit/cognition/CMakeLists.txt) 注册新单测目标。
+- 验证结果：
+  - `Build_CMakeTools(buildTargets=["dasall_reasoner_tool_candidate_filtering_unit_test"])`：通过。
+  - `RunCtest_CMakeTools(tests=["ReasonerToolCandidateFilteringTest"])`：通过；`100% tests passed, 0 tests failed out of 1`。
+  - `RunCtest_CMakeTools(tests=["ReasonerToolCandidateFilteringTest","ReasonerActionDecisionTest"])`：通过；`100% tests passed, 0 tests failed out of 2`。
+- 结果：
+  - 当 runtime 提供较大的可见工具 descriptor 集时，Reasoner 现在会先把工具面裁到 top-K，再选择 `tool_intent_hint.tool_name`，避免 execute-action 分支直接在全量 catalog 上做单点指向。
+  - 当 `available_tool_descriptors` 缺席时，Reasoner 仍退回既有 tool selection 路径，不会破坏现有 runtime routing 兼容性。
 
 ### 7.4 P3 任务（运营/演进/安全）
 

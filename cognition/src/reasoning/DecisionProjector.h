@@ -1,5 +1,6 @@
 #pragma once
 
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -36,12 +37,17 @@ class DecisionProjector {
       std::vector<decision::CandidateDecisionScore> candidate_scores) const;
 
  private:
+    struct ToolIntentProjection {
+        std::optional<decision::ToolIntentHint> hint;
+        std::vector<std::string> diagnostics;
+    };
+
   [[nodiscard]] decision::ResponseOutline project_response_outline(
       const ReasoningRequest& request,
       std::string_view mode,
       std::string_view focus) const;
 
-  [[nodiscard]] std::optional<decision::ToolIntentHint> build_tool_intent_hint(
+    [[nodiscard]] ToolIntentProjection build_tool_intent_hint(
       const ReasoningRequest& request,
       const plan::PlanNode& active_node) const;
 

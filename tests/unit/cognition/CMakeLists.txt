@@ -169,6 +169,12 @@ dasall_add_cognition_unit_test(
 )
 
 dasall_add_cognition_unit_test(
+	dasall_reasoner_tool_candidate_filtering_unit_test
+	ReasonerToolCandidateFilteringTest.cpp
+	ReasonerToolCandidateFilteringTest
+)
+
+dasall_add_cognition_unit_test(
 	dasall_reflection_engine_decision_unit_test
 	ReflectionEngineDecisionTest.cpp
 	ReflectionEngineDecisionTest
@@ -588,6 +594,11 @@ target_include_directories(dasall_reasoner_conflict_resolution_unit_test
 )
 
 target_include_directories(dasall_reasoner_candidate_weight_projection_unit_test
+	PRIVATE
+		${CMAKE_SOURCE_DIR}/cognition/src
+)
+
+target_include_directories(dasall_reasoner_tool_candidate_filtering_unit_test
 	PRIVATE
 		${CMAKE_SOURCE_DIR}/cognition/src
 )

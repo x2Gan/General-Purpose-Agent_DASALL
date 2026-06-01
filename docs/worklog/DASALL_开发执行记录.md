@@ -1,3 +1,41 @@
+## 记录 #870
+
+- 日期：2026-06-01
+- 阶段：cognition / tool candidate prefilter closure
+- 任务：完成 WP-COG-GAP-015“Tool 候选预筛（GAP-P2-E）”
+- 状态：已完成（Reasoner rule-based top-K prefilter、focused regression 与 deliverable closeout 已闭合）
+
+### 执行前提
+
+1. [docs/deliverables/COG-EVAL-2026-05-31-cognition子系统落地评估与生产级缺口治理任务规划.md](../deliverables/COG-EVAL-2026-05-31-cognition子系统落地评估与生产级缺口治理任务规划.md) 将 `WP-COG-GAP-015` 的代码目标限定为“Reasoner 收到 `ToolDescriptor` 列表后做 top-K 过滤”，并要求保留先规则、后 embedding 的演进路径。
+2. [docs/architecture/DASALL_cognition子系统详细设计.md](../architecture/DASALL_cognition子系统详细设计.md) 已在 blocker 收敛后把 `available_tool_descriptors` 固定为 cognition owner 内的 explainability / candidate filtering seam，因此本轮实现必须停留在 reasoning 内部投影，不扩张 `ToolIntentHint` 为真实候选集合或 ToolRequest authority。
+3. OpenAI Function Calling 最佳实践明确建议把每轮可调用工具数控制在较小子集，并通过 `allowed_tools` / request-scoped tool subset 约束模型工具面；本轮据此采用 deterministic rule prefilter，把 execute-action 的工具选择压缩到 top-K，再保留单一 `tool_intent_hint.tool_name` 供 Runtime 消费。
+
+### 改动
+
+1. 更新 [docs/architecture/DASALL_cognition子系统详细设计.md](../architecture/DASALL_cognition子系统详细设计.md)，补 execute-action 路径的 deterministic rule prefilter 语义，明确 `available_tool_descriptors` 先做 top-K 收敛，再映射到单一 `tool_intent_hint.tool_name`，候选规模仅通过低基数 diagnostics 暴露。
+2. 更新 [cognition/src/reasoning/DecisionProjector.h](../../cognition/src/reasoning/DecisionProjector.h) 与 [cognition/src/reasoning/DecisionProjector.cpp](../../cognition/src/reasoning/DecisionProjector.cpp)，加入 `tool_name` / `display_name` / `tags` / perception tool entity / goal-objective 关键词驱动的 rule-based descriptor ranking，并在大工具空间下截断到 top-K=3。
+3. 在同一投影路径中新增 `tool_candidate_prefilter:applied` 与 `tool_candidate_prefilter_count:3` 等低基数 diagnostics，使候选收敛可被审计与单测观测，同时保持 `ToolIntentHint` 冻结字段不变。
+4. 新增 [tests/unit/cognition/ReasonerToolCandidateFilteringTest.cpp](../../tests/unit/cognition/ReasonerToolCandidateFilteringTest.cpp)，覆盖“descriptor 大集合收敛到 K=3”与“descriptor 缺席时回退旧路径”两条路径；更新 [tests/unit/cognition/CMakeLists.txt](../../tests/unit/cognition/CMakeLists.txt) 注册新单测。
+5. 更新 [docs/deliverables/COG-EVAL-2026-05-31-cognition子系统落地评估与生产级缺口治理任务规划.md](../deliverables/COG-EVAL-2026-05-31-cognition子系统落地评估与生产级缺口治理任务规划.md)，回写 `WP-COG-GAP-015` 的主任务 closeout，并将 blocker 状态改写为已解阻。
+
+### 验证
+
+1. `Build_CMakeTools(buildTargets=["dasall_reasoner_action_decision_unit_test"])`
+   - 结果：通过；确认 prefilter 代码接入后现有 execute-action 切片可成功编译。
+2. `Build_CMakeTools(buildTargets=["dasall_reasoner_tool_candidate_filtering_unit_test"])`
+   - 结果：通过。
+3. `RunCtest_CMakeTools(tests=["ReasonerToolCandidateFilteringTest"])`
+   - 结果：通过；`100% tests passed, 0 tests failed out of 1`。
+4. `RunCtest_CMakeTools(tests=["ReasonerToolCandidateFilteringTest","ReasonerActionDecisionTest"])`
+   - 结果：通过；`100% tests passed, 0 tests failed out of 2`。
+
+### 结果
+
+1. execute-action 路径现在不再直接从全量 `available_tool_descriptors` 中单点取值，而是先基于规则把候选压缩到 top-K，再用首候选填充 `tool_intent_hint.tool_name`。
+2. `ToolIntentHint` 冻结字段保持不变；候选收敛信息只进入 `ActionDecision.diagnostics`，因此没有越过 cognition/runtime 的 owner boundary，也没有引入新的 shared contract 扩张。
+3. `WP-COG-GAP-015` 已闭合；后续若切换到 embedding prefilter，只需替换 ranking 逻辑，不需要再动 runtime descriptor plumbing 或 ToolIntentHint surface。
+
 ## 记录 #869
 
 - 日期：2026-06-01
