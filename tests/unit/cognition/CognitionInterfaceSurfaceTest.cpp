@@ -270,6 +270,12 @@ void test_cognition_config_defaults_match_profile_projection_table() {
               "perception rule fallback should be enabled by default");
   assert_true(config.response.template_fallback_enabled,
               "response template fallback should be enabled by default");
+  assert_true(config.response.templates.clarification.find("{summary}") != std::string::npos,
+              "default clarification template should preserve the summary placeholder seam");
+  assert_true(config.response.templates.safe_converge.find("{summary}") != std::string::npos,
+              "default safe-converge template should preserve the summary placeholder seam");
+  assert_true(config.response.templates.fallback_failure.find("{summary}") != std::string::npos,
+              "default fallback-failure template should preserve the summary placeholder seam");
   assert_true(!config.reasoner.allow_delegate_hint,
               "delegate hints should stay disabled by default");
   assert_true(config.reasoner.candidate_weights.tool_call == 1.00F,

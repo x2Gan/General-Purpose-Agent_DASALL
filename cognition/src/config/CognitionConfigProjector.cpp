@@ -76,6 +76,42 @@ void apply_reasoner_candidate_weights(std::string_view profile_id,
   }
 }
 
+void apply_response_templates(std::string_view profile_id,
+                              CognitionConfig& config) {
+  if (profile_id == "desktop_full" || profile_id == "cloud_full") {
+    return;
+  }
+
+  if (profile_id == "edge_balanced") {
+    config.response.templates.clarification =
+        "I need a bit more detail before I continue. Current summary: {summary}";
+    config.response.templates.safe_converge =
+        "I am returning a compact safe response for this environment. {summary}";
+    config.response.templates.fallback_failure =
+        "I could not validate a final response on this route. Current summary: {summary}";
+    return;
+  }
+
+  if (profile_id == "edge_minimal") {
+    config.response.templates.clarification =
+        "Need clarification before continuing: {summary}";
+    config.response.templates.safe_converge =
+        "Returning a safe fallback response: {summary}";
+    config.response.templates.fallback_failure =
+        "Validated final response unavailable: {summary}";
+    return;
+  }
+
+  if (profile_id == "factory_test") {
+    config.response.templates.clarification =
+        "Clarification required before the workflow can continue. Summary seed: {summary}";
+    config.response.templates.safe_converge =
+        "Diagnostic safe-converge response emitted. Summary seed: {summary}";
+    config.response.templates.fallback_failure =
+        "Diagnostic fallback failure response emitted. Summary seed: {summary}";
+  }
+}
+
 [[nodiscard]] CognitionConfig merge_profile_defaults(
     std::string_view profile_id,
     const profiles::RuntimePolicySnapshot& snapshot) {
@@ -100,6 +136,7 @@ void apply_reasoner_candidate_weights(std::string_view profile_id,
   }
 
   apply_reasoner_candidate_weights(profile_id, config);
+  apply_response_templates(profile_id, config);
 
   return config;
 }

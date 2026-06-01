@@ -416,6 +416,25 @@
   - `ctest --test-dir build-ci -R "ResponseBuilderTemplateFallbackTest" --output-on-failure`
 - **阻塞 / 解阻**：无。
 
+**Closeout（2026-06-01）**
+
+- 状态：已完成（response template 配置面、profile 默认投影、focused regression 与文档回链已闭合）。
+- 设计回链：
+  - [docs/architecture/DASALL_cognition子系统详细设计.md](../architecture/DASALL_cognition子系统详细设计.md) §6.10 现已冻结 `cognition.response.templates.{clarification,safe_converge,fallback_failure}` 三类模板槽，并明确保留单一 `{summary}` 占位符 seam。
+  - 同文档 ResponseBuilder 章节已补模板选择语义：`AskClarification -> clarification`、`ConvergeSafe -> safe_converge`、generic degraded path -> `fallback_failure`；summary seed 优先级与 fail-closed 约束保持不变。
+  - 外部参考继续采用 ICU MessageFormat 的消息单元原则：用户可见文案应以单条消息模板承载可替换参数，而不是在代码里拼接片段；本轮据此只引入轻量 `{summary}` 占位符，不额外扩张完整模板引擎。
+- 代码结果：
+  - 更新 [cognition/include/CognitionConfig.h](../../cognition/include/CognitionConfig.h)，新增 `CognitionResponseTemplates`，把 clarification / safe_converge / fallback_failure 三类终态模板挂入 `CognitionConfig.response.templates`。
+  - 更新 [cognition/src/config/CognitionConfigProjector.cpp](../../cognition/src/config/CognitionConfigProjector.cpp)，为 desktop_full / cloud_full / edge_balanced / edge_minimal / factory_test 五档 profile 投影不同的 response fallback copy。
+  - 更新 [cognition/src/response/ResponseBuilder.cpp](../../cognition/src/response/ResponseBuilder.cpp)，让模板 fallback 依据 terminal decision 选择配置化模板，并执行 `{summary}` 占位符替换；ResponseBuilder 不再持有固定 fallback 文案字面量，只保留既有 seed 缺失错误文案与 diagnostics。
+  - 更新 [tests/unit/cognition/ResponseBuilderTemplateFallbackTest.cpp](../../tests/unit/cognition/ResponseBuilderTemplateFallbackTest.cpp)、[tests/unit/cognition/CognitionConfigProjectionTest.cpp](../../tests/unit/cognition/CognitionConfigProjectionTest.cpp) 与 [tests/unit/cognition/CognitionInterfaceSurfaceTest.cpp](../../tests/unit/cognition/CognitionInterfaceSurfaceTest.cpp)，固定配置覆盖、profile-shaped template copy 差异，以及公共配置面的 placeholder seam。
+- 验证结果：
+  - `Build_CMakeTools(buildTargets=["dasall_cognition_config_projection_unit_test","dasall_cognition_interface_surface_unit_test","dasall_response_builder_template_fallback_unit_test"])`：通过。
+  - `RunCtest_CMakeTools(tests=["CognitionConfigProjectionTest","CognitionInterfaceSurfaceTest","ResponseBuilderTemplateFallbackTest"])`：通过；`100% tests passed, 0 tests failed out of 3`。
+- 结果：
+  - ResponseBuilder 的用户可见 fallback 文案现在完全由配置与 profile 投影驱动，后续本地化、品牌化或 installed/profile 差异不再需要改 response 代码。
+  - 这轮改动没有放宽 response fallback 的 owner 边界；status、fallback_used、summary seed 优先级与 structured envelope 校验仍保持现有 contract。
+
 #### WP-COG-GAP-011 BudgetContext ≥0.8 显式分支（GAP-P1-F）
 
 - **代码目标**

@@ -680,6 +680,9 @@ sequenceDiagram
 | cognition.thresholds.replan_hint | 0.50 | Reflection 给出 replan 的建议阈值 | ADR-007 一致 |
 | cognition.perception.rule_fallback_enabled | true | llm 不可用时允许规则感知降级 | 工程可实现性要求 |
 | cognition.response.template_fallback_enabled | true | response stage 支持模板降级 | 质量门要求 |
+| cognition.response.templates.clarification | `I need more detail before I can complete this request. Current understanding: {summary}` | AskClarification 终态模板 | GAP-P1-E；保留单一 `{summary}` 占位符，便于 profile/品牌投影与后续本地化 |
+| cognition.response.templates.safe_converge | `I am returning a safe degraded response while preserving the current goal state. {summary}` | ConvergeSafe 终态模板 | GAP-P1-E；不得在 ResponseBuilder 内回退为新的硬编码文案 |
+| cognition.response.templates.fallback_failure | `I could not produce a validated final response. Best available summary: {summary}` | 无 terminal decision 或 generic degraded path 模板 | GAP-P1-E；占位符为空时仍沿用既有 seed fail-closed 约束 |
 | cognition.reasoner.allow_delegate_hint | false | 首版默认不把多 Agent delegate 作为主路径 | ADR-008 风险收敛 |
 | cognition.reasoner.candidate_weights.{tool_call,direct_response,clarification,converge_safe} | 1.00 | 对四类候选路径施加 profile bias；中性默认值不改变本地 heuristic 基线 | GAP-P1-D；后续离线校准 seam |
 | cognition.observability.emit_stage_spans | true | 每阶段 trace span 开关 | infra 观测一致性 |
@@ -691,9 +694,9 @@ sequenceDiagram
 |---|---|---|
 | desktop_full | 五段全开；planner/reflection 允许高 reasoning；response 优先 llm；reasoner 轻微上调 tool_call、轻微下调 direct_response | 面向完整开发与验证环境 |
 | cloud_full | 五段全开；planning/response 都允许高质量 route；reasoner 默认与 desktop_full 同步偏向 tool_call | 云模型主路径 |
-| edge_balanced | 五段逻辑保留；感知与 response 允许紧凑模式；plan 节点数收紧；reasoner 轻微偏向 direct_response / clarification / safe converge | 资源受限但仍保留语义完整性 |
-| edge_minimal | 五段逻辑保留；Perception、Planner、Reasoner 可共享轻量模型档位；response 默认开启模板降级；reasoner 显式下调 tool_call、上调 direct_response / converge_safe | 不能关 cognition，只能降级实现 |
-| factory_test | 五段逻辑保留；观测增强；response 可模板优先；reasoner 偏向 clarification / safe converge 以利诊断 | 强调诊断与联调 |
+| edge_balanced | 五段逻辑保留；感知与 response 允许紧凑模式；plan 节点数收紧；reasoner 轻微偏向 direct_response / clarification / safe converge；response 模板文案改为 compact copy | 资源受限但仍保留语义完整性 |
+| edge_minimal | 五段逻辑保留；Perception、Planner、Reasoner 可共享轻量模型档位；response 默认开启模板降级并投影最短 safe copy；reasoner 显式下调 tool_call、上调 direct_response / converge_safe | 不能关 cognition，只能降级实现 |
+| factory_test | 五段逻辑保留；观测增强；response 可模板优先且文案携带 diagnostic summary-seed 提示；reasoner 偏向 clarification / safe converge 以利诊断 | 强调诊断与联调 |
 
 ### 6.11 可观测性设计
 
@@ -892,8 +895,8 @@ flowchart LR
 2. 非职责边界：不直接向用户通道提交结果；不替 Runtime 决定何时进入终态；不直接发起恢复；不暴露 raw prompt、provider payload 或 reasoning_content。
 3. 核心数据定义：围绕 ResponseBuildRequest、ResponseBuildResult、ResponseBuildPolicy、ResponseEnvelope、AgentResult status/provenance 建模；ResponseEnvelope 至少显式表达 response_mode、summary_text、structured_sections、artifact_refs、omitted_details、fallback_used。
 4. 公共/内部接口：公共面保持 IResponseBuilder::build()；内部建议拆为 select_response_mode()、build_with_llm_bridge()、build_with_template()、project_response_envelope()、project_agent_result_status()、redact_unsafe_fields()、clamp_output_size()。
-5. 关键执行流：先根据 terminal_decision、goal completion 和 build_hints 选择 llm 生成或模板路径；若选择 llm，则通过 CognitionLlmBridge 请求 `schema://cognition/response/v1` 的结构化响应，依次执行 raw schema 校验、`ResponseEnvelope` typed projection 与 ResponseBuildResult invariant 校验；随后统一映射为 AgentResult，包括 status、summary、artifacts、error_info、completion signals，并附带 fallback_used、omitted_details 与 schema_version。
-6. 失败与降级语义：llm 不可用、schema 违例、typed projection 失败或 response envelope invariant 不合法时，若 template_fallback_enabled=true 则退化为模板结果并把 AgentResult.status 置为 PartiallyCompleted 或 Failed；若模板也不可用，则返回 ResponseBuildResult(ErrorInfo)，由 Runtime 构造最小失败结果；任何情况下都不得静默丢失失败信息，也不得把 bridge content 当未校验纯文本直接吞入最终 summary。
+5. 关键执行流：先根据 terminal_decision、goal completion 和 build_hints 选择 llm 生成或模板路径；若选择 llm，则通过 CognitionLlmBridge 请求 `schema://cognition/response/v1` 的结构化响应，依次执行 raw schema 校验、`ResponseEnvelope` typed projection 与 ResponseBuildResult invariant 校验；若进入模板路径，则按 `ActionDecisionKind::AskClarification -> clarification`、`ActionDecisionKind::ConvergeSafe -> safe_converge`、其余 -> `fallback_failure` 选择 `cognition.response.templates.*`，并只对单一 `{summary}` 占位符做替换；随后统一映射为 AgentResult，包括 status、summary、artifacts、error_info、completion signals，并附带 fallback_used、omitted_details 与 schema_version。
+6. 失败与降级语义：llm 不可用、schema 违例、typed projection 失败或 response envelope invariant 不合法时，若 template_fallback_enabled=true 则退化为模板结果并把 AgentResult.status 置为 PartiallyCompleted 或 Failed；模板路径继续复用既有 summary seed 优先级（`terminal_decision.response_outline.summary -> latest_observation.payload -> context_packet.current_goal_summary -> goal_contract.goal_description`），seed 为空时保持 fail-closed；任何情况下都不得静默丢失失败信息，也不得把 bridge content 当未校验纯文本直接吞入最终 summary。
 7. 测试与验收出口：建议单测为 tests/unit/cognition/ResponseBuilderAgentResultMappingTest.cpp、tests/unit/cognition/ResponseBuilderTemplateFallbackTest.cpp、tests/unit/cognition/ResponseBuilderRedactionTest.cpp、tests/unit/cognition/StageOutputValidatorResponseEnvelopeTest.cpp；建议验收命令为 ctest --test-dir build-ci -R "ResponseBuilder(AgentResultMapping|TemplateFallback|Redaction)Test|StageOutputValidatorResponseEnvelopeTest" --output-on-failure。
 
 反思与终态收敛关键时序如下：

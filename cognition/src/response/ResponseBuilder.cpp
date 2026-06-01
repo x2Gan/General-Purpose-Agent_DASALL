@@ -900,6 +900,56 @@ void append_unique(std::vector<std::string>& values, const std::string& value) {
   return clamped;
 }
 
+[[nodiscard]] std::string_view select_template_kind(
+    const ResponseBuildRequest& request) {
+  if (request.terminal_decision.has_value()) {
+    switch (request.terminal_decision->decision_kind) {
+      case decision::ActionDecisionKind::AskClarification:
+        return "clarification";
+      case decision::ActionDecisionKind::ConvergeSafe:
+        return "safe_converge";
+      case decision::ActionDecisionKind::NoDecision:
+      case decision::ActionDecisionKind::ExecuteAction:
+      case decision::ActionDecisionKind::DirectResponse:
+        break;
+    }
+  }
+
+  return "fallback_failure";
+}
+
+[[nodiscard]] std::string_view select_template_text(const CognitionConfig& config,
+                                                    const ResponseBuildRequest& request) {
+  const auto template_kind = select_template_kind(request);
+  if (template_kind == "clarification") {
+    return config.response.templates.clarification;
+  }
+
+  if (template_kind == "safe_converge") {
+    return config.response.templates.safe_converge;
+  }
+
+  return config.response.templates.fallback_failure;
+}
+
+[[nodiscard]] std::string apply_response_template(std::string_view template_text,
+                                                  std::string_view summary_seed) {
+  static constexpr std::string_view kSummaryPlaceholder = "{summary}";
+
+  if (template_text.empty()) {
+    return std::string(summary_seed);
+  }
+
+  std::string resolved(template_text);
+  std::size_t position = 0U;
+  while ((position = resolved.find(kSummaryPlaceholder, position)) != std::string::npos) {
+    resolved.replace(position, kSummaryPlaceholder.size(), summary_seed);
+    position += summary_seed.size();
+  }
+
+  return resolved;
+}
+
 [[nodiscard]] std::string derive_template_summary(const ResponseBuildRequest& request) {
   if (request.terminal_decision.has_value() && request.terminal_decision->response_outline.has_value() &&
       !request.terminal_decision->response_outline->summary.empty()) {
@@ -1005,16 +1055,20 @@ void append_bridge_diagnostics(std::vector<std::string>& diagnostics,
 
 [[nodiscard]] ResponseBuildResult build_with_template(const CognitionConfig& config,
                                                       const ResponseBuildRequest& request) {
-  auto summary = derive_template_summary(request);
-  if (summary.empty()) {
+  const auto summary_seed = derive_template_summary(request);
+  if (summary_seed.empty()) {
     return build_error_result(contracts::ResultCode::RuntimeRetryExhausted,
                               "cognition.response.template_fallback",
                               "response template fallback requires a terminal summary seed",
                               "response_template_seed_missing");
   }
 
+  const auto template_kind = select_template_kind(request);
+  auto summary = apply_response_template(select_template_text(config, request), summary_seed);
   std::vector<std::string> diagnostics = {"response_mode:template_fallback",
-                                          "response_template_fallback"};
+                                          "response_template_fallback",
+                                          std::string{"response_template_kind:"} +
+                                              std::string(template_kind)};
   auto redaction = redact_unsafe_fields(config, std::move(summary));
   if (redaction.redacted) {
     diagnostics.push_back("response_redacted");
@@ -1036,6 +1090,8 @@ void append_bridge_diagnostics(std::vector<std::string>& diagnostics,
   if (agent_result.tags.has_value()) {
     agent_result.tags->push_back("response_mode:template_fallback");
     agent_result.tags->push_back("response_fallback_used");
+    agent_result.tags->push_back(std::string{"response_template_kind:"} +
+                                 std::string(template_kind));
     if (redaction.redacted) {
       agent_result.tags->push_back("response_redacted");
     }

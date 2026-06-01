@@ -161,6 +161,45 @@ void test_response_builder_uses_template_fallback_when_payload_is_absent() {
               "structured payload should preserve the fallback flag");
 }
 
+void test_response_builder_uses_configured_clarification_template() {
+  CognitionConfig config;
+  config.response.templates.clarification = "CLARIFY-OVERRIDE: {summary}";
+  auto builder = create_response_builder(config);
+  auto request = make_request();
+  request.build_hints.max_summary_chars = 0U;
+  request.terminal_decision->decision_kind =
+      dasall::cognition::decision::ActionDecisionKind::AskClarification;
+
+  const auto result = builder->build(request);
+
+  assert_true(result.agent_result.has_value(),
+              "clarification template override should still produce an AgentResult");
+  assert_true(result.agent_result->response_text.has_value() &&
+                  result.agent_result->response_text->find("CLARIFY-OVERRIDE: ") == 0U,
+              "clarification template override should drive the user-visible response text");
+  assert_true(contains_token(result.diagnostics, "response_template_kind:clarification"),
+              "clarification template path should identify the selected template kind");
+}
+
+void test_response_builder_uses_configured_fallback_failure_template() {
+  CognitionConfig config;
+  config.response.templates.fallback_failure = "FAIL-OVERRIDE: {summary}";
+  auto builder = create_response_builder(config);
+  auto request = make_request();
+  request.build_hints.max_summary_chars = 0U;
+  request.terminal_decision.reset();
+
+  const auto result = builder->build(request);
+
+  assert_true(result.agent_result.has_value(),
+              "generic template fallback should still produce an AgentResult");
+  assert_true(result.agent_result->response_text.has_value() &&
+                  result.agent_result->response_text->find("FAIL-OVERRIDE: ") == 0U,
+              "fallback-failure template override should drive the user-visible response text");
+  assert_true(contains_token(result.diagnostics, "response_template_kind:fallback_failure"),
+              "generic template fallback should identify the fallback-failure template kind");
+}
+
 void test_response_builder_returns_explicit_error_when_template_fallback_is_disabled() {
   auto builder = create_response_builder(CognitionConfig{});
 
@@ -224,6 +263,39 @@ void test_response_builder_falls_back_when_bridge_returns_failure() {
               "bridge failure should fall back through the existing template path");
 }
 
+  void test_response_builder_projects_profile_specific_safe_converge_templates() {
+    CognitionConfig edge_minimal_config;
+    edge_minimal_config.response.templates.safe_converge =
+      "Returning a safe fallback response: {summary}";
+    CognitionConfig factory_test_config;
+    factory_test_config.response.templates.safe_converge =
+      "Diagnostic safe-converge response emitted. Summary seed: {summary}";
+    auto edge_minimal_builder = create_response_builder(edge_minimal_config);
+    auto factory_test_builder = create_response_builder(factory_test_config);
+    auto request = make_request();
+    request.build_hints.prefer_template = true;
+    request.build_hints.max_summary_chars = 0U;
+
+    const auto edge_minimal_result = edge_minimal_builder->build(request);
+    const auto factory_test_result = factory_test_builder->build(request);
+
+    assert_true(edge_minimal_result.agent_result.has_value() &&
+            edge_minimal_result.agent_result->response_text.has_value(),
+          "edge_minimal profile should still materialize a template response");
+    assert_true(factory_test_result.agent_result.has_value() &&
+            factory_test_result.agent_result->response_text.has_value(),
+          "factory_test profile should still materialize a template response");
+    assert_true(edge_minimal_result.agent_result->response_text->find(
+            "Returning a safe fallback response: ") == 0U,
+          "edge_minimal should project the compact safe-converge template copy");
+    assert_true(factory_test_result.agent_result->response_text->find(
+            "Diagnostic safe-converge response emitted. ") == 0U,
+          "factory_test should project the diagnostic safe-converge template copy");
+    assert_true(*edge_minimal_result.agent_result->response_text !=
+            *factory_test_result.agent_result->response_text,
+          "different profiles should produce different projected template copy");
+  }
+
 void test_response_builder_consumes_structured_bridge_payload() {
   auto llm_manager = std::make_shared<MockLLMManager>();
   llm_manager->set_structured_stage_payload(
@@ -268,8 +340,11 @@ void test_response_builder_consumes_structured_bridge_payload() {
 int main() {
   try {
     test_response_builder_uses_template_fallback_when_payload_is_absent();
+    test_response_builder_uses_configured_clarification_template();
+    test_response_builder_uses_configured_fallback_failure_template();
     test_response_builder_returns_explicit_error_when_template_fallback_is_disabled();
     test_response_builder_falls_back_when_bridge_returns_failure();
+    test_response_builder_projects_profile_specific_safe_converge_templates();
     test_response_builder_consumes_structured_bridge_payload();
   } catch (const std::exception& ex) {
     std::cerr << ex.what() << '\n';

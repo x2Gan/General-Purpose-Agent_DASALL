@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <string>
 
 namespace dasall::cognition {
 
@@ -14,8 +15,18 @@ struct CognitionPerceptionPolicy {
   bool rule_fallback_enabled = true;
 };
 
+struct CognitionResponseTemplates {
+  std::string clarification =
+      "I need more detail before I can complete this request. Current understanding: {summary}";
+  std::string safe_converge =
+      "I am returning a safe degraded response while preserving the current goal state. {summary}";
+  std::string fallback_failure =
+      "I could not produce a validated final response. Best available summary: {summary}";
+};
+
 struct CognitionResponsePolicy {
   bool template_fallback_enabled = true;
+  CognitionResponseTemplates templates;
 };
 
 struct CognitionReasonerCandidateWeights {

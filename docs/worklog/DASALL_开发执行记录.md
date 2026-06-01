@@ -1,3 +1,37 @@
+## 记录 #863
+
+- 日期：2026-06-01
+- 阶段：cognition / response template externalization closure
+- 任务：完成 WP-COG-GAP-010 Response template 文案外置
+- 状态：已完成（response template 配置面、profile 默认投影、focused regression 与文档回链已闭合）
+
+### 执行前提
+
+1. [docs/deliverables/COG-EVAL-2026-05-31-cognition子系统落地评估与生产级缺口治理任务规划.md](../deliverables/COG-EVAL-2026-05-31-cognition子系统落地评估与生产级缺口治理任务规划.md) 将 `WP-COG-GAP-010` 定义为 P1 稳定性缺口：必须把 response template fallback 的 clarification / safe_converge / fallback_failure 三类文案从 ResponseBuilder 实现中剥离到 `CognitionConfig.response.templates`，并让 profile 投影提供默认值。
+2. [docs/architecture/DASALL_cognition子系统详细设计.md](../architecture/DASALL_cognition子系统详细设计.md) 的 owner 边界要求 ResponseBuilder 只负责终态输出构造，不得借文案外置重新引入 runtime 控制面或 prompt owner 依赖；因此本轮只增加 config seam 与轻量占位符替换，不扩张成新的模板运行时。
+3. ICU MessageFormat 指南指出，用户可见消息应作为单一消息单元管理，并通过占位符承载变量元素，而不是在代码中拼接碎片文本；本轮据此把 response fallback 文案统一收敛到单条模板字符串，并保留单一 `{summary}` 占位符 seam。
+
+### 改动
+
+1. 更新 [cognition/include/CognitionConfig.h](../cognition/include/CognitionConfig.h)，新增 `CognitionResponseTemplates`，把 clarification / safe_converge / fallback_failure 三类模板挂入 `CognitionResponsePolicy`，并为公共默认构造保留可工作的默认文案。
+2. 更新 [cognition/src/config/CognitionConfigProjector.cpp](../cognition/src/config/CognitionConfigProjector.cpp)，为 desktop_full / cloud_full / edge_balanced / edge_minimal / factory_test 五档 profile 投影不同的 response fallback copy，让紧凑 copy 与 diagnostic copy 只通过 projector 注入。
+3. 更新 [cognition/src/response/ResponseBuilder.cpp](../cognition/src/response/ResponseBuilder.cpp)，按 terminal decision 在 `clarification`、`safe_converge`、`fallback_failure` 三类模板之间选择，并执行 `{summary}` 占位符替换；同时补 `response_template_kind:*` diagnostics / tags，便于回归验证。
+4. 更新 [tests/unit/cognition/ResponseBuilderTemplateFallbackTest.cpp](../tests/unit/cognition/ResponseBuilderTemplateFallbackTest.cpp)、[tests/unit/cognition/CognitionConfigProjectionTest.cpp](../tests/unit/cognition/CognitionConfigProjectionTest.cpp) 与 [tests/unit/cognition/CognitionInterfaceSurfaceTest.cpp](../tests/unit/cognition/CognitionInterfaceSurfaceTest.cpp)，固定配置覆盖、profile-shaped template copy 差异、公共配置默认值与 placeholder seam。
+5. 更新 [docs/architecture/DASALL_cognition子系统详细设计.md](../architecture/DASALL_cognition子系统详细设计.md) 与 [docs/deliverables/COG-EVAL-2026-05-31-cognition子系统落地评估与生产级缺口治理任务规划.md](../deliverables/COG-EVAL-2026-05-31-cognition子系统落地评估与生产级缺口治理任务规划.md)，回写配置键、profile 默认策略、ResponseBuilder 模板选择语义与 closeout 证据。
+
+### 验证
+
+1. `Build_CMakeTools(buildTargets=["dasall_cognition_config_projection_unit_test","dasall_cognition_interface_surface_unit_test","dasall_response_builder_template_fallback_unit_test"])`
+   - 结果：通过。
+2. `RunCtest_CMakeTools(tests=["CognitionConfigProjectionTest","CognitionInterfaceSurfaceTest","ResponseBuilderTemplateFallbackTest"])`
+   - 结果：通过；`100% tests passed, 0 tests failed out of 3`。
+
+### 结果
+
+1. ResponseBuilder 的用户可见 fallback 文案现在完全由 `CognitionConfig.response.templates` 与 profile projector 驱动，后续本地化或品牌化不再需要修改 response 代码路径。
+2. 文案外置没有改变 response fallback 的 contract：summary seed 优先级、`fallback_used`、`AgentResult.status` 与 structured envelope 校验继续维持既有 fail-closed 语义。
+3. `WP-COG-GAP-010` 的代码、focused regression、详细设计回链与交付 closeout 已闭合；后续 `WP-COG-GAP-011` 可以直接在不改 response copy 的前提下推进 budget-pressure 显式分支。
+
 ## 记录 #862
 
 - 日期：2026-06-01

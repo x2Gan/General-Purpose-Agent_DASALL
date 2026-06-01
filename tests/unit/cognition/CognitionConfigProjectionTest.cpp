@@ -120,6 +120,15 @@ void test_project_config_uses_runtime_policy_snapshot_as_single_source_of_truth(
               "degrade policy should project directly into perception rule fallback enablement");
   assert_true(config->response.template_fallback_enabled,
               "degrade policy should project directly into response template fallback enablement");
+    assert_equal(std::string("Need clarification before continuing: {summary}"),
+           config->response.templates.clarification,
+           "edge_minimal should project the compact clarification template copy");
+    assert_equal(std::string("Returning a safe fallback response: {summary}"),
+           config->response.templates.safe_converge,
+           "edge_minimal should project the compact safe-converge template copy");
+    assert_equal(std::string("Validated final response unavailable: {summary}"),
+           config->response.templates.fallback_failure,
+           "edge_minimal should project the compact fallback-failure template copy");
   assert_true(!config->reasoner.allow_delegate_hint,
               "delegate hint should remain closed on the frozen first cognition surface");
   assert_true(config->observability.emit_stage_spans,
@@ -127,6 +136,26 @@ void test_project_config_uses_runtime_policy_snapshot_as_single_source_of_truth(
   assert_true(config->observability.redact_context_payload,
               "context redaction must stay hard-enabled by the projector");
 }
+
+  void test_project_config_projects_profile_specific_response_templates() {
+    const auto desktop_config =
+      CognitionConfigProjector::project_config(make_runtime_policy_snapshot("desktop_full"));
+    const auto factory_config =
+      CognitionConfigProjector::project_config(make_runtime_policy_snapshot("factory_test"));
+
+    assert_true(desktop_config.has_value(),
+          "desktop_full should remain projectable after response templates move into config");
+    assert_true(factory_config.has_value(),
+          "factory_test should remain projectable after response templates move into config");
+    assert_true(desktop_config->response.templates.safe_converge !=
+            factory_config->response.templates.safe_converge,
+          "profile projection should keep response template copy profile-specific");
+    assert_equal(
+      std::string(
+        "Diagnostic safe-converge response emitted. Summary seed: {summary}"),
+      factory_config->response.templates.safe_converge,
+      "factory_test should project the diagnostic safe-converge template copy");
+  }
 
 void test_derive_stage_model_hint_preserves_canonical_stage_keys_and_profile_shape() {
   const auto hint = CognitionConfigProjector::derive_stage_model_hint(
@@ -189,6 +218,7 @@ void test_projector_rejects_missing_routes_and_noncanonical_stage_names() {
 int main() {
   try {
     test_project_config_uses_runtime_policy_snapshot_as_single_source_of_truth();
+    test_project_config_projects_profile_specific_response_templates();
     test_derive_stage_model_hint_preserves_canonical_stage_keys_and_profile_shape();
     test_derive_stage_model_hint_handles_response_and_reflection_defaults();
     test_projector_rejects_missing_routes_and_noncanonical_stage_names();
