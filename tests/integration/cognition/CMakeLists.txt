@@ -84,6 +84,13 @@ dasall_add_cognition_integration_test(
 )
 
 dasall_add_cognition_integration_test(
+  dasall_cognition_llm_judge_regression_integration_test
+  CognitionLlmJudgeRegressionTest
+  CognitionLlmJudgeRegressionTest.cpp
+  "integration;cognition;judge"
+)
+
+dasall_add_cognition_integration_test(
   dasall_cognition_structured_output_integration_test
   CognitionStructuredOutputIntegrationTest
   CognitionStructuredOutputIntegrationTest.cpp
@@ -149,6 +156,16 @@ target_link_libraries(dasall_cognition_production_logging_integration_test
 target_compile_definitions(dasall_cognition_review_regression_integration_test
   PRIVATE
     DASALL_PROJECT_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
+)
+
+target_compile_definitions(dasall_cognition_llm_judge_regression_integration_test
+  PRIVATE
+    DASALL_PROJECT_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
+)
+
+target_link_libraries(dasall_cognition_llm_judge_regression_integration_test
+  PRIVATE
+    dasall_llm
 )
 
 if(NOT DASALL_COGNITION_INTEGRATION_TEST_EXECUTABLE_TARGETS)

@@ -1,3 +1,39 @@
+## 记录 #874
+
+- 日期：2026-06-01
+- 阶段：cognition / llm-as-judge regression closure
+- 任务：完成 WP-COG-GAP-018“LLM-as-judge 主链回归（GAP-P3-C）”
+- 状态：已完成（judge prompt release、离线 batch runner、focused regression 与报告归档脚本已闭合）
+
+### 执行前提
+
+1. [docs/deliverables/COG-EVAL-2026-05-31-cognition子系统落地评估与生产级缺口治理任务规划.md](../deliverables/COG-EVAL-2026-05-31-cognition子系统落地评估与生产级缺口治理任务规划.md) 已将 `WP-COG-GAP-018` 固定为“CI 离线作业，不入主路径；判官 prompt 由 LLM 子系统 release 治理”，因此本轮只能复用既有 `PromptPipeline + LLMManager` 治理链，不能再发明平行 judge stage 或旁路 prompt selector。
+2. 前置依赖 `WP-COG-GAP-001`、`WP-COG-GAP-002` 与 `WP-COG-GAP-017` 已完成：response-stage prompt release 选择、replay golden trace 数据集，以及 `failure_samples/<category>/` 失败语料抽样 seam 已具备稳定输入面。
+3. [docs/architecture/DASALL_cognition子系统详细设计.md](../architecture/DASALL_cognition子系统详细设计.md) 与 [docs/architecture/DASALL_llm子系统详细设计.md](../architecture/DASALL_llm子系统详细设计.md) 已明确 owner boundary：judge 作业只消费 redacted case summary / rubric / trace bundle，且 prompt 仍必须停留在 response canonical stage，通过 `task_type` 与可选 `prompt_release_id_override` 受 LLM registry/policy 治理。
+
+### 改动
+
+1. 更新 [docs/architecture/DASALL_cognition子系统详细设计.md](../architecture/DASALL_cognition子系统详细设计.md) 与 [docs/architecture/DASALL_llm子系统详细设计.md](../architecture/DASALL_llm子系统详细设计.md)，冻结 `WP-COG-GAP-018` 的输入 split、artifact 名称，以及“response stage + task_type + optional prompt override”的单一治理语义。
+2. 新增 [llm/assets/prompts/responder/judge_main_chain/manifest.yaml](../../llm/assets/prompts/responder/judge_main_chain/manifest.yaml)、[llm/assets/prompts/responder/judge_main_chain/system.md](../../llm/assets/prompts/responder/judge_main_chain/system.md) 与 [llm/assets/prompts/responder/judge_main_chain/task.md](../../llm/assets/prompts/responder/judge_main_chain/task.md)，把 `judge_main_chain` prompt release 纳入 responder family，并固定输出 schema 与 render slots。
+3. 新增 [tests/integration/cognition/CognitionLlmJudgeRegressionTest.cpp](../../tests/integration/cognition/CognitionLlmJudgeRegressionTest.cpp) 并更新 [tests/integration/cognition/CMakeLists.txt](../../tests/integration/cognition/CMakeLists.txt)，构建 mock-backed 离线 runner：读取 curated replay、可选 failure sample split，经真实 `PromptPipeline + LLMManager` 选择 judge release，输出 `judge-cases.jsonl`、`judge-results.jsonl`、`judge-report.json`、`judge-report.md`、`status.txt`。
+4. 新增 [scripts/ci/cognition_llm_judge_regression.sh](../../scripts/ci/cognition_llm_judge_regression.sh)，作为 batch mode 包装脚本，透传 `ARTIFACT_DIR`、`REPLAY_DIR`、`FAILURE_SAMPLES_DIR` 与 `PROMPT_RELEASE_ID`，直接运行新集成测试二进制并打印报告。
+5. 更新 [docs/deliverables/COG-EVAL-2026-05-31-cognition子系统落地评估与生产级缺口治理任务规划.md](../deliverables/COG-EVAL-2026-05-31-cognition子系统落地评估与生产级缺口治理任务规划.md) 与 [docs/todos/DASALL_子系统查漏补缺专项记录.md](../todos/DASALL_子系统查漏补缺专项记录.md)，回写 `WP-COG-GAP-018` closeout、GA-Cog-Gate-P3 当前状态与 cognition 总账结论。
+
+### 验证
+
+1. `Build_CMakeTools(buildTargets=["dasall_cognition_llm_judge_regression_integration_test"])`
+   - 结果：通过。
+2. `RunCtest_CMakeTools(tests=["CognitionLlmJudgeRegressionTest"])`
+   - 结果：通过；`100% tests passed, 0 tests failed out of 1`。
+3. `ARTIFACT_DIR=/tmp/dasall-cognition-judge-regression-artifacts BUILD_DIR=$PWD/build/vscode-linux-ninja ./scripts/ci/cognition_llm_judge_regression.sh`
+   - 结果：通过；输出 `curated_case_count=4`、`supplemental_case_count=0`、`pass_count=4`、`fail_count=0`，报告 `expectations met: true`。
+
+### 结果
+
+1. cognition 现在具备由 LLM release 治理的离线 judge regression 闭环，离线作业可以直接消费 replay success-chain，且在有 failure corpus 时追加 supplemental split，不需要侵入 runtime/cognition 主路径。
+2. judge prompt 继续停留在 responder family 的 response stage，并由 `task_type=judge_main_chain` 与可选 `prompt_release_id_override` 驱动选择；prompt governance、trusted source 和 allowlist 没有被绕开。
+3. `WP-COG-GAP-018` 已闭合；后续如果需要切换 judge release 或接入更多失败语料，只需扩展 prompt release 与输入目录，不需要再新增第二套评测执行面。
+
 ## 记录 #873
 
 - 日期：2026-06-01

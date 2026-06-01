@@ -1,0 +1,28 @@
+schema_version: "1"
+min_loader_version: "1"
+package_id: responder.judge_main_chain
+prompt_id: responder
+version: "2026.06.01"
+stage: response
+eval_status: stable
+release_scope: stable
+output_schema_ref: schema://responder/judge_main_chain
+trusted_source: profiles
+default_release: false
+source_uri: prompt://responder/judge_main_chain
+language: zh-cn
+model_family: openai_compatible
+task_types:
+  - judge_main_chain
+template_slots:
+  - user_goal
+  - constraints
+  - session_summary
+tool_hints: []
+tags:
+  - responder
+  - judge
+  - main_chain
+profile_tags:
+  - desktop_full
+  - cloud_full
