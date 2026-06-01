@@ -1,3 +1,36 @@
+## 记录 #873
+
+- 日期：2026-06-01
+- 阶段：cognition / failure corpus sampling closure
+- 任务：完成 WP-COG-GAP-017“失败语料采样（GAP-P3-B）”
+- 状态：已完成（replay recorder failure sampling、focused regression 与文档回链已闭合）
+
+### 执行前提
+
+1. [docs/deliverables/COG-EVAL-2026-05-31-cognition子系统落地评估与生产级缺口治理任务规划.md](../deliverables/COG-EVAL-2026-05-31-cognition子系统落地评估与生产级缺口治理任务规划.md) 已将 `WP-COG-GAP-017` 固定为“复用 GAP-P0-B replay recorder，对 `cognition.schema_violation / reflection.abort_safe / response.fallback_used` 增加采样开关与采样率”，因此本轮不重新设计第二套 recorder 或额外离线数据格式。
+2. 前置依赖 `WP-COG-GAP-002` 已完成，cognition 已具备 request / bridge payload / result 三类 replay trace 的 owner 内部 sink seam 与 golden regression；本轮只允许在该 seam 上追加 failure corpus sampling，不得改 façade/response 的 public surface。
+3. [docs/architecture/DASALL_cognition子系统详细设计.md](../architecture/DASALL_cognition子系统详细设计.md) 已冻结 replay recorder 只能消费 redacted structured replay fields；因此 failure sampling 也必须只复制 replay corpus，不能旁路 raw prompt、provider-private payload 或恢复审计事实。
+
+### 改动
+
+1. 更新 [cognition/src/observability/CognitionReplayTraceRecorder.h](../../cognition/src/observability/CognitionReplayTraceRecorder.h)，新增 `ReplayFailureSampleRule` / `ReplayFailureSamplingConfig`，并在 recorder 内部按 deterministic sampling key 为 `cognition.schema_violation`、`reflection.abort_safe`、`response.fallback_used` 三类 failure 复制同 request 的 replay corpus 到 `failure_samples/<category>/`。
+2. 新增 [tests/unit/cognition/CognitionFailureSamplingTest.cpp](../../tests/unit/cognition/CognitionFailureSamplingTest.cpp)，覆盖 planning schema violation、reflection abort-safe、response template fallback 三类正例，以及 `sample_rate=0.0` 的负例。
+3. 更新 [tests/unit/cognition/CMakeLists.txt](../../tests/unit/cognition/CMakeLists.txt) 与 [tests/unit/cognition/CognitionReplayRegressionTest.cpp](../../tests/unit/cognition/CognitionReplayRegressionTest.cpp)，注册 `CognitionFailureSamplingTest` 并补齐 replay recorder 新配置字段初始化，防止新增配置面回退到旧 regression 产生噪声告警。
+4. 更新 [docs/architecture/DASALL_cognition子系统详细设计.md](../architecture/DASALL_cognition子系统详细设计.md) 与 [docs/deliverables/COG-EVAL-2026-05-31-cognition子系统落地评估与生产级缺口治理任务规划.md](../deliverables/COG-EVAL-2026-05-31-cognition子系统落地评估与生产级缺口治理任务规划.md)，回写 failure sampling 的 owner boundary、采样类别与 focused validation 证据。
+
+### 验证
+
+1. `cmake --build build-ci --target dasall_cognition_failure_sampling_unit_test dasall_cognition_replay_regression_unit_test`
+   - 结果：通过。
+2. `ctest --test-dir build-ci -R "^(CognitionFailureSamplingTest|CognitionReplayRegressionTest)$" --output-on-failure`
+   - 结果：通过；`100% tests passed, 0 tests failed out of 2`。
+
+### 结果
+
+1. replay recorder 现在能够在不改变既有 replay.trace 全量落盘语义的前提下，按 request 复制失败语料到分类目录，供后续离线人评与 judge regression 直接消费。
+2. 三类 failure corpus 继续停留在 cognition owner 内部 sink seam，没有把 replay 分类逻辑扩张到 shared contracts、Runtime 恢复控制或 LLM provider surface。
+3. `WP-COG-GAP-017` 已闭合；后续 `WP-COG-GAP-018` 可以直接依赖 `failure_samples/` 目录作为离线 judge 输入，而不需要重做采样管线。
+
 ## 记录 #872
 
 - 日期：2026-06-01

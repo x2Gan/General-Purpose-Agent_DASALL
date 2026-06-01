@@ -684,6 +684,23 @@
 - **验收命令**：`ctest -R "CognitionFailureSampling"`
 - **阻塞 / 解阻**：依赖 GAP-P0-B。
 
+**Closeout（2026-06-01）**
+
+- 状态：已完成（failure corpus sampling 开关/采样率、focused regression 与设计回链已闭合；无新增 BLOCK 任务）。
+- 设计回链：
+  - [docs/architecture/DASALL_cognition子系统详细设计.md](../architecture/DASALL_cognition子系统详细设计.md) 现已把 replay recorder 的 `failure_samples/<category>/` 语义固定为 owner 内部 sink seam，只允许 `cognition.schema_violation`、`reflection.abort_safe`、`response.fallback_used` 三类低基数 failure corpus copy。
+  - 失败采样继续复用 GAP-P0-B 的 replay recorder/redaction 边界：只复制 request / bridge payload / result 的结构化 replay 轨迹，不旁路 raw prompt、provider-private payload 或恢复审计事实。
+- 代码结果：
+  - 更新 [cognition/src/observability/CognitionReplayTraceRecorder.h](../../cognition/src/observability/CognitionReplayTraceRecorder.h)，新增 `ReplayFailureSamplingConfig` / `ReplayFailureSampleRule`，在保持原 `replay.trace.*` 全量落盘不变的前提下，按 deterministic sample rule 将命中的 request replay corpus 复制到 `failure_samples/<category>/`。
+  - 新增 [tests/unit/cognition/CognitionFailureSamplingTest.cpp](../../tests/unit/cognition/CognitionFailureSamplingTest.cpp)，覆盖 `structured_projection.schema_violation:*`、`decision_kind=AbortSafe`、`fallback_used=true` 三类正例，以及 `sample_rate=0.0` 负例。
+  - 更新 [tests/unit/cognition/CMakeLists.txt](../../tests/unit/cognition/CMakeLists.txt) 与 [tests/unit/cognition/CognitionReplayRegressionTest.cpp](../../tests/unit/cognition/CognitionReplayRegressionTest.cpp)，注册 `CognitionFailureSamplingTest` 并显式补齐新配置字段初始化，确保 replay regression 不受采样扩展影响。
+- 验证结果：
+  - `cmake --build build-ci --target dasall_cognition_failure_sampling_unit_test dasall_cognition_replay_regression_unit_test`：通过。
+  - `ctest --test-dir build-ci -R "^(CognitionFailureSamplingTest|CognitionReplayRegressionTest)$" --output-on-failure`：通过；`100% tests passed, 0 tests failed out of 2`。
+- 结果：
+  - cognition 现在可以在保留 replay regression 全量 golden trace 的同时，额外按类别抽样沉淀失败语料，为后续离线人评与 LLM-as-judge 提供稳定输入，而不改变主链运行时 owner boundary。
+  - `WP-COG-GAP-017` 已闭合；后续 `WP-COG-GAP-018` 可直接消费 `failure_samples/` 目录下的稳定语料，不需要再重复实现 replay 分类器。
+
 #### WP-COG-GAP-018 LLM-as-judge 主链回归（GAP-P3-C）
 
 - **代码目标**：CI 离线作业，不入主路径；判官 prompt 由 LLM 子系统 release 治理。

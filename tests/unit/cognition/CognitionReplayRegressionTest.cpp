@@ -119,6 +119,7 @@ void assert_trace_matches(const fs::path& output_dir,
       .telemetry_sink = make_replay_trace_recorder(ReplayTraceRecorderConfig{
           .output_dir = output_dir.string(),
           .enabled_profile_id = std::string{kReplayProfile},
+        .failure_sampling = {},
       }),
   };
 }

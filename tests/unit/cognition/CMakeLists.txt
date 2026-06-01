@@ -353,6 +353,12 @@ dasall_add_cognition_unit_test(
 	CognitionReplayRegressionTest
 )
 
+dasall_add_cognition_unit_test(
+	dasall_cognition_failure_sampling_unit_test
+	CognitionFailureSamplingTest.cpp
+	CognitionFailureSamplingTest
+)
+
 target_link_libraries(dasall_cognition_config_projection_unit_test
 	PRIVATE
 		dasall_profiles
