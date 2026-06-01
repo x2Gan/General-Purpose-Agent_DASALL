@@ -2907,6 +2907,7 @@ constexpr std::string_view kRuntimeSkillToolPrefix = "skill.";
 struct RuntimeToolManagerComposition {
   std::shared_ptr<tools::ToolManager> tool_manager;
   std::vector<std::string> visible_tools;
+  std::vector<contracts::ToolDescriptor> available_tool_descriptors;
   bool skill_runtime_active = false;
 };
 
@@ -3082,6 +3083,10 @@ struct RuntimeSkillSurface {
       dataset_descriptor.tool_name.value_or(std::string("agent.dataset")),
       terminal_descriptor.tool_name.value_or(std::string("agent.terminal")),
   };
+    composition.available_tool_descriptors = {
+      dataset_descriptor,
+      terminal_descriptor,
+    };
 
   const std::set<std::string> available_tool_names = {
       dataset_descriptor.tool_name.value_or(std::string("agent.dataset")),
@@ -3096,6 +3101,7 @@ struct RuntimeSkillSurface {
                                              skill_surface.descriptors)) {
     composition.skill_runtime_active = true;
     for (const auto& descriptor : skill_surface.descriptors) {
+      composition.available_tool_descriptors.push_back(descriptor);
       if (descriptor.tool_name.has_value()) {
         composition.visible_tools.push_back(*descriptor.tool_name);
       }
@@ -3597,6 +3603,8 @@ RuntimeDependencyCompositionResult compose_minimal_live_dependency_set(
                       std::string(composition_owner));
   }
   dependency_set->visible_tools = tool_composition.visible_tools;
+    dependency_set->available_tool_descriptors =
+      tool_composition.available_tool_descriptors;
   dependency_set->external_evidence = {
       std::string("runtime:") + std::string(composition_owner) +
       (cognition_first_requested ? ":cognition-first-forced"

@@ -2579,6 +2579,7 @@ class CognitionFacade final : public ICognitionEngine {
     reasoning_request.goal_contract = request.goal_contract;
     reasoning_request.context_packet = request.context_packet;
     reasoning_request.belief_state = request.belief_state;
+    reasoning_request.available_tool_descriptors = request.available_tool_descriptors;
     reasoning_request.perception_result = perception;
     reasoning_request.active_plan = *active_plan_graph;
     reasoning_request.latest_observation = request.latest_observation;

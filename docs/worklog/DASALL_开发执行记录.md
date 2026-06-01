@@ -1,3 +1,41 @@
+## 记录 #869
+
+- 日期：2026-06-01
+- 阶段：cognition / tool descriptor unblock closure
+- 任务：完成 WP-COG-GAP-015 前置 BLOCK“Runtime 提供 ToolDescriptor 接入路径”
+- 状态：已完成（Runtime → Cognition ToolDescriptor 接线、focused regression 与设计回链已闭合）
+
+### 执行前提
+
+1. [docs/deliverables/COG-EVAL-2026-05-31-cognition子系统落地评估与生产级缺口治理任务规划.md](../deliverables/COG-EVAL-2026-05-31-cognition子系统落地评估与生产级缺口治理任务规划.md) 已将 `WP-COG-GAP-015` 标记为 blocked，并把唯一前置条件定义为“Reasoner 收到 ToolDescriptor 列表的 runtime 提供接入路径”。
+2. [docs/architecture/DASALL_cognition子系统详细设计.md](../architecture/DASALL_cognition子系统详细设计.md) 的 owner 边界要求 cognition 只输出 `tool_intent_hint`，不得直接生成 `ToolRequest`；因此本轮 blocker 修复只能增加 runtime→cognition 的 descriptor 透传 seam，不能把 ToolManager、ToolRegistry 或 ToolRequest authority 拉进 cognition。
+3. OpenAI Function Calling 指南强调两点：应用侧负责在每轮请求中提供当前可调用工具集合，并可用 `allowed_tools` / 较小工具子集限制模型的可调用面以提升准确率与 token 效率；本轮据此把解阻目标收敛为“runtime 提供本轮可见 ToolDescriptor 子集”，而不是让 cognition 反向枚举整个 tools owner catalog。
+
+### 改动
+
+1. 更新 [docs/architecture/DASALL_cognition子系统详细设计.md](../architecture/DASALL_cognition子系统详细设计.md)，在 Reasoner 章节补 `available_tool_descriptors` 的 additive seam，明确它只承载本轮可见工具 descriptor 子集，不提升为 ToolRequest authority。
+2. 更新 [cognition/include/CognitionTypes.h](../cognition/include/CognitionTypes.h)、[cognition/include/IReasoner.h](../cognition/include/IReasoner.h) 与 [cognition/src/CognitionFacade.cpp](../cognition/src/CognitionFacade.cpp)，让 `CognitionStepRequest` / `ReasoningRequest` 接受并透传 `available_tool_descriptors`。
+3. 更新 [runtime/include/RuntimeDependencySet.h](../runtime/include/RuntimeDependencySet.h)、[runtime/src/AgentOrchestrator.cpp](../runtime/src/AgentOrchestrator.cpp) 与 [apps/runtime_support/src/RuntimeLiveDependencyComposition.cpp](../apps/runtime_support/src/RuntimeLiveDependencyComposition.cpp)，把 live runtime composition 当前可见工具的 descriptor 集合保存到 dependency set，并在组装 cognition request 时一并下发。
+4. 更新 [tests/fixtures/runtime/CognitionRuntimeIntegrationFixture.h](../tests/fixtures/runtime/CognitionRuntimeIntegrationFixture.h)、[tests/unit/cognition/CognitionInterfaceSurfaceTest.cpp](../tests/unit/cognition/CognitionInterfaceSurfaceTest.cpp) 与 [tests/integration/cognition/CognitionRuntimeInteractionContractTest.cpp](../tests/integration/cognition/CognitionRuntimeInteractionContractTest.cpp)，固定公共 surface 类型与 runtime→cognition descriptor 投影合同。
+5. 更新 [docs/deliverables/COG-EVAL-2026-05-31-cognition子系统落地评估与生产级缺口治理任务规划.md](../deliverables/COG-EVAL-2026-05-31-cognition子系统落地评估与生产级缺口治理任务规划.md)，回写 `WP-COG-GAP-015` 的 blocker closeout 与 focused regression 证据。
+
+### 验证
+
+1. `Build_CMakeTools(buildTargets=["dasall_cognition_interface_surface_unit_test","dasall_runtime_agent_orchestrator_controller_assembly_unit_test"])`
+   - 结果：通过。
+2. `RunCtest_CMakeTools(tests=["CognitionInterfaceSurfaceTest","AgentOrchestratorControllerAssemblyTest"])`
+   - 结果：通过；`100% tests passed, 0 tests failed out of 2`。
+3. `Build_CMakeTools(buildTargets=["dasall_cognition_runtime_interaction_contract_integration_test","dasall_cognition_interface_surface_unit_test"])`
+   - 结果：通过。
+4. `RunCtest_CMakeTools(tests=["CognitionRuntimeInteractionContractTest","CognitionInterfaceSurfaceTest"])`
+   - 结果：通过；`100% tests passed, 0 tests failed out of 2`。
+
+### 结果
+
+1. runtime 现在能够把与 `visible_tools` 同步的 `ToolDescriptor` 子集送入 `CognitionStepRequest` / `ReasoningRequest`，不再只有 tool name 字符串可用。
+2. cognition 仍保持现有 owner 边界：只消费 descriptor 做候选筛选与 explainability，仍只向 Runtime 输出 `tool_intent_hint`，不会直接生成 `ToolRequest` 或越界触达 ToolManager。
+3. `WP-COG-GAP-015` 的 blocker 已闭合；下一轮可以直接在 Reasoner / DecisionProjector 上实现 top-K 候选预筛与 `ReasonerToolCandidateFilteringTest`，无需再补 runtime catalog 接线。
+
 ## 记录 #868
 
 - 日期：2026-06-01

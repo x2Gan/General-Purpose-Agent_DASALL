@@ -6,6 +6,7 @@
 #include "CognitionTypes.h"
 #include "perception/PerceptionResult.h"
 #include "plan/PlanGraph.h"
+#include "tool/ToolDescriptor.h"
 
 namespace dasall::cognition {
 
@@ -17,6 +18,7 @@ struct ReasoningRequest {
   contracts::GoalContract goal_contract;
   contracts::ContextPacket context_packet;
   contracts::BeliefState belief_state;
+  std::vector<contracts::ToolDescriptor> available_tool_descriptors;
   perception::PerceptionResult perception_result;
   plan::PlanGraph active_plan;
   std::optional<contracts::Observation> latest_observation;

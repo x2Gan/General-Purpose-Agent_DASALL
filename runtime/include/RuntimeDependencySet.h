@@ -8,6 +8,7 @@
 
 #include "checkpoint/Checkpoint.h"
 #include "session/SessionTypes.h"
+#include "tool/ToolDescriptor.h"
 
 namespace dasall::cognition {
 
@@ -180,6 +181,7 @@ class RuntimeDependencySet final {
   std::shared_ptr<BackgroundMaintenanceHooks> background_maintenance_hooks;
   std::vector<std::shared_ptr<infra::IHealthProbe>> health_probes;
   std::vector<std::string> visible_tools;
+  std::vector<contracts::ToolDescriptor> available_tool_descriptors;
   std::vector<std::string> external_evidence;
 
   [[nodiscard]] bool has_live_unary_ports() const {

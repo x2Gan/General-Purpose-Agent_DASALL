@@ -380,6 +380,8 @@ void test_decide_and_reflect_request_result_family_freezes_fields() {
   static_assert(std::is_same_v<decltype(CognitionStepRequest{}.goal_contract), GoalContract>);
   static_assert(std::is_same_v<decltype(CognitionStepRequest{}.context_packet), ContextPacket>);
   static_assert(std::is_same_v<decltype(CognitionStepRequest{}.belief_state), BeliefState>);
+  static_assert(std::is_same_v<decltype(CognitionStepRequest{}.available_tool_descriptors),
+                               std::vector<dasall::contracts::ToolDescriptor>>);
   static_assert(std::is_same_v<decltype(CognitionStepRequest{}.latest_observation),
                                std::optional<Observation>>);
   static_assert(std::is_same_v<decltype(CognitionStepRequest{}.budget_context),
@@ -670,6 +672,8 @@ void test_stage_component_headers_freeze_public_interfaces() {
   static_assert(std::is_same_v<decltype(ReasoningRequest{}.goal_contract), GoalContract>);
   static_assert(std::is_same_v<decltype(ReasoningRequest{}.context_packet), ContextPacket>);
   static_assert(std::is_same_v<decltype(ReasoningRequest{}.belief_state), BeliefState>);
+  static_assert(std::is_same_v<decltype(ReasoningRequest{}.available_tool_descriptors),
+                               std::vector<dasall::contracts::ToolDescriptor>>);
   static_assert(std::is_same_v<decltype(ReasoningRequest{}.perception_result),
                                PerceptionResult>);
   static_assert(std::is_same_v<decltype(ReasoningRequest{}.active_plan), PlanGraph>);

@@ -1453,6 +1453,8 @@ void append_retrieval_evidence_ref(
       .created_at = current_time_ms(),
       .tags = std::vector<std::string>{"runtime", "cognition", "true-integration"},
   };
+    cognition_request.available_tool_descriptors =
+      composition.dependency_set->available_tool_descriptors;
   cognition_request.budget_context = cognition::BudgetContext{
       .total_budget_tokens = budget_value(runtime_budget.max_tokens, 2048U),
       .consumed_tokens = 0U,

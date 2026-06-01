@@ -12,6 +12,7 @@
 #include "error/ErrorInfo.h"
 #include "error/ResultCode.h"
 #include "observation/Observation.h"
+#include "tool/ToolDescriptor.h"
 
 #include "belief/BeliefUpdateHint.h"
 #include "decision/ActionDecision.h"
@@ -71,6 +72,7 @@ struct CognitionStepRequest {
   contracts::GoalContract goal_contract;
   contracts::ContextPacket context_packet;
   contracts::BeliefState belief_state;
+  std::vector<contracts::ToolDescriptor> available_tool_descriptors;
   std::optional<contracts::Observation> latest_observation;
   std::optional<BudgetContext> budget_context;
   StageExecutionHints execution_hints;

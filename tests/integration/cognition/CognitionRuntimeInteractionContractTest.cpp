@@ -905,6 +905,17 @@ void test_belief_writeback_failure_does_not_override_completed_result() {
             "structured execute action should keep task_completed=true");
       assert_true(structured_engine->decide_calls == 1,
             "runtime should consume the projected ActionDecision through the real decide path");
+      assert_true(structured_engine->last_decide_request.has_value(),
+        "runtime should retain the projected cognition step request for contract inspection");
+      bool has_dataset_descriptor = false;
+      for (const auto& descriptor : structured_engine->last_decide_request->available_tool_descriptors) {
+        if (descriptor.tool_name == std::optional<std::string>{"agent.dataset"}) {
+          has_dataset_descriptor = true;
+          break;
+        }
+      }
+      assert_true(has_dataset_descriptor,
+        "runtime should project visible tool descriptors into CognitionStepRequest");
       assert_true(structured_engine->reflect_calls == 1,
             "execute action path should re-enter reflection exactly once after the tool hop");
       assert_true(contract_tool_manager->invoke_calls == 1,

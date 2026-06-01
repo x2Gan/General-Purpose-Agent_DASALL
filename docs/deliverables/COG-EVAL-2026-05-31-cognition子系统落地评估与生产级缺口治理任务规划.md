@@ -593,6 +593,24 @@
   - `ctest --test-dir build-ci -R "ReasonerToolCandidateFilteringTest" --output-on-failure`
 - **阻塞 / 解阻**：依赖 ToolDescriptor 接入路径（Runtime 提供）。
 
+**BLOCK Closeout（2026-06-01）**
+
+- 状态：已完成（Runtime → Cognition ToolDescriptor 接线、focused regression 与设计回链已闭合；`WP-COG-GAP-015` 从 blocked 转为可执行）。
+- 设计回链：
+  - [docs/architecture/DASALL_cognition子系统详细设计.md](../architecture/DASALL_cognition子系统详细设计.md) 已补 `ReasoningRequest.available_tool_descriptors` 的 additive seam，明确该字段只承载本轮可见工具 descriptor 子集，服务 cognition owner 内的候选筛选与 explainability，不提升为 ToolRequest authority。
+- 代码结果：
+  - 更新 [cognition/include/CognitionTypes.h](../../cognition/include/CognitionTypes.h)、[cognition/include/IReasoner.h](../../cognition/include/IReasoner.h) 与 [cognition/src/CognitionFacade.cpp](../../cognition/src/CognitionFacade.cpp)，让 `CognitionStepRequest` / `ReasoningRequest` 接受并透传 `available_tool_descriptors`。
+  - 更新 [runtime/include/RuntimeDependencySet.h](../../runtime/include/RuntimeDependencySet.h)、[runtime/src/AgentOrchestrator.cpp](../../runtime/src/AgentOrchestrator.cpp) 与 [apps/runtime_support/src/RuntimeLiveDependencyComposition.cpp](../../apps/runtime_support/src/RuntimeLiveDependencyComposition.cpp)，让 live runtime composition 收集当前可见工具的 descriptor 集合，并在运行时请求组装时一并送入 cognition。
+  - 更新 [tests/fixtures/runtime/CognitionRuntimeIntegrationFixture.h](../../tests/fixtures/runtime/CognitionRuntimeIntegrationFixture.h)、[tests/unit/cognition/CognitionInterfaceSurfaceTest.cpp](../../tests/unit/cognition/CognitionInterfaceSurfaceTest.cpp) 与 [tests/integration/cognition/CognitionRuntimeInteractionContractTest.cpp](../../tests/integration/cognition/CognitionRuntimeInteractionContractTest.cpp)，固定公共 surface 与 runtime→cognition descriptor 投影合同。
+- 验证结果：
+  - `Build_CMakeTools(buildTargets=["dasall_cognition_interface_surface_unit_test","dasall_runtime_agent_orchestrator_controller_assembly_unit_test"])`：通过。
+  - `RunCtest_CMakeTools(tests=["CognitionInterfaceSurfaceTest","AgentOrchestratorControllerAssemblyTest"])`：通过；`100% tests passed, 0 tests failed out of 2`。
+  - `Build_CMakeTools(buildTargets=["dasall_cognition_runtime_interaction_contract_integration_test","dasall_cognition_interface_surface_unit_test"])`：通过。
+  - `RunCtest_CMakeTools(tests=["CognitionRuntimeInteractionContractTest","CognitionInterfaceSurfaceTest"])`：通过；`100% tests passed, 0 tests failed out of 2`。
+- 结果：
+  - runtime 现在不再只向 cognition 暴露 `visible_tools` 名字列表，而是同步提供与本轮可见工具面一致的 `ToolDescriptor` 集合。
+  - `WP-COG-GAP-015` 后续可以直接在现有 Reasoner / DecisionProjector seam 上实现 top-K 候选预筛，而不需要先补新的 runtime/tool catalog 基础设施。
+
 ### 7.4 P3 任务（运营/演进/安全）
 
 #### WP-COG-GAP-016 入口 PII / injection 扫描信号（GAP-P3-A）
