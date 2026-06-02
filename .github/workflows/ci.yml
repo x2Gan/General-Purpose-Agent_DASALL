@@ -31,3 +31,19 @@ jobs:
 
       - name: Static checks
         run: bash scripts/ci/static_check.sh
+
+  memory_tsan_stress:
+    runs-on: ubuntu-22.04
+    env:
+      CMAKE_GENERATOR: Ninja
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install build tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake ninja-build g++
+
+      - name: Run memory_tsan_stress
+        run: bash scripts/ci/memory_tsan_stress.sh

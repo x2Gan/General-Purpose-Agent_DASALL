@@ -1,3 +1,41 @@
+## 记录 #877
+
+- 日期：2026-06-02
+- 阶段：memory / concurrency soak tsan gate closure
+- 任务：完成 WP-MEM-GAP-003“Memory 并发 / 长跑压力门（GAP-P0-C）”
+- 状态：已完成（并发 stress、长跑 soak、TSAN green、CI 入口与文档回写已闭合）
+
+### 执行前提
+
+1. [docs/deliverables/MEM-EVAL-2026-05-31-memory子系统落地评估与生产级缺口治理任务规划.md](../deliverables/MEM-EVAL-2026-05-31-memory子系统落地评估与生产级缺口治理任务规划.md) 已将 `WP-MEM-GAP-003` 固定为“Memory 并发 / 长跑压力门”，但当前树此前只有 [tests/unit/memory/WorkingMemoryBoardConcurrencyTest.cpp](../../tests/unit/memory/WorkingMemoryBoardConcurrencyTest.cpp) 与 [tests/unit/memory/SqliteMemoryStoreConcurrencyTest.cpp](../../tests/unit/memory/SqliteMemoryStoreConcurrencyTest.cpp) 这类点测，缺 manager 级 stress / soak / TSAN 证据。
+2. 本轮同回合发现仓库缺少 `tsan` preset，如果不先补 [CMakePresets.json](../../CMakePresets.json) 与统一执行入口，就无法按规划里的 `cmake --preset tsan` 口径完成验收。
+3. 首轮 `memory_tsan_stress` 复跑暴露的报告停在 SQLite WAL shared-memory header 读取链，而不是 [memory/src](../../memory/src)；本轮必须把第三方 SQLite 假阳性与 Memory owner 并发缺口分开处理，不能用宽 suppression 掩盖 Memory 自身栈帧。
+
+### 改动
+
+1. 新增 [tests/unit/memory/MemoryConcurrencyStressTest.cpp](../../tests/unit/memory/MemoryConcurrencyStressTest.cpp) 与 [tests/integration/memory/MemoryLongRunningSoakTest.cpp](../../tests/integration/memory/MemoryLongRunningSoakTest.cpp)，并更新 [tests/unit/memory/CMakeLists.txt](../../tests/unit/memory/CMakeLists.txt) 与 [tests/integration/memory/CMakeLists.txt](../../tests/integration/memory/CMakeLists.txt)：manager 级 1k+ 轮并发压力门、压缩长跑 soak 门现已纳入 CTest。
+2. 更新 [CMakePresets.json](../../CMakePresets.json)、新增 [scripts/ci/memory_tsan_stress.sh](../../scripts/ci/memory_tsan_stress.sh) 与 [scripts/ci/memory_tsan.supp](../../scripts/ci/memory_tsan.supp)，并修改 [.github/workflows/ci.yml](../../.github/workflows/ci.yml)：仓库现提供统一 `memory_tsan_stress` CI job / 手工复验脚本；SQLite WAL shared-memory 假阳性被收口到 4 个 SQLite 函数名的窄 suppression，不覆盖 `memory/src/*`。
+3. 新增 [docs/todos/memory/deliverables/WP-MEM-GAP-003-concurrency-soak-closeout.md](../todos/memory/deliverables/WP-MEM-GAP-003-concurrency-soak-closeout.md)，并回写 [docs/deliverables/MEM-EVAL-2026-05-31-memory子系统落地评估与生产级缺口治理任务规划.md](../deliverables/MEM-EVAL-2026-05-31-memory子系统落地评估与生产级缺口治理任务规划.md) 与 [docs/todos/DASALL_子系统查漏补缺专项记录.md](../todos/DASALL_子系统查漏补缺专项记录.md)，把 `GAP-P0-C / WP-MEM-GAP-003` 从规划态更新为已闭合状态。
+
+### 验证
+
+1. `Build_CMakeTools(buildTargets=["dasall_memory_concurrency_stress_unit_test"])`
+   - 结果：通过。
+2. `RunCtest_CMakeTools(tests=["MemoryConcurrencyStressTest"])`
+   - 结果：通过。
+3. `Build_CMakeTools(buildTargets=["dasall_memory_long_running_soak_integration_test"])`
+   - 结果：通过。
+4. `RunCtest_CMakeTools(tests=["MemoryLongRunningSoakTest"])`
+   - 结果：通过。
+5. `bash scripts/ci/memory_tsan_stress.sh`
+   - 结果：通过；`MemoryConcurrencyStressTest` 与 `MemoryLongRunningSoakTest` 在 `tsan` preset 下 `100% tests passed, 0 tests failed out of 2`。
+
+### 结果
+
+1. `WP-MEM-GAP-003 / GAP-P0-C` 已闭合；Memory 现同时具备 manager 级并发压力门、压缩长跑 soak 门与统一 TSAN green 入口。
+2. 本轮把 TSAN 噪声严格限定在 SQLite WAL 共享内存 vendor 路径；后续若 TSAN 栈进入 [memory/src](../../memory/src)，应直接重新打开 Memory 并发缺口，而不是复用本轮 suppression。
+3. Memory 当前剩余高优先级焦点转为 `WP-MEM-GAP-004 / GAP-P0-D` installed / qemu gate；并发 / 长跑 / TSAN 已不再阻塞 P0 收敛。
+
 ## 记录 #876
 
 - 日期：2026-06-02

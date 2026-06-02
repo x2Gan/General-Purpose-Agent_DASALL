@@ -103,6 +103,13 @@ dasall_add_memory_integration_test(
   "integration;memory"
 )
 
+dasall_add_memory_integration_test(
+  dasall_memory_long_running_soak_integration_test
+  MemoryLongRunningSoakTest
+  MemoryLongRunningSoakTest.cpp
+  "integration;memory;stress"
+)
+
 target_link_libraries(dasall_memory_context_assemble_integration_test
   PRIVATE
     dasall_sqlite3
@@ -159,6 +166,11 @@ target_link_libraries(dasall_memory_checkpoint_busy_integration_test
     dasall_sqlite3
 )
 
+target_link_libraries(dasall_memory_long_running_soak_integration_test
+  PRIVATE
+    dasall_sqlite3
+)
+
 target_include_directories(dasall_memory_writeback_integration_test
   PRIVATE
     ${CMAKE_SOURCE_DIR}/memory/src
@@ -202,6 +214,11 @@ target_include_directories(dasall_memory_compression_llm_summarizer_integration_
 )
 
 target_include_directories(dasall_memory_checkpoint_busy_integration_test
+  PRIVATE
+    ${CMAKE_SOURCE_DIR}/memory/src
+)
+
+target_include_directories(dasall_memory_long_running_soak_integration_test
   PRIVATE
     ${CMAKE_SOURCE_DIR}/memory/src
 )
@@ -250,6 +267,13 @@ target_compile_definitions(dasall_memory_checkpoint_busy_integration_test
   PRIVATE
     DASALL_SQL_MEMORY_DIR="${CMAKE_SOURCE_DIR}/sql/memory"
 )
+
+target_compile_definitions(dasall_memory_long_running_soak_integration_test
+  PRIVATE
+    DASALL_SQL_MEMORY_DIR="${CMAKE_SOURCE_DIR}/sql/memory"
+)
+
+set_tests_properties(MemoryLongRunningSoakTest PROPERTIES TIMEOUT 180)
 
 if(NOT DASALL_MEMORY_INTEGRATION_TEST_EXECUTABLE_TARGETS)
   message(FATAL_ERROR "memory integration registration requires at least one test target")

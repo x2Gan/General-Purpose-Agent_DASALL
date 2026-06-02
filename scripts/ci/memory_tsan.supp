@@ -1,0 +1,6 @@
+# SQLite WAL shared-memory headers intentionally use lock-free cross-process
+# publication patterns that TSAN reports as races under stress runs.
+race:walTryBeginRead
+race:walIndexReadHdr
+race:walIndexTryHdr
+race:walIndexWriteHdr

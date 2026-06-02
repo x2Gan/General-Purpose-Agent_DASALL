@@ -58,6 +58,10 @@ add_executable(dasall_memory_sqlite_store_concurrency_unit_test
 	SqliteMemoryStoreConcurrencyTest.cpp
 )
 
+add_executable(dasall_memory_concurrency_stress_unit_test
+	MemoryConcurrencyStressTest.cpp
+)
+
 add_executable(dasall_memory_candidate_collector_unit_test
 	CandidateCollectorTest.cpp
 )
@@ -228,6 +232,13 @@ target_link_libraries(dasall_memory_sqlite_version_gate_unit_test
 )
 
 target_link_libraries(dasall_memory_sqlite_store_concurrency_unit_test
+	PRIVATE
+		dasall_memory
+		dasall_sqlite3
+		dasall_test_support
+)
+
+target_link_libraries(dasall_memory_concurrency_stress_unit_test
 	PRIVATE
 		dasall_memory
 		dasall_sqlite3
@@ -408,6 +419,11 @@ target_include_directories(dasall_memory_sqlite_store_concurrency_unit_test
 		${CMAKE_SOURCE_DIR}/memory/src
 )
 
+target_include_directories(dasall_memory_concurrency_stress_unit_test
+	PRIVATE
+		${CMAKE_SOURCE_DIR}/memory/src
+)
+
 target_include_directories(dasall_memory_candidate_collector_unit_test
 	PRIVATE
 		${CMAKE_SOURCE_DIR}/memory/src
@@ -535,6 +551,11 @@ target_compile_definitions(dasall_memory_sqlite_store_concurrency_unit_test
 		DASALL_SQL_MEMORY_DIR="${CMAKE_SOURCE_DIR}/sql/memory"
 )
 
+target_compile_definitions(dasall_memory_concurrency_stress_unit_test
+	PRIVATE
+		DASALL_SQL_MEMORY_DIR="${CMAKE_SOURCE_DIR}/sql/memory"
+)
+
 target_compile_definitions(dasall_memory_interface_compile_unit_test
 	PRIVATE
 		DASALL_MEMORY_PUBLIC_INCLUDE_DIR="${CMAKE_SOURCE_DIR}/memory/include"
@@ -581,6 +602,7 @@ dasall_apply_common_options(dasall_memory_sqlite_transaction_unit_test)
 dasall_apply_common_options(dasall_memory_sqlite_store_unit_test)
 dasall_apply_common_options(dasall_memory_sqlite_version_gate_unit_test)
 dasall_apply_common_options(dasall_memory_sqlite_store_concurrency_unit_test)
+dasall_apply_common_options(dasall_memory_concurrency_stress_unit_test)
 dasall_apply_common_options(dasall_memory_candidate_collector_unit_test)
 dasall_apply_common_options(dasall_memory_candidate_collector_vector_off_unit_test)
 dasall_apply_common_options(dasall_memory_budget_allocator_unit_test)
@@ -646,6 +668,9 @@ set_tests_properties(SqliteVersionGateTest PROPERTIES LABELS "unit;memory")
 
 add_test(NAME SqliteMemoryStoreConcurrencyTest COMMAND dasall_memory_sqlite_store_concurrency_unit_test)
 set_tests_properties(SqliteMemoryStoreConcurrencyTest PROPERTIES LABELS "unit;memory")
+
+add_test(NAME MemoryConcurrencyStressTest COMMAND dasall_memory_concurrency_stress_unit_test)
+set_tests_properties(MemoryConcurrencyStressTest PROPERTIES LABELS "unit;memory;stress" TIMEOUT 180)
 
 add_test(NAME CandidateCollectorTest COMMAND dasall_memory_candidate_collector_unit_test)
 set_tests_properties(CandidateCollectorTest PROPERTIES LABELS "unit;memory")
@@ -722,6 +747,7 @@ set(DASALL_MEMORY_UNIT_TEST_EXECUTABLE_TARGETS
 	dasall_memory_sqlite_transaction_unit_test
 	dasall_memory_sqlite_store_unit_test
 	dasall_memory_sqlite_version_gate_unit_test
+	dasall_memory_concurrency_stress_unit_test
 	dasall_memory_candidate_collector_unit_test
 	dasall_memory_candidate_collector_vector_off_unit_test
 	dasall_memory_budget_allocator_unit_test

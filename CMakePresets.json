@@ -17,6 +17,22 @@
         "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
         "DASALL_ENABLE_TESTS": "ON"
       }
+    },
+    {
+      "name": "tsan",
+      "displayName": "ThreadSanitizer",
+      "description": "TSAN-enabled preset for concurrency stress validation.",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/tsan",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+        "DASALL_ENABLE_TESTS": "ON",
+        "CMAKE_C_FLAGS": "-O1 -g -fsanitize=thread -fno-omit-frame-pointer",
+        "CMAKE_CXX_FLAGS": "-O1 -g -fsanitize=thread -fno-omit-frame-pointer",
+        "CMAKE_EXE_LINKER_FLAGS": "-fsanitize=thread",
+        "CMAKE_SHARED_LINKER_FLAGS": "-fsanitize=thread"
+      }
     }
   ],
   "buildPresets": [
@@ -24,6 +40,11 @@
       "name": "vscode-linux-ninja",
       "displayName": "Build With VS Code Linux Ninja",
       "configurePreset": "vscode-linux-ninja"
+    },
+    {
+      "name": "tsan",
+      "displayName": "Build With ThreadSanitizer",
+      "configurePreset": "tsan"
     }
   ],
   "testPresets": [
@@ -31,6 +52,14 @@
       "name": "vscode-linux-ninja",
       "displayName": "Test With VS Code Linux Ninja",
       "configurePreset": "vscode-linux-ninja",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "tsan",
+      "displayName": "Test With ThreadSanitizer",
+      "configurePreset": "tsan",
       "output": {
         "outputOnFailure": true
       }

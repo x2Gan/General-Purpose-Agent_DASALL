@@ -115,7 +115,7 @@
 | §4.1.1 / CrewAI 对齐 composite scoring | CandidateCollector 评分仅 confidence + recency 阈值 | 候选评分维度单一，影响 BudgetAllocator 选择质量 | GAP-P2-D（MEM-E03） |
 | §6.5.1a ProgrammaticMemory | 完全空白，仅 asset ref 字段冻结 | 设计已声明 MEM-E06 后置，依赖 llm 资产治理 | GAP-P3-A（MEM-E06） |
 | §6.6 接口数量 | `IFactStore` / `IExperienceStore` / `ISessionStore` / `ISummaryStore` / `IMaintenanceStore` / `ITransactionalStore` 6 个 mini-interface 全部由 `SqliteMemoryStore` 单类实现 | 与 §6.6 决策"逻辑职责保留 + 实现统一"一致，但接口数量略冗余 | GAP-P3-B（设计冗余清理） |
-| 长跑 / 并发 / soak 证据 | 单测 `WorkingMemoryBoardConcurrencyTest` / `SqliteMemoryStoreConcurrencyTest` 覆盖；**无 1k+ 轮长跑压测、无 TSAN preset 复跑** | RT-GATE 与 MEM-G 系列二值证据未闭环 | GAP-P0-C |
+| 长跑 / 并发 / soak 证据 | 已通过 [tests/unit/memory/MemoryConcurrencyStressTest.cpp](../../tests/unit/memory/MemoryConcurrencyStressTest.cpp) 1k+ 轮 manager 并发压力、[tests/integration/memory/MemoryLongRunningSoakTest.cpp](../../tests/integration/memory/MemoryLongRunningSoakTest.cpp) 压缩长跑 soak，以及 [scripts/ci/memory_tsan_stress.sh](../../scripts/ci/memory_tsan_stress.sh) / [.github/workflows/ci.yml](../../.github/workflows/ci.yml) 的 `memory_tsan_stress` 复跑 | 结构性缺口已清零；后续只保留 installed / qemu 与更高层 release-soak 采样 | GAP-P0-C 已闭合（2026-06-02） |
 | installed package gate | 已有 `MemoryMaintenanceProofRunner.cpp` + `RuntimeInstalledProofRunner.cpp` 给到 daemon 侧，但**memory 维度的 installed-evidence 文档未集中归档** | 与 access / runtime 风格不完全对齐 | GAP-P1-C |
 
 ### 3.3 设计声明但代码层未显性兑现（按设计后置 / 半显性）
@@ -193,10 +193,10 @@
   - 边界说明：deliverable 草案原写法是把 `LLMBackedEmbeddingAdapter` 放进 llm 模块，但 [tests/unit/llm/LLMBoundaryGuardComplianceTest.cpp](../../tests/unit/llm/LLMBoundaryGuardComplianceTest.cpp) 已禁止 llm include / link memory；因此 concrete 实现实际落在 runtime_support，llm 继续只暴露 transport / provider / secret public SPI。
   - 验证证据：`LLMBackedEmbeddingAdapterCompileTest`、`MemoryVectorRecallQualityTest` 已通过。
 
-- **GAP-P0-C 并发 / 长跑压力门 MEM-G**
-  - 现状：仅 `WorkingMemoryBoardConcurrencyTest` / `SqliteMemoryStoreConcurrencyTest` 单测；无 1k+ 轮长跑、无 TSAN preset 复跑。
-  - 风险：WritebackCoordinator + MaintenanceWorker + ContextOrchestrator 三线程并发证据缺失；锁顺序违例不可检测。
-  - 必要条件：复用 runtime GAP-P0-C 的 TSAN preset 基础设施。
+- **GAP-P0-C 并发 / 长跑压力门 MEM-G**（已闭合，2026-06-02）
+  - 完成情况：已新增 [tests/unit/memory/MemoryConcurrencyStressTest.cpp](../../tests/unit/memory/MemoryConcurrencyStressTest.cpp) 与 [tests/integration/memory/MemoryLongRunningSoakTest.cpp](../../tests/integration/memory/MemoryLongRunningSoakTest.cpp)，并分别接入 [tests/unit/memory/CMakeLists.txt](../../tests/unit/memory/CMakeLists.txt) 与 [tests/integration/memory/CMakeLists.txt](../../tests/integration/memory/CMakeLists.txt)；[CMakePresets.json](../../CMakePresets.json) 已补 `tsan` presets；[scripts/ci/memory_tsan_stress.sh](../../scripts/ci/memory_tsan_stress.sh)、[scripts/ci/memory_tsan.supp](../../scripts/ci/memory_tsan.supp) 与 [.github/workflows/ci.yml](../../.github/workflows/ci.yml) 已形成统一 `memory_tsan_stress` 入口。
+  - TSAN 说明：首轮 TSAN 报告停在 SQLite WAL shared-memory header 读取链（`walTryBeginRead` / `walIndexReadHdr`），与 SQLite 3.51.3 源码对该路径的 false-positive 注释一致；本轮仅以 `memory_tsan.supp` 窄 suppression 固定第三方噪声，不覆盖任何 `memory/src/*` 栈帧。
+  - 验证证据：`MemoryConcurrencyStressTest`、`MemoryLongRunningSoakTest` build-tree 直跑通过；`bash scripts/ci/memory_tsan_stress.sh` 复跑结果为 `100% tests passed, 0 tests failed out of 2`。
 
 - **GAP-P0-D Memory installed / qemu gate**
   - 现状：[MemoryMaintenanceProofRunner.cpp](../../apps/daemon/src/MemoryMaintenanceProofRunner.cpp) 已存在，但 memory 维度 installed-evidence 未集中归档；与 access / runtime 已有 gate 不对齐。
@@ -279,16 +279,22 @@
 
 #### WP-MEM-GAP-003 Memory 并发 / 长跑压力门（GAP-P0-C）
 
-- **代码目标**
-  - 新增 `tests/unit/memory/MemoryConcurrencyStressTest.cpp`：1k+ 轮 prepare_context + write_back + run_maintenance 三线程并发；锁顺序断言。
-  - 新增 `tests/integration/memory/MemoryLongRunningSoakTest.cpp`：模拟 24h 压缩窗口缩到 5 min，验证 WAL 增长 / quarantine / retention 不爆。
-  - CI 加 `memory_tsan_stress` 任务（复用 runtime GAP-P0-C 的 TSAN preset）。
-- **测试目标**
-  - `MemoryConcurrencyStressTest`、`MemoryLongRunningSoakTest`；TSAN preset 内同样目标全绿。
-- **验收命令**
-  - `ctest --test-dir build-ci -R "MemoryConcurrencyStress|MemoryLongRunningSoak" --output-on-failure`
-  - `cmake --preset tsan && ctest --preset tsan -R "Memory"`
-- **阻塞 / 解阻**：依赖 profiles 内 tsan preset（runtime GAP-P0-C 提供）。
+- **状态**：已完成（2026-06-02）。
+- **代码结果**
+  - [tests/unit/memory/MemoryConcurrencyStressTest.cpp](../../tests/unit/memory/MemoryConcurrencyStressTest.cpp) 已新增 manager 级 1k+ 轮并发压力门，覆盖 `prepare_context()` / `write_back()` / `run_maintenance()` 三线程交错，并通过 [tests/unit/memory/CMakeLists.txt](../../tests/unit/memory/CMakeLists.txt) 注册 `MemoryConcurrencyStressTest`。
+  - [tests/integration/memory/MemoryLongRunningSoakTest.cpp](../../tests/integration/memory/MemoryLongRunningSoakTest.cpp) 已新增压缩长跑 soak，用批量写回 + maintenance 循环验证 WAL 增长、checkpoint、retention 与 quarantine cleanup，并通过 [tests/integration/memory/CMakeLists.txt](../../tests/integration/memory/CMakeLists.txt) 注册 `MemoryLongRunningSoakTest`。
+  - [CMakePresets.json](../../CMakePresets.json)、[scripts/ci/memory_tsan_stress.sh](../../scripts/ci/memory_tsan_stress.sh)、[scripts/ci/memory_tsan.supp](../../scripts/ci/memory_tsan.supp) 与 [.github/workflows/ci.yml](../../.github/workflows/ci.yml) 已补齐 `tsan` preset、CI job 与统一脚本入口，同名 `memory_tsan_stress` 现复用同一条命令链。
+- **测试结果**
+  - `MemoryConcurrencyStressTest` 已证明 shared writer mutex wiring、并发 `prepare_context()` 与 manager 级 writeback / maintenance 交错路径稳定。
+  - `MemoryLongRunningSoakTest` 已证明压缩长跑下 checkpoint 确实执行、retention / quarantine cleanup 生效，且 WAL 尺寸保持在约束上界内。
+  - 首轮 TSAN 复跑暴露的报告停在 SQLite WAL shared-memory header 读取链，不属于 Memory owner 锁序；本轮以 [scripts/ci/memory_tsan.supp](../../scripts/ci/memory_tsan.supp) 仅匹配 `walTryBeginRead` / `walIndexReadHdr` / `walIndexTryHdr` / `walIndexWriteHdr` 四个 SQLite 函数名，未扩大到 `memory/src/*`。
+- **验收证据**
+  - `Build_CMakeTools(buildTargets=["dasall_memory_concurrency_stress_unit_test"])`：通过。
+  - `RunCtest_CMakeTools(tests=["MemoryConcurrencyStressTest"])`：通过。
+  - `Build_CMakeTools(buildTargets=["dasall_memory_long_running_soak_integration_test"])`：通过。
+  - `RunCtest_CMakeTools(tests=["MemoryLongRunningSoakTest"])`：通过。
+  - `bash scripts/ci/memory_tsan_stress.sh`：通过，`100% tests passed, 0 tests failed out of 2`。
+- **阻塞 / 解阻**：已解阻。本轮同回合补齐 `tsan` preset；随后把 SQLite WAL 共享内存假阳性收口到窄 suppression 文件，未改写 Memory owner 语义。
 
 #### WP-MEM-GAP-004 Memory installed / qemu gate（GAP-P0-D）
 
@@ -469,7 +475,7 @@ flowchart LR
 ```
 
 执行建议：
-1. **第一批并发（P0 启动）**：WP-MEM-GAP-001 / -002 / -003 / -004 互相低耦合，可并行启动；其中 -001 / -002 与 LLM-EVAL 中 LLM 子系统对接任务联动。
+1. **剩余 P0**：WP-MEM-GAP-004 继续单独推进；WP-MEM-GAP-001 / -002 / -003 已于 2026-06-02 闭合。
 2. **第二批（P1）**：WP-MEM-GAP-005 / -006 / -007 / -008；其中 -006 与 runtime GAP-P1-A 联动落地。
 3. **第三批（P2 演进）**：WP-MEM-GAP-009 ← -002；WP-MEM-GAP-010 / -011 / -012 / -013（链式依赖）。
 4. **第四批（P3 清理与运营）**：WP-MEM-GAP-014 ← llm 资产；WP-MEM-GAP-015 / -016 / -017；WP-MEM-GAP-018 在 P0/P1 全部 Done 后执行。
@@ -506,7 +512,7 @@ memory 子系统已达到 **可生产部署 v1** 水位：架构 / 详设目标 
 
 距离 **GA 生产级** 的真实缺口集中在两个象限：
 1. **质量层**：`GAP-P0-A` 与 `GAP-P0-B` 已于 2026-06-02 闭合，生产侧 LLM-backed Summarizer 与外部 Embedding service 均已进入 live composition；当前剩余关键质量缺口转为跨 session FactQuery、token 估算、ConflictResolver 向量辅助与后续 scoring / retention 治理。
-2. **运营层**：并发 / 长跑证据（GAP-P0-C）、installed gate（GAP-P0-D）、生产 ticker（GAP-P1-B）、soak 采样（GAP-P3-E）需逐步收敛。
+2. **运营层**：并发 / 长跑 / TSAN 压力门（GAP-P0-C）已于 2026-06-02 通过 build-tree + TSAN 证据闭合；当前剩余运营焦点是 installed gate（GAP-P0-D）、生产 ticker（GAP-P1-B）与更高层 soak 采样（GAP-P3-E）。
 
 其余 P2 / P3 缺口（MEM-E02..E09）为设计文档已显式声明的演进项，不属于实现缺陷。GA 收敛优先级建议：**剩余 P0 两项 → P1 四项 → P2 链式 → P3 选择性**。
 
@@ -530,7 +536,7 @@ memory 子系统已达到 **可生产部署 v1** 水位：架构 / 详设目标 
 |---|---|---|
 | V1 | WP-MEM-GAP-001 | LLM-backed Summarizer 注入（生产装配，已完成 2026-06-02） |
 | V1 | WP-MEM-GAP-002 | 外部 Embedding Service 注入（生产装配，已完成 2026-06-02） |
-| V1 | WP-MEM-GAP-003 | 并发 / 长跑压力门 + TSAN |
+| V1 | WP-MEM-GAP-003 | 并发 / 长跑压力门 + TSAN（已完成 2026-06-02） |
 | V1 | WP-MEM-GAP-004 | Memory installed / qemu gate |
 | V1 | WP-MEM-GAP-005 | tiktoken token 估算 |
 | V1 | WP-MEM-GAP-006 | 生产侧 MaintenanceTicker 挂载 |
