@@ -41,9 +41,9 @@
 | 可观测性（log/metric/audit/trace） | [memory/src/observability/MemoryObservability.cpp](../../memory/src/observability/MemoryObservability.cpp) 482 行；`MemoryProductionLoggingIntegrationTest` / `MemoryObservabilityBridgeTest` 端到端覆盖 | **达成**（生产侧 sink 已直连，**比 runtime 子系统更完整**） |
 | 业务链贯通（Runtime ↔ Memory ↔ SQLite ↔ Vector ↔ Profile ↔ Observability） | unary、resume、recovery、context-assemble、writeback、maintenance、failure-injection、checkpoint-busy、profile-compat、production-logging 等 11 条集成测全部存在 | **可贯通** |
 | 真实落地 vs 桩 | 无空壳实现；`memory/src/MemoryBuildSkeleton.cpp` 仅 4 行历史 namespace 文件可清理；所有主要组件均含真实业务体（store 1493 / orchestrator 814 / writeback 693 / vector backend 713 / observability 482 / manager 482 / schema migrator 406 / row mappers 408 / conflict resolver 371 / compression coordinator 320 / budget allocator 313 / detached vector factory 280 / candidate collector 246 / working board 244） | **无虚假实现** |
-| 距离生产级 GA | 仍欠：生产侧 LLM-backed Summarizer 注入、外部 embedding service 注入、跨 session FactQuery、tiktoken token 估算、向量相似度辅助冲突检测、ProgrammaticMemory 持久化、composite scoring、遗忘曲线、ConcurrencyStress / Soak 长跑证据 | **未到生产级** |
+| 距离生产级 GA | 仍欠：外部 embedding service 注入、跨 session FactQuery、tiktoken token 估算、向量相似度辅助冲突检测、ProgrammaticMemory 持久化、composite scoring、遗忘曲线、ConcurrencyStress / Soak 长跑证据 | **未到生产级** |
 
-总体结论：memory 已完成**架构 / 接口 / 持久化 / 上下文装配 / 写回 / 维护 / 观测性**的真实落地，与 runtime 同处"骨架达成、深度需补"水位；区别于 runtime 缺口的"信号外送 / 跨版本 / 并发证据"，memory 的缺口集中在**质量层（摘要质量 / 召回质量 / 冲突精度）与运营层（长跑证据 / 跨 session 共享 / 演进契约）**。GA 前必须收敛 P0 项。
+总体结论：memory 已完成**架构 / 接口 / 持久化 / 上下文装配 / 写回 / 维护 / 观测性**的真实落地，与 runtime 同处"骨架达成、深度需补"水位；区别于 runtime 缺口的"信号外送 / 跨版本 / 并发证据"，memory 当前剩余缺口集中在**质量层（embedding / 跨 session 召回 / 冲突精度）与运营层（长跑证据 / 演进契约）**。GA 前仍需继续收敛剩余 P0 项。
 
 ---
 
@@ -59,7 +59,7 @@
 | Programmatic Memory（§4.1 / §6.5.1a） | **未落地持久化**，仅设计声明 asset ref/lease | 与设计一致（MEM-E06 后置） |
 | ContextPacket 11 槽位 + token 预算 + 压缩触发 | ContextOrchestrator.build_packet + BudgetAllocator + CompressionCoordinator | 达成 |
 | 冲突检测 + 置信度 + 来源引用（§5.3.4） | MemoryConflictResolver 真实规则引擎（kPolarityPairs / kNegationMarkers / kNoiseTokens / shared_anchor_count / has_polarity_conflict / extract_single_number） + ConflictAction 4 态 | 达成（向量辅助缺，GAP-P2-D） |
-| 写回 SummaryMemory 含 decisions_made/confirmed_facts/tool_outcomes（§5.3.5） | CompressionCoordinator extract_decisions / extract_confirmed_facts / extract_tool_outcomes 关键词匹配 + merge_with_existing | **达成但精度受限**（中文关键词 + 模板拼接），见 GAP-P0-A |
+| 写回 SummaryMemory 含 decisions_made/confirmed_facts/tool_outcomes（§5.3.5） | CompressionCoordinator extract_decisions / extract_confirmed_facts / extract_tool_outcomes + runtime_support 注入的 `LLMBackedSummarizer`；`prompt_release_id_override=responder@2026.06.02` 输出结构化 summary payload | **达成**（2026-06-02 已接入生产侧 LLM-backed Summarizer；后续仅继续治理 prompt/provider 质量） |
 | Session/Turn/SummaryMemory/MemoryFact 关键对象（§5.3.6） | contracts 已冻结；memory 内 RowMappers 完整双向映射 | 达成 |
 | Vector backend 灰度策略（sqlite-vss / none / hnswlib opt-in） | VectorBackend 枚举 + DetachedVectorIndexFactory + UnavailableVectorMemoryIndexAdapter | 达成（默认关闭符合 §10.2 灰度） |
 | Profile 兼容（desktop_full / edge_balanced / edge_minimal） | MemoryConfigProjector + `MemoryProfileCompatibilityTest` | 达成 |
@@ -70,11 +70,10 @@
 | Failure injection（BUSY / 损坏 / vector 缺失 / disk full / schema mismatch） | `MemoryFailureInjectionTest` 5 路径 | 达成 |
 | 生产 composition | RuntimeLiveDependencyComposition.cpp:3308 真实注入 logger/audit/metrics/tracer + profile_id | 达成 |
 
-**普遍性架构缺口**：memory 已经把"控制平面之下的状态层"做扎实，缺口集中在**质量与运营**：
-1. 生产侧未注入 LLM-backed Summarizer，导致摘要恒为模板；
-2. 生产侧未注入外部 embedding service，导致向量召回质量受限（且默认关闭）；
-3. 生产侧未挂主动 maintenance ticker，导致 WAL/retention 依赖外部触发；
-4. 长跑 / 并发 / soak 证据偏弱。
+**普遍性架构缺口**：memory 已经把"控制平面之下的状态层"做扎实；`GAP-P0-A` 已于 2026-06-02 通过 runtime_support owner glue 闭合，当前剩余缺口集中在**质量与运营**：
+1. 生产侧未注入外部 embedding service，导致向量召回质量受限（且默认关闭）；
+2. 生产侧未挂主动 maintenance ticker，导致 WAL/retention 依赖外部触发；
+3. 长跑 / 并发 / soak 证据偏弱。
 
 ---
 
@@ -105,7 +104,7 @@
 
 | 设计 ID / 条款 | 现状 | 风险 | 关联缺口 |
 |---|---|---|---|
-| §6.3.1 阶段 2 ISummarizer 注入（MEM-E01） | `ISummarizer` 接口已冻结，CompressionCoordinator 第二参数 `ISummarizer* summarizer = nullptr`；**生产装配 [MemoryManagerFactory.cpp:143](../../memory/src/MemoryManagerFactory.cpp) 永远 `make_unique<CompressionCoordinator>(*store)` 单参构造**，导致生产环境 100% 走模板路径 | 摘要 precision/recall 受限于中文关键词；长会话 decisions_made/confirmed_facts 提取不全 | GAP-P0-A |
+| §6.3.1 阶段 2 ISummarizer 注入（MEM-E01） | 已通过 [memory/include/MemoryDependencies.h](../../memory/include/MemoryDependencies.h) `summarizer_factory` + [memory/src/MemoryManagerFactory.cpp](../../memory/src/MemoryManagerFactory.cpp) owner 装配 + [apps/runtime_support/src/RuntimeLiveDependencyComposition.cpp](../../apps/runtime_support/src/RuntimeLiveDependencyComposition.cpp) 注入 [apps/runtime_support/src/LLMBackedSummarizer.h](../../apps/runtime_support/src/LLMBackedSummarizer.h) / [apps/runtime_support/src/LLMBackedSummarizer.cpp](../../apps/runtime_support/src/LLMBackedSummarizer.cpp) 闭合 | 结构性缺口已清零；后续仅继续治理 prompt release / provider 质量与更高层 SLO | GAP-P0-A 已闭合（2026-06-02） |
 | §6.3.2 / MEM-E04 IEmbeddingAdapter 外部注入 | 仅 [SimpleLocalEmbeddingAdapter.cpp](../../memory/src/vector/SimpleLocalEmbeddingAdapter.cpp)（104 行 hash-based）；factory 内永远 `make_unique<SimpleLocalEmbeddingAdapter>` | 向量召回质量在生产用例下偏弱；当前默认 `vector.enabled=false` 已规避，但启用时质量不可期 | GAP-P0-B |
 | §6.12.2 token 估算 | `estimate_text_tokens` 使用 bytes/4 + chars*2 + 10% safety margin 启发式 | 边界场景下 over-budget 误差 ±20%；BudgetAllocator 裁剪决策可能失真 | GAP-P1-A（MEM-E08） |
 | §11.1 vector 失败拖垮主链路 | WritebackCoordinator 已把 vector 写入挪到 core transaction commit 后（best-effort）；**但 search_ann 失败的 fallback 路径在 CandidateCollector 内仅 best-effort 记录** | 与设计一致，已规避；唯一观察项：vector 重试与 retry budget 耦合度 | 无独立缺口 |
@@ -144,7 +143,7 @@
 | Profile 链 | profiles.MemoryConfig | assemble/writeback/checkpoint 行为 | MemoryConfigProjector → MemoryConfig → 各 component | [MemoryProfileCompatibilityTest.cpp](../../tests/integration/memory/MemoryProfileCompatibilityTest.cpp) | ✅ 完整 |
 | Production logging 链 | memory 事件 | infra.log / audit / metric / trace | MemoryObservability.emit → MemoryRuntimeDependencies.{logger/audit_logger/metrics_provider/tracer_provider} | [MemoryProductionLoggingIntegrationTest.cpp](../../tests/integration/memory/MemoryProductionLoggingIntegrationTest.cpp) / [MemoryObservabilityBridgeTest.cpp](../../tests/integration/memory/MemoryObservabilityBridgeTest.cpp) | ✅ 完整 |
 | Topology smoke | top-level | memory subsystem 入口 | MemoryIntegrationTopologySmokeTest | ✅ 完整 |
-| 生成质量链 | turn 文本 → SummaryMemory.summary_text | CompressionCoordinator.template + （阶段 2 ISummarizer） | **生产装配未注入 ISummarizer** | 无独立测试 | ❌ 缺，GAP-P0-A |
+| 生成质量链 | turn 文本 → SummaryMemory.summary_text | CompressionCoordinator.template fallback + `LLMBackedSummarizer`（阶段 2 已注入） | `LLMBackedSummarizerCompileTest` / `MemoryCompressionLLMSummarizerIntegrationTest` / `MemoryProductionLoggingIntegrationTest` | ✅ 已闭合（原 GAP-P0-A） |
 | 向量召回质量链 | turn/fact text → embedding → search_ann | SimpleLocalEmbeddingAdapter（hash） | **未接外部 embedding service** | `VectorMemoryAdapterTest` 仅功能验证 | ❌ 缺，GAP-P0-B |
 | 跨 session FactQuery 链 | user/profile 维度 | Long-Term 共享事实 | **无 cross-session 接口** | 无 | ❌ 缺，GAP-P2-B |
 | Maintenance ticker 链 | 周期触发 | WAL gc / quarantine cleanup / vector rebuild | **生产侧未挂 ticker** | 无 | ❌ 缺，GAP-P1-B |
@@ -159,7 +158,7 @@
 | 五层记忆 | Working / Short / Long-Semantic / Experience / Vector 显式分层 | MemoryOS 三层；CrewAI 长短期 + 实体；MemGPT main+archival | ✅ 分层粒度合理，覆盖工业主流 |
 | Working Memory 黑板 | shared_mutex + TTL + LRU + snapshot/restore | MemGPT main context；LangGraph state | ✅ 对齐 |
 | Long-Term Semantic 冲突检测 | 规则引擎（极性词 / 否定词 / 数字 / 锚点 token） | MemoryOS / 知识图谱风格 | ✅ 真实落地，**比多数 OSS Agent 强**（向量辅助缺，GAP-P2-A） |
-| 摘要质量 | 阶段 1 模板（关键词提取）；阶段 2 ISummarizer 接口已冻结但未注入 | MemGPT recursive summarization；MemoryOS dialog page | ⚠️ 阶段 1 与设计一致，生产侧需阶段 2（GAP-P0-A） |
+| 摘要质量 | 阶段 1 模板 fallback + 阶段 2 `LLMBackedSummarizer`（`responder@2026.06.02`） | MemGPT recursive summarization；MemoryOS dialog page | ✅ 生产装配已闭合；后续只剩 prompt/provider 质量指标治理 |
 | 向量召回 | sqlite-vss + 本地 hash embedding | OpenAI text-embedding-3 / bge / e5 | ⚠️ 需外部 service（GAP-P0-B） |
 | 持久化 | SQLite WAL + 单 writer + reader pool + busy retry + PASSIVE checkpoint + sqlite-vss + schema_migrations | Akka Persistence / SQLite 官方推荐 | ✅ 对齐工业最佳实践 |
 | 错误分类 | 5 枚举 + retryable/audit_required/result_code/warning_key/audit_scope 元数据 | k8s admission errors / SQLite result codes | ✅ 比常见 Agent 实现完备 |
@@ -184,10 +183,10 @@
 
 ### 6.1 P0（GA 阻塞，必须先收敛）
 
-- **GAP-P0-A 生产侧 LLM-backed Summarizer 注入（MEM-E01）**
-  - 现状：[MemoryManagerFactory.cpp:143](../../memory/src/MemoryManagerFactory.cpp) `make_unique<CompressionCoordinator>(*store)` 单参构造，生产侧恒为模板路径。
-  - 风险：长会话 SummaryMemory.summary_text 质量受限于关键词提取（中文 "决定/计划/确认/必须" 等）；与设计 §6.3.1 阶段 2 不一致；影响下一轮 Context 装配质量。
-  - 必要条件：runtime / cognition 提供 LLM 回调（已具备）；ADR-006 边界要求 memory 不直接调 llm，需通过 ISummarizer 抽象注入。
+- **GAP-P0-A 生产侧 LLM-backed Summarizer 注入（MEM-E01）**（已闭合，2026-06-02）
+  - 完成情况：[memory/include/MemoryDependencies.h](../../memory/include/MemoryDependencies.h) 已新增 `summarizer_factory`， [memory/src/MemoryManagerFactory.cpp](../../memory/src/MemoryManagerFactory.cpp) 会装配 summarizer owner 并把 `ISummarizer*` 注入 `CompressionCoordinator`，生产侧不再固定走模板路径。
+  - 边界说明：deliverable 草案原写法是把 `LLMBackedSummarizer` 放进 llm 模块，但 [tests/unit/llm/LLMBoundaryGuardComplianceTest.cpp](../../tests/unit/llm/LLMBoundaryGuardComplianceTest.cpp) 已禁止 llm include/link memory；因此 concrete 实现实际落在 [apps/runtime_support/src/LLMBackedSummarizer.h](../../apps/runtime_support/src/LLMBackedSummarizer.h) / [apps/runtime_support/src/LLMBackedSummarizer.cpp](../../apps/runtime_support/src/LLMBackedSummarizer.cpp)，由 runtime_support 持有 `llm_manager` 并通过 composition 注入。
+  - 验证证据：`LLMBackedSummarizerCompileTest`、`MemoryCompressionLLMSummarizerIntegrationTest`、`MemoryProductionLoggingIntegrationTest` 与 `DaemonRuntimeLiveDependencyCompositionTest` 已通过。
 
 - **GAP-P0-B 生产侧外部 Embedding Service 注入（MEM-E04）**
   - 现状：[SimpleLocalEmbeddingAdapter.cpp](../../memory/src/vector/SimpleLocalEmbeddingAdapter.cpp) hash-based 占位；`MemoryManagerFactory.create_embedding_adapter` 永远返回 simple adapter。
@@ -246,16 +245,21 @@
 
 #### WP-MEM-GAP-001 LLM-backed Summarizer 注入（GAP-P0-A）
 
-- **代码目标**
-  - 在 [memory/include/MemoryDependencies.h](../../memory/include/MemoryDependencies.h) `MemoryRuntimeDependencies` 增加 `std::function<std::unique_ptr<ISummarizer>(const MemoryConfig&)> summarizer_factory`（owner 仍归 memory，不直接持有 llm 句柄）；与 ADR-006 一致：memory 调用 `ISummarizer`，不感知 llm provider。
-  - [memory/src/MemoryManagerFactory.cpp](../../memory/src/MemoryManagerFactory.cpp) 在装配 CompressionCoordinator 时调用 `summarizer_factory(config)`，缺省回落到模板路径并打 `summarizer_unwired` warning。
-  - 在 [apps/runtime_support/src/RuntimeLiveDependencyComposition.cpp](../../apps/runtime_support/src/RuntimeLiveDependencyComposition.cpp) 注入由 llm 子系统提供的 `LLMBackedSummarizerFactory`（runtime composition 层胶水代码持有 llm_manager 句柄）。
-  - 在 [llm/include/](../../llm/include/) 新增 `LLMBackedSummarizer.h`（实现 memory::ISummarizer，落在 llm 模块内，避免 memory 反向依赖）。
-- **测试目标**
-  - `LLMBackedSummarizerCompileTest`（编译保护）；`MemoryCompressionLLMSummarizerIntegrationTest`（注入 fake llm provider，验证摘要走 LLM 而非模板）；扩展 `MemoryProductionLoggingIntegrationTest` 加 `strategy=summarizer` 断言。
-- **验收命令**
-  - `ctest --test-dir build-ci -R "LLMBackedSummarizer|MemoryCompressionLLMSummarizer|MemoryProductionLogging" --output-on-failure`
-- **阻塞 / 解阻**：依赖 llm 子系统 `ILLMManager::generate` 已稳定（已具备）；与 LLM-EVAL 中 LLM-backed Summarizer 计划联动。
+- **状态**：已完成（2026-06-02）。
+- **代码结果**
+  - [memory/include/MemoryDependencies.h](../../memory/include/MemoryDependencies.h)、[memory/src/MemoryManagerInternal.h](../../memory/src/MemoryManagerInternal.h) 与 [memory/src/MemoryManagerFactory.cpp](../../memory/src/MemoryManagerFactory.cpp) 已新增 `summarizer_factory` seam、summarizer owner 生命周期与 `CompressionCoordinator` 注入路径；未注入时仍保留模板 fallback 和 warning 语义。
+  - [apps/runtime_support/src/RuntimeLiveDependencyComposition.cpp](../../apps/runtime_support/src/RuntimeLiveDependencyComposition.cpp) 现会先创建 `llm_manager` 再创建 `memory_manager`，并通过 runtime-owned lambda 注入 summarizer；concrete 类型落在 [apps/runtime_support/src/LLMBackedSummarizer.h](../../apps/runtime_support/src/LLMBackedSummarizer.h) / [apps/runtime_support/src/LLMBackedSummarizer.cpp](../../apps/runtime_support/src/LLMBackedSummarizer.cpp)，而不是 llm public surface。
+  - [llm/assets/prompts/responder/memory_summary/manifest.yaml](../../llm/assets/prompts/responder/memory_summary/manifest.yaml)、[llm/assets/prompts/responder/memory_summary/system.md](../../llm/assets/prompts/responder/memory_summary/system.md) 与 [llm/assets/prompts/responder/memory_summary/task.md](../../llm/assets/prompts/responder/memory_summary/task.md) 已冻结 `responder@2026.06.02` summary prompt release；[memory/src/context/ContextOrchestrator.cpp](../../memory/src/context/ContextOrchestrator.cpp) 与 [memory/src/observability/MemoryObservability.cpp](../../memory/src/observability/MemoryObservability.cpp) 已补 `compression_strategy=summarizer` telemetry。
+- **测试结果**
+  - [tests/unit/memory/LLMBackedSummarizerCompileTest.cpp](../../tests/unit/memory/LLMBackedSummarizerCompileTest.cpp) 验证 request 投影、tag slot、schema / format 选择。
+  - [tests/integration/memory/MemoryCompressionLLMSummarizerIntegrationTest.cpp](../../tests/integration/memory/MemoryCompressionLLMSummarizerIntegrationTest.cpp) 验证真实 memory manager 压缩链会走 LLM-backed summarizer，而不是模板 fallback。
+  - [tests/integration/memory/MemoryProductionLoggingIntegrationTest.cpp](../../tests/integration/memory/MemoryProductionLoggingIntegrationTest.cpp) 现断言 `compression_strategy=summarizer`；[tests/integration/access/DaemonRuntimeLiveDependencyCompositionTest.cpp](../../tests/integration/access/DaemonRuntimeLiveDependencyCompositionTest.cpp) 证明 daemon live composition 已带上该 wiring。
+- **验收证据**
+  - `Build_CMakeTools(buildTargets=["dasall_memory_llm_backed_summarizer_compile_unit_test","dasall_memory_compression_llm_summarizer_integration_test"])`：通过。
+  - `RunCtest_CMakeTools(tests=["LLMBackedSummarizerCompileTest","MemoryCompressionLLMSummarizerIntegrationTest"])`：通过，2/2。
+  - `Build_CMakeTools(buildTargets=["dasall_memory_production_logging_integration_test","dasall_access_daemon_runtime_live_dependency_composition_integration_test"])`：通过。
+  - `RunCtest_CMakeTools(tests=["MemoryProductionLoggingIntegrationTest","DaemonRuntimeLiveDependencyCompositionTest"])`：通过，2/2。
+- **阻塞 / 解阻**：已解阻。`ILLMManager::generate` 与 responder prompt pipeline 已具备；本轮唯一偏差是把 concrete summarizer 从草案中的 llm 模块调整到 runtime_support，以保持 llm boundary guard 不回退。
 
 #### WP-MEM-GAP-002 外部 Embedding Service 注入（GAP-P0-B）
 
@@ -483,7 +487,7 @@ flowchart LR
 
 | 关联子系统 | 协同点 | 联动任务 |
 |---|---|---|
-| llm | ISummarizer / IEmbeddingAdapter 实现归属 llm，实现 memory 接口 | WP-MEM-GAP-001 / -002 |
+| runtime_support + llm | runtime_support owner glue 持有 `llm_manager` 并注入 `LLMBackedSummarizer` / 后续 `LLMBackedEmbeddingAdapter`；llm 继续只暴露能力与 prompt/provider 治理 | WP-MEM-GAP-001 / -002 |
 | runtime | MaintenanceTicker 与 BackgroundMaintenanceTicker 协调；external_evidence projector 在 runtime 装配 | WP-MEM-GAP-006 / -007；与 RT-EVAL GAP-P1-A 联动 |
 | knowledge | structured evidence → `vector<string>` 投影规范 | WP-MEM-GAP-007 |
 | profiles | tokenizer / vector / retention / scoring 配置键扩展 | WP-MEM-GAP-005 / -011 / -012 / -013 |
@@ -497,7 +501,7 @@ flowchart LR
 memory 子系统已达到 **可生产部署 v1** 水位：架构 / 详设目标 100% 落地、无虚假实现、业务链贯通、ADR 边界守门、可观测性 sink 直连、profile 兼容齐备。
 
 距离 **GA 生产级** 的真实缺口集中在两个象限：
-1. **质量层**：生产侧未注入 LLM-backed Summarizer（GAP-P0-A）与外部 Embedding service（GAP-P0-B），导致摘要 / 召回质量受限——这是阻止 v2（高质量长会话）的关键缺口，需 llm 子系统协同。
+1. **质量层**：`GAP-P0-A` 已于 2026-06-02 闭合，生产侧 LLM-backed Summarizer 已进入 live composition；当前剩余关键缺口是外部 Embedding service（GAP-P0-B）、跨 session FactQuery 与后续质量指标治理。
 2. **运营层**：并发 / 长跑证据（GAP-P0-C）、installed gate（GAP-P0-D）、生产 ticker（GAP-P1-B）、soak 采样（GAP-P3-E）需逐步收敛。
 
 其余 P2 / P3 缺口（MEM-E02..E09）为设计文档已显式声明的演进项，不属于实现缺陷。GA 收敛优先级建议：**P0 四项 → P1 四项 → P2 链式 → P3 选择性**。
@@ -520,7 +524,7 @@ memory 子系统已达到 **可生产部署 v1** 水位：架构 / 详设目标 
 
 | 版本 | 任务 ID | 简述 |
 |---|---|---|
-| V1 | WP-MEM-GAP-001 | LLM-backed Summarizer 注入（生产装配） |
+| V1 | WP-MEM-GAP-001 | LLM-backed Summarizer 注入（生产装配，已完成 2026-06-02） |
 | V1 | WP-MEM-GAP-002 | 外部 Embedding Service 注入（生产装配） |
 | V1 | WP-MEM-GAP-003 | 并发 / 长跑压力门 + TSAN |
 | V1 | WP-MEM-GAP-004 | Memory installed / qemu gate |

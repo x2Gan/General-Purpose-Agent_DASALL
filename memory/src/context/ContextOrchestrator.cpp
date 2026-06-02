@@ -548,6 +548,17 @@ contracts::ContextPacket make_minimal_packet(const MemoryContextRequest& request
         .key = "compression_note_count",
         .value = std::to_string(result.compression_notes.size()),
     });
+    const auto strategy_it = std::find_if(
+        result.compression_notes.begin(), result.compression_notes.end(),
+        [](const std::string& note) {
+          return note.rfind("strategy:", 0U) == 0U && note.size() > 9U;
+        });
+    if (strategy_it != result.compression_notes.end()) {
+      fields.push_back(MemoryTelemetryField{
+          .key = "compression_strategy",
+          .value = strategy_it->substr(9U),
+      });
+    }
   }
   fields.push_back(MemoryTelemetryField{
       .key = "degraded",

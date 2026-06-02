@@ -126,6 +126,7 @@ classify_span_status(const std::string_view event_name) {
       "warning_codes",
       "dropped_section_count",
       "compression_note_count",
+      "compression_strategy",
       "degraded",
       "result_code",
       "failure_reason",

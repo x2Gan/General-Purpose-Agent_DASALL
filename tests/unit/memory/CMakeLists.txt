@@ -82,6 +82,10 @@ add_executable(dasall_memory_compression_summarizer_unit_test
 	CompressionCoordinatorSummarizerTest.cpp
 )
 
+add_executable(dasall_memory_llm_backed_summarizer_compile_unit_test
+	LLMBackedSummarizerCompileTest.cpp
+)
+
 add_executable(dasall_memory_context_orchestrator_unit_test
 	ContextOrchestratorTest.cpp
 )
@@ -258,6 +262,14 @@ target_link_libraries(dasall_memory_compression_summarizer_unit_test
 		dasall_test_support
 )
 
+target_link_libraries(dasall_memory_llm_backed_summarizer_compile_unit_test
+	PRIVATE
+		dasall_apps_runtime_support
+		dasall_llm
+		dasall_memory
+		dasall_test_support
+)
+
 target_link_libraries(dasall_memory_context_orchestrator_unit_test
 	PRIVATE
 		dasall_memory
@@ -401,6 +413,12 @@ target_include_directories(dasall_memory_compression_summarizer_unit_test
 		${CMAKE_SOURCE_DIR}/memory/src
 )
 
+target_include_directories(dasall_memory_llm_backed_summarizer_compile_unit_test
+	PRIVATE
+		${CMAKE_SOURCE_DIR}/apps/runtime_support/src
+		${CMAKE_SOURCE_DIR}/tests/mocks/include
+)
+
 target_include_directories(dasall_memory_context_orchestrator_unit_test
 	PRIVATE
 		${CMAKE_SOURCE_DIR}/memory/src
@@ -533,6 +551,7 @@ dasall_apply_common_options(dasall_memory_budget_allocator_unit_test)
 dasall_apply_common_options(dasall_memory_context_budget_unit_test)
 dasall_apply_common_options(dasall_memory_compression_coordinator_unit_test)
 dasall_apply_common_options(dasall_memory_compression_summarizer_unit_test)
+dasall_apply_common_options(dasall_memory_llm_backed_summarizer_compile_unit_test)
 dasall_apply_common_options(dasall_memory_context_orchestrator_unit_test)
 dasall_apply_common_options(dasall_memory_context_orchestrator_evidence_unit_test)
 dasall_apply_common_options(dasall_memory_context_orchestrator_degraded_unit_test)
@@ -608,6 +627,9 @@ set_tests_properties(CompressionCoordinatorTest PROPERTIES LABELS "unit;memory")
 add_test(NAME CompressionCoordinatorSummarizerTest COMMAND dasall_memory_compression_summarizer_unit_test)
 set_tests_properties(CompressionCoordinatorSummarizerTest PROPERTIES LABELS "unit;memory")
 
+add_test(NAME LLMBackedSummarizerCompileTest COMMAND dasall_memory_llm_backed_summarizer_compile_unit_test)
+set_tests_properties(LLMBackedSummarizerCompileTest PROPERTIES LABELS "unit;memory")
+
 add_test(NAME ContextOrchestratorTest COMMAND dasall_memory_context_orchestrator_unit_test)
 set_tests_properties(ContextOrchestratorTest PROPERTIES LABELS "unit;memory")
 
@@ -662,6 +684,7 @@ set(DASALL_MEMORY_UNIT_TEST_EXECUTABLE_TARGETS
 	dasall_memory_context_budget_unit_test
 	dasall_memory_compression_coordinator_unit_test
 	dasall_memory_compression_summarizer_unit_test
+	dasall_memory_llm_backed_summarizer_compile_unit_test
 	dasall_memory_context_orchestrator_unit_test
 	dasall_memory_context_orchestrator_evidence_unit_test
 	dasall_memory_context_orchestrator_degraded_unit_test

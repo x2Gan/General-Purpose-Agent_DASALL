@@ -7,6 +7,7 @@
 
 #include "MemoryDependencies.h"
 #include "IContextOrchestrator.h"
+#include "ISummarizer.h"
 #include "vector/IEmbeddingAdapter.h"
 #include "IMemoryManager.h"
 #include "IMemoryStore.h"
@@ -24,6 +25,7 @@ class MemoryObservability;
 }  // namespace observability
 
 struct MemoryManagerDependencies {
+  std::unique_ptr<ISummarizer> summarizer;
   std::unique_ptr<IContextOrchestrator> context_orchestrator;
   std::unique_ptr<IMemoryStore> store;
   std::unique_ptr<IWorkingMemoryBoard> working_memory_board;

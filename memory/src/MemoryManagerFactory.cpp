@@ -134,6 +134,9 @@ std::unique_ptr<IMemoryManager> create_memory_manager(
   }
 
   if (dependencies.store && dependencies.working_memory_board) {
+    if (runtime_dependencies.summarizer_factory) {
+      dependencies.summarizer = runtime_dependencies.summarizer_factory(config);
+    }
     dependencies.embedding_adapter = create_embedding_adapter(config);
     dependencies.vector_index = create_vector_index(
         config, *dependencies.store, dependencies.embedding_adapter.get());
@@ -143,7 +146,8 @@ std::unique_ptr<IMemoryManager> create_memory_manager(
         *dependencies.store, *dependencies.store, config,
         dependencies.vector_index.get());
     auto allocator = std::make_unique<BudgetAllocator>(config);
-    auto compressor = std::make_unique<CompressionCoordinator>(*dependencies.store);
+    auto compressor = std::make_unique<CompressionCoordinator>(
+        *dependencies.store, dependencies.summarizer.get());
     auto conflict_resolver =
       std::make_unique<MemoryConflictResolver>(*dependencies.store);
     dependencies.context_orchestrator = std::make_unique<ContextOrchestrator>(

@@ -1,0 +1,28 @@
+schema_version: "1"
+min_loader_version: "1"
+package_id: responder.memory_summary
+prompt_id: responder
+version: "2026.06.02"
+stage: response
+eval_status: stable
+release_scope: stable
+output_schema_ref: schema://responder/memory_summary
+trusted_source: profiles
+default_release: false
+source_uri: prompt://responder/memory_summary
+language: zh-cn
+model_family: openai_compatible
+task_types:
+  - summary
+template_slots:
+  - user_goal
+  - constraints
+  - session_summary
+tool_hints: []
+tags:
+  - responder
+  - memory
+  - summary
+profile_tags:
+  - desktop_full
+  - cloud_full

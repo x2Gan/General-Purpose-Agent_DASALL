@@ -15,6 +15,8 @@
 #endif
 
 #include "IMemoryManager.h"
+#include "LLMBackedSummarizer.h"
+#include "MockLLMManager.h"
 #include "ObservabilityLiveComposition.h"
 #include "logging/FileLogReader.h"
 #include "logging/LogQueryService.h"
@@ -25,6 +27,8 @@
 namespace {
 
 namespace fs = std::filesystem;
+
+using dasall::tests::mocks::MockLLMManager;
 
 class ScopedTempDir {
  public:
@@ -223,6 +227,14 @@ void test_memory_production_logging_persists_queryable_redacted_events() {
               "memory production logging integration should keep the concrete logger inspectable");
 
   const auto config = make_sqlite_config(database_path);
+    auto llm_manager = std::make_shared<MockLLMManager>();
+    llm_manager->set_generate_handler(
+      [](const dasall::llm::LLMGenerateRequest& request) {
+      return MockLLMManager::make_structured_stage_result(
+        request.stage,
+        R"({"schema_version":"memory_summary.v1","request_id":"req-memory-production-logging-summary","summary_text":"LLM 生产摘要：logging path 已接线","decisions_made":["保留 summarizer strategy 审计字段"],"confirmed_facts":["memory logging integration 走 LLM summarizer"],"tool_outcomes":["memory_logging:test"]})",
+        request.request.request_id);
+      });
   auto manager = dasall::memory::create_memory_manager(
       config,
       dasall::memory::MemoryRuntimeDependencies{
@@ -230,6 +242,12 @@ void test_memory_production_logging_persists_queryable_redacted_events() {
           .audit_logger = observability.audit_logger,
           .metrics_provider = observability.metrics_provider,
           .tracer_provider = observability.tracer_provider,
+        .summarizer_factory =
+          [llm_manager](const dasall::memory::MemoryConfig&) {
+          return std::make_unique<
+            dasall::apps::runtime_support::LLMBackedSummarizer>(
+            llm_manager);
+          },
           .profile_id = "desktop_full",
       });
   assert_true(manager != nullptr,
@@ -278,6 +296,12 @@ void test_memory_production_logging_persists_queryable_redacted_events() {
       });
   assert_true(!context_result.result_code.has_value(),
               "memory production logging integration should complete the context assembly path");
+          assert_true(logger->has_last_dispatched_event() &&
+                  logger->last_dispatched_event().attrs.at("event_name") ==
+                    "context.assembled" &&
+                  logger->last_dispatched_event().attrs.at("compression_strategy") ==
+                    "summarizer",
+                "memory production logging integration should retain the summarizer compression strategy on the context event");
 
   seed_old_quarantine_record(database_path, "memory-production-logging-quarantine");
   const auto maintenance_report = manager->run_maintenance(
@@ -364,7 +388,9 @@ void test_memory_production_logging_persists_queryable_redacted_events() {
                   runtime_log_text.find("memory context.assembled") != std::string::npos &&
                   runtime_log_text.find("memory maintenance.completed") != std::string::npos &&
                   runtime_log_text.find("memory init.completed") != std::string::npos &&
-                  runtime_log_text.find("memory shutdown.completed") != std::string::npos,
+            runtime_log_text.find("memory shutdown.completed") != std::string::npos &&
+            runtime_log_text.find("compression_strategy") != std::string::npos &&
+            runtime_log_text.find("summarizer") != std::string::npos,
               "memory production logging integration should persist lifecycle, writeback, context, and maintenance events into runtime.log");
   assert_true(runtime_log_text.find(trace_id) != std::string::npos &&
                   runtime_log_text.find(writeback_request_id) != std::string::npos &&
@@ -374,7 +400,9 @@ void test_memory_production_logging_persists_queryable_redacted_events() {
   assert_true(artifact_text.find("memory writeback.completed") != std::string::npos &&
                   artifact_text.find("memory context.assembled") != std::string::npos &&
                   artifact_text.find("memory maintenance.completed") != std::string::npos &&
-                  artifact_text.find(writeback_request_id) != std::string::npos,
+            artifact_text.find(writeback_request_id) != std::string::npos &&
+            artifact_text.find("compression_strategy") != std::string::npos &&
+            artifact_text.find("summarizer") != std::string::npos,
               "memory production logging integration should keep correlated memory events queryable from artifact payloads");
   assert_true(index_text.find("memory-prod-logging-session") != std::string::npos &&
                   index_text.find("memory-prod-logging-trace") != std::string::npos &&

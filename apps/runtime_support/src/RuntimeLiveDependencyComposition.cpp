@@ -32,6 +32,7 @@
 #include "IKnowledgeService.h"
 #include "ILLMTransport.h"
 #include "ILLMManager.h"
+#include "LLMBackedSummarizer.h"
 #include "LLMGenerateRequest.h"
 #include "LLMManagerResult.h"
 #include "ObservabilityLiveComposition.h"
@@ -3315,32 +3316,10 @@ RuntimeDependencyCompositionResult compose_minimal_live_dependency_set(
               std::string(composition_owner) + ": " + memory_config_error);
   }
 
-  auto memory_manager = std::shared_ptr<memory::IMemoryManager>(
-      memory::create_memory_manager(
-        *memory_config,
-        memory::MemoryRuntimeDependencies{
-          .logger = observability.logger,
-          .audit_logger = observability.audit_logger,
-          .metrics_provider = observability.metrics_provider,
-          .tracer_provider = observability.tracer_provider,
-          .profile_id = policy_snapshot->effective_profile_id(),
-        }));
-  if (memory_manager == nullptr) {
-    return make_error(std::string("memory manager factory returned null for ") +
-                      std::string(composition_owner));
-  }
-
-  const auto init_code = memory_manager->init(*memory_config);
-  if (static_cast<int>(init_code) != 0) {
-    return make_error(std::string("memory manager init failed for ") +
-                      std::string(composition_owner));
-  }
-  dependency_set->memory_manager = std::move(memory_manager);
-
   const bool cognition_first_requested = runtime_cognition_first_requested();
+  std::shared_ptr<llm::ILLMManager> llm_manager;
   if (cognition_first_requested) {
-    dependency_set->llm_manager =
-        std::make_shared<ScriptedCognitionFirstLLMManager>();
+    llm_manager = std::make_shared<ScriptedCognitionFirstLLMManager>();
   } else {
     auto llm_result = llm::create_production_llm_manager(
         *policy_snapshot,
@@ -3357,8 +3336,48 @@ RuntimeDependencyCompositionResult compose_minimal_live_dependency_set(
       return make_error(std::string("llm manager composition failed for ") +
                         std::string(composition_owner) + ": " + llm_result.error);
     }
-    dependency_set->llm_manager = std::move(llm_result.manager);
+    llm_manager = std::move(llm_result.manager);
   }
+
+  if (llm_manager == nullptr) {
+    return make_error(std::string("llm manager composition returned null for ") +
+                      std::string(composition_owner));
+  }
+  dependency_set->llm_manager = llm_manager;
+
+  auto memory_manager = std::shared_ptr<memory::IMemoryManager>(
+      memory::create_memory_manager(
+          *memory_config,
+          memory::MemoryRuntimeDependencies{
+              .logger = observability.logger,
+              .audit_logger = observability.audit_logger,
+              .metrics_provider = observability.metrics_provider,
+              .tracer_provider = observability.tracer_provider,
+              .summarizer_factory =
+                  [llm_manager,
+                   profile_id = policy_snapshot->effective_profile_id(),
+                   llm_timeout_ms = static_cast<std::uint32_t>(
+                       policy_snapshot->timeout_policy().llm.timeout_ms)](
+                      const memory::MemoryConfig&) {
+                  LLMBackedSummarizer::Options options;
+                  options.profile_id = profile_id;
+                  options.timeout_ms = llm_timeout_ms;
+                    return std::make_unique<LLMBackedSummarizer>(
+                    llm_manager, std::move(options));
+                  },
+              .profile_id = policy_snapshot->effective_profile_id(),
+          }));
+  if (memory_manager == nullptr) {
+    return make_error(std::string("memory manager factory returned null for ") +
+                      std::string(composition_owner));
+  }
+
+  const auto init_code = memory_manager->init(*memory_config);
+  if (static_cast<int>(init_code) != 0) {
+    return make_error(std::string("memory manager init failed for ") +
+                      std::string(composition_owner));
+  }
+  dependency_set->memory_manager = std::move(memory_manager);
 
   auto cognition_engine = cognition::create_cognition_engine(
       *policy_snapshot,

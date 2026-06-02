@@ -1,4 +1,5 @@
 add_library(dasall_apps_runtime_support STATIC
+  src/LLMBackedSummarizer.cpp
   src/RuntimeLiveDependencyComposition.cpp
 )
 

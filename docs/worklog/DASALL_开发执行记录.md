@@ -1,3 +1,41 @@
+## 记录 #875
+
+- 日期：2026-06-02
+- 阶段：memory / llm-backed summarizer production closure
+- 任务：完成 WP-MEM-GAP-001“LLM-backed Summarizer 注入（GAP-P0-A）”
+- 状态：已完成（runtime_support owner glue、summary prompt release、focused validation 与文档回写已闭合）
+
+### 执行前提
+
+1. [docs/deliverables/MEM-EVAL-2026-05-31-memory子系统落地评估与生产级缺口治理任务规划.md](../deliverables/MEM-EVAL-2026-05-31-memory子系统落地评估与生产级缺口治理任务规划.md) 已把 `WP-MEM-GAP-001` 固定为“阶段 2 ISummarizer 注入”，但草案中把 concrete `LLMBackedSummarizer` 放在 llm 模块的落点与 [tests/unit/llm/LLMBoundaryGuardComplianceTest.cpp](../../tests/unit/llm/LLMBoundaryGuardComplianceTest.cpp) 冲突；本轮必须先守住 llm 不 include/link memory 的现有边界。
+2. `CompressionCoordinator` 早已支持可选 `ISummarizer*`；真实缺口不在 writeback 算法，而在 [memory/src/MemoryManagerFactory.cpp](../../memory/src/MemoryManagerFactory.cpp) 缺少 runtime-facing seam、summarizer owner 生命周期，以及 [apps/runtime_support/src/RuntimeLiveDependencyComposition.cpp](../../apps/runtime_support/src/RuntimeLiveDependencyComposition.cpp) 的 live composition 顺序尚未给 memory 注入 LLM-backed summarizer。
+3. `ILLMManager::generate`、response canonical stage 与 prompt release override 已稳定可用；本轮只允许复用既有 LLM 治理链，通过 `task_type=summary`、`prompt_release_id_override` 与 JSON output schema 闭合 Memory summary 路径，不能另起旁路 prompt 或把 llm concrete 类型暴露给 memory。
+
+### 改动
+
+1. 更新 [memory/include/MemoryDependencies.h](../../memory/include/MemoryDependencies.h)、[memory/src/MemoryManagerInternal.h](../../memory/src/MemoryManagerInternal.h) 与 [memory/src/MemoryManagerFactory.cpp](../../memory/src/MemoryManagerFactory.cpp)，新增 `summarizer_factory` 窄注入面、summarizer owner 生命周期，并在 store / working board 存在时把 `ISummarizer*` 注入 `CompressionCoordinator`；未注入时仍保留模板 fallback 与 warning 语义。
+2. 新增 [apps/runtime_support/src/LLMBackedSummarizer.h](../../apps/runtime_support/src/LLMBackedSummarizer.h) 与 [apps/runtime_support/src/LLMBackedSummarizer.cpp](../../apps/runtime_support/src/LLMBackedSummarizer.cpp)，并更新 [apps/runtime_support/src/RuntimeLiveDependencyComposition.cpp](../../apps/runtime_support/src/RuntimeLiveDependencyComposition.cpp) 与 [apps/runtime_support/CMakeLists.txt](../../apps/runtime_support/CMakeLists.txt)：runtime_support 现在先创建 `llm_manager`，再通过 lambda 把 runtime-owned summarizer 注入 memory manager，保持 llm public surface 不感知 memory。
+3. 新增 [llm/assets/prompts/responder/memory_summary/manifest.yaml](../../llm/assets/prompts/responder/memory_summary/manifest.yaml)、[llm/assets/prompts/responder/memory_summary/system.md](../../llm/assets/prompts/responder/memory_summary/system.md) 与 [llm/assets/prompts/responder/memory_summary/task.md](../../llm/assets/prompts/responder/memory_summary/task.md)，冻结 `responder@2026.06.02` summary prompt release；`LLMBackedSummarizer` 以 `stage=response`、`task_type=summary`、`response_format=json_object`、`output_schema_ref=schema://responder/memory_summary` 调用既有 LLM pipeline。
+4. 新增 [tests/unit/memory/LLMBackedSummarizerCompileTest.cpp](../../tests/unit/memory/LLMBackedSummarizerCompileTest.cpp) 与 [tests/integration/memory/MemoryCompressionLLMSummarizerIntegrationTest.cpp](../../tests/integration/memory/MemoryCompressionLLMSummarizerIntegrationTest.cpp)，并更新 [tests/unit/memory/CMakeLists.txt](../../tests/unit/memory/CMakeLists.txt) 与 [tests/integration/memory/CMakeLists.txt](../../tests/integration/memory/CMakeLists.txt)；同时更新 [memory/src/context/ContextOrchestrator.cpp](../../memory/src/context/ContextOrchestrator.cpp)、[memory/src/observability/MemoryObservability.cpp](../../memory/src/observability/MemoryObservability.cpp) 与 [tests/integration/memory/MemoryProductionLoggingIntegrationTest.cpp](../../tests/integration/memory/MemoryProductionLoggingIntegrationTest.cpp)，把 `compression_strategy=summarizer` 固定到 production telemetry / logging 断言。
+5. 更新 [docs/deliverables/MEM-EVAL-2026-05-31-memory子系统落地评估与生产级缺口治理任务规划.md](../deliverables/MEM-EVAL-2026-05-31-memory子系统落地评估与生产级缺口治理任务规划.md) 与 [docs/todos/DASALL_子系统查漏补缺专项记录.md](../todos/DASALL_子系统查漏补缺专项记录.md)，回写 `GAP-P0-A / WP-MEM-GAP-001` 已闭合、实际实现落点从草案中的 llm 修正为 runtime_support，以及剩余 P0 焦点转向 embedding / 并发长跑 / installed gate。
+
+### 验证
+
+1. `Build_CMakeTools(buildTargets=["dasall_memory_llm_backed_summarizer_compile_unit_test","dasall_memory_compression_llm_summarizer_integration_test"])`
+   - 结果：通过。
+2. `RunCtest_CMakeTools(tests=["LLMBackedSummarizerCompileTest","MemoryCompressionLLMSummarizerIntegrationTest"])`
+   - 结果：通过；`100% tests passed, 0 tests failed out of 2`。
+3. `Build_CMakeTools(buildTargets=["dasall_memory_production_logging_integration_test","dasall_access_daemon_runtime_live_dependency_composition_integration_test"])`
+   - 结果：通过。
+4. `RunCtest_CMakeTools(tests=["MemoryProductionLoggingIntegrationTest","DaemonRuntimeLiveDependencyCompositionTest"])`
+   - 结果：通过；`100% tests passed, 0 tests failed out of 2`。
+
+### 结果
+
+1. Memory 生产压缩路径现在会优先使用 runtime_support 注入的 LLM-backed summarizer，`SummaryMemory.summary_text` 不再固定停留在模板关键词提取；同时 memory 继续只依赖 `ISummarizer` 抽象，没有越过 ADR-006。
+2. llm boundary guard 继续成立：concrete `LLMBackedSummarizer` 没有进入 llm public surface，llm 仍只负责 prompt/provider/manager 治理；runtime_support 才是持有 `llm_manager` 并进行跨模块胶水注入的 owner。
+3. `WP-MEM-GAP-001 / GAP-P0-A` 已闭合；Memory V1 剩余高优先级缺口转为外部 Embedding service、并发 / 长跑压力门与 installed / qemu gate。
+
 ## 记录 #874
 
 - 日期：2026-06-01

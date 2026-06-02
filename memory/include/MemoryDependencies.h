@@ -1,5 +1,6 @@
 #pragma once
 
+#include <functional>
 #include <memory>
 #include <string>
 
@@ -29,11 +30,16 @@ class ITracerProvider;
 
 namespace dasall::memory {
 
+struct MemoryConfig;
+class ISummarizer;
+
 struct MemoryRuntimeDependencies {
   std::shared_ptr<dasall::infra::logging::ILogger> logger;
   std::shared_ptr<dasall::infra::audit::IAuditLogger> audit_logger;
   std::shared_ptr<dasall::infra::metrics::IMetricsProvider> metrics_provider;
   std::shared_ptr<dasall::infra::tracing::ITracerProvider> tracer_provider;
+  std::function<std::unique_ptr<ISummarizer>(const MemoryConfig&)>
+      summarizer_factory;
   std::string profile_id = "unknown";
 };
 
