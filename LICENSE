@@ -1,0 +1,58 @@
+Proprietary Source-Available License
+
+Copyright (c) 2026 Gan GAN. All rights reserved.
+
+Licensor: Gan GAN
+Contact for written authorization: Whisky.Gan@gmail.com
+
+This repository, including without limitation all source code, build scripts,
+configuration, tests, documentation, assets, and related materials
+(collectively, the "Materials"), is proprietary.
+
+1. Limited permission to read
+
+You may access and read the Materials solely for personal or internal review,
+evaluation, and source inspection. No other rights are granted, whether
+expressly, by implication, estoppel, or otherwise.
+
+2. No use without prior written authorization
+
+Except for the limited permission in Section 1, you may not, without the prior
+written authorization of Gan GAN:
+
+- use or execute any part of the Materials;
+- compile, build, install, deploy, host, or operate any part of the Materials;
+- reproduce, copy, modify, adapt, translate, reverse engineer, or create
+	derivative works from any part of the Materials;
+- distribute, publish, disclose, sublicense, sell, lease, lend, transfer, or
+	otherwise make the Materials available to any third party;
+- use the Materials for commercial purposes, service delivery, benchmarking,
+	model training, or competitive analysis beyond ordinary read-only review.
+
+3. No open source grant
+
+This repository is not open source. Nothing in this license grants any right to
+use the Materials under any open source license.
+
+4. Incidental technical copies
+
+Transient or incidental copies created automatically by a web browser,
+repository viewer, cache, or similar mechanism solely to enable authorized
+read-only access under Section 1 are permitted. Any other copying requires
+prior written authorization.
+
+5. Reservation of rights
+
+All rights not expressly granted are reserved by Gan GAN.
+No patent, trademark, trade secret, or other intellectual property rights are
+granted under this license.
+
+6. Disclaimer
+
+THE MATERIALS ARE PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE, TITLE, AND NONINFRINGEMENT. IN NO EVENT SHALL
+GAN GAN BE LIABLE FOR ANY CLAIM, DAMAGES, OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT, OR OTHERWISE, ARISING FROM,
+OUT OF, OR IN CONNECTION WITH THE MATERIALS OR THE USE OF OR OTHER DEALINGS IN
+THE MATERIALS.

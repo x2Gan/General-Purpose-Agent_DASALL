@@ -1,7 +1,7 @@
 Source: dasall
 Section: utils
 Priority: optional
-Maintainer: x2Gan <Whisky.Gan@gmail.com>
+Maintainer: Gan GAN <Whisky.Gan@gmail.com>
 Build-Depends:
  debhelper-compat (= 13),
  cmake,

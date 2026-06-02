@@ -653,7 +653,7 @@ v1 建议把自定义 maintainer scripts 压缩到最低：
 Source: dasall
 Section: utils
 Priority: optional
-Maintainer: x2Gan <Whisky.Gan@gmail.com>
+Maintainer: Gan GAN <Whisky.Gan@gmail.com>
 Build-Depends:
  debhelper-compat (= 13),
  cmake,

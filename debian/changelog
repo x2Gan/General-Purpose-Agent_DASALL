@@ -4,4 +4,4 @@ dasall (0.1.0-1) noble; urgency=medium
   * Split delivery into dasall-cli, dasall-daemon and dasall-common.
   * Keep dasall-daemon disabled and stopped on first install.
 
- -- x2Gan <Whisky.Gan@gmail.com>  Thu, 07 May 2026 22:28:58 +0800
+ -- Gan GAN <Whisky.Gan@gmail.com>  Thu, 07 May 2026 22:28:58 +0800
