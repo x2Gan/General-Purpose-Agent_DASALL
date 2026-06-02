@@ -30,6 +30,7 @@
 #include "LogEvent.h"
 #include "ICognitionEngine.h"
 #include "IKnowledgeService.h"
+#include "LLMBackedEmbeddingAdapter.h"
 #include "ILLMTransport.h"
 #include "ILLMManager.h"
 #include "LLMBackedSummarizer.h"
@@ -3316,6 +3317,17 @@ RuntimeDependencyCompositionResult compose_minimal_live_dependency_set(
               std::string(composition_owner) + ": " + memory_config_error);
   }
 
+    std::vector<std::string> runtime_embedding_provider_selection_failures;
+    auto runtime_embedding_provider = select_runtime_knowledge_embedding_provider(
+      readonly_assets_root / "llm" / "providers",
+      &runtime_embedding_provider_selection_failures);
+  auto runtime_embedding_transport =
+      options.knowledge_query_encoder_transport_override;
+  if (runtime_embedding_transport == nullptr) {
+    runtime_embedding_transport =
+        std::make_shared<RuntimeKnowledgeQueryEncoderCurlTransport>();
+  }
+
   const bool cognition_first_requested = runtime_cognition_first_requested();
   std::shared_ptr<llm::ILLMManager> llm_manager;
   if (cognition_first_requested) {
@@ -3364,6 +3376,36 @@ RuntimeDependencyCompositionResult compose_minimal_live_dependency_set(
                   options.timeout_ms = llm_timeout_ms;
                     return std::make_unique<LLMBackedSummarizer>(
                     llm_manager, std::move(options));
+                  },
+              .embedding_adapter_factory =
+                  [embedding_provider = runtime_embedding_provider,
+                   transport = runtime_embedding_transport,
+                   secret_manager = dependency_set->secret_manager,
+                   owner = std::string(composition_owner)](
+                      const memory::MemoryConfig&) ->
+                      std::unique_ptr<memory::IEmbeddingAdapter> {
+                    if (!embedding_provider.has_value() ||
+                        !embedding_provider->has_consistent_values() ||
+                        transport == nullptr) {
+                      return nullptr;
+                    }
+
+                    LLMBackedEmbeddingAdapter::Options options;
+                    options.provider =
+                        LLMBackedEmbeddingAdapter::ProviderConfig{
+                        .provider_id = embedding_provider->provider_id,
+                        .model_id = embedding_provider->model_id,
+                        .base_url = embedding_provider->base_url,
+                        .auth_ref = embedding_provider->auth_ref,
+                        .base_url_alias = embedding_provider->base_url_alias,
+                        .snapshot_version = embedding_provider->snapshot_version,
+                        .timeout_ms = embedding_provider->timeout_ms,
+                        };
+                    options.composition_owner = owner + ":memory.embedding";
+                    return std::make_unique<LLMBackedEmbeddingAdapter>(
+                        transport,
+                        secret_manager,
+                        std::move(options));
                   },
               .profile_id = policy_snapshot->effective_profile_id(),
           }));
@@ -3692,19 +3734,11 @@ RuntimeDependencyCompositionResult compose_minimal_live_dependency_set(
       environment_flag_enabled("DASALL_DETACHED_VECTOR_LOCAL_FALLBACK");
   if (!create_query_encoder && knowledge_hybrid_runtime_configured &&
       !local_query_fallback_forced) {
-    std::vector<std::string> provider_selection_failures;
-    auto provider_config = select_runtime_knowledge_embedding_provider(
-        readonly_assets_root / "llm" / "providers",
-        &provider_selection_failures);
-    auto transport = options.knowledge_query_encoder_transport_override;
-    if (transport == nullptr) {
-      transport = std::make_shared<RuntimeKnowledgeQueryEncoderCurlTransport>();
-    }
     runtime_query_encoder_health_state =
         std::make_shared<RuntimeProductionQueryEncoderHealthState>(
-            std::move(provider_config),
+            runtime_embedding_provider,
             dependency_set->secret_manager,
-            std::move(transport),
+            runtime_embedding_transport,
             std::string(composition_owner));
     if (runtime_query_encoder_health_state->has_provider_configuration()) {
       create_query_encoder = [runtime_query_encoder_health_state]() {

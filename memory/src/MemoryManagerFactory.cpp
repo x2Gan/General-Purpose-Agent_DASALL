@@ -74,14 +74,89 @@ class BootstrapContextOrchestrator final : public IContextOrchestrator {
   }
 };
 
-[[nodiscard]] std::unique_ptr<IEmbeddingAdapter> create_embedding_adapter(
-    const MemoryConfig& config) {
-  if (!config.vector.enabled ||
-      config.vector.backend_type == VectorBackend::None) {
-    return nullptr;
+struct EmbeddingAdapterSelection {
+  std::unique_ptr<IEmbeddingAdapter> adapter;
+  bool used_local_fallback = false;
+  const char* warning_key = nullptr;
+  const char* fallback_reason = nullptr;
+};
+
+[[nodiscard]] const char* vector_backend_name(VectorBackend backend) {
+  switch (backend) {
+    case VectorBackend::SqliteVss:
+      return "sqlite_vss";
+    case VectorBackend::None:
+      return "none";
   }
 
-  return std::make_unique<SimpleLocalEmbeddingAdapter>();
+  return "unknown";
+}
+
+void emit_embedding_adapter_fallback_warning(
+    const std::shared_ptr<observability::MemoryObservability>& observability,
+    const MemoryRuntimeDependencies& runtime_dependencies,
+    const MemoryConfig& config,
+    const EmbeddingAdapterSelection& selection) {
+  if (observability == nullptr || !selection.used_local_fallback ||
+      selection.warning_key == nullptr) {
+    return;
+  }
+
+  observability->emit(
+      "factory.embedding_adapter.degraded",
+      observability::MemoryTelemetryContext{
+          .request_id = "memory-factory-embedding-adapter",
+          .session_id = {},
+          .stage = "factory",
+          .trace_id = {},
+          .profile_id = runtime_dependencies.profile_id,
+      },
+      {
+          observability::MemoryTelemetryField{.key = "warning_count",
+                                              .value = "1"},
+          observability::MemoryTelemetryField{.key = "warning",
+                                              .value = selection.warning_key},
+          observability::MemoryTelemetryField{.key = "warning_codes",
+                                              .value = selection.warning_key},
+          observability::MemoryTelemetryField{.key = "vector_enabled",
+                                              .value = config.vector.enabled ? "true"
+                                                                            : "false"},
+          observability::MemoryTelemetryField{.key = "reason",
+                                              .value = selection.fallback_reason == nullptr
+                                                           ? "unknown"
+                                                           : selection.fallback_reason},
+          observability::MemoryTelemetryField{.key = "storage_backend",
+                                              .value = vector_backend_name(
+                                                  config.vector.backend_type)},
+      });
+}
+
+[[nodiscard]] EmbeddingAdapterSelection create_embedding_adapter(
+    const MemoryConfig& config,
+    const MemoryRuntimeDependencies& runtime_dependencies) {
+  EmbeddingAdapterSelection selection;
+  if (!config.vector.enabled ||
+      config.vector.backend_type == VectorBackend::None) {
+    return selection;
+  }
+
+  if (runtime_dependencies.embedding_adapter_factory) {
+    selection.adapter = runtime_dependencies.embedding_adapter_factory(config);
+    if (selection.adapter != nullptr) {
+      return selection;
+    }
+
+    selection.used_local_fallback = true;
+    selection.warning_key = "embedding_adapter_local_fallback";
+    selection.fallback_reason = "factory_returned_null";
+  } else {
+    selection.used_local_fallback = true;
+    selection.warning_key = "embedding_adapter_local_fallback";
+    selection.fallback_reason = "factory_missing";
+  }
+
+  selection.adapter = std::make_unique<SimpleLocalEmbeddingAdapter>();
+  return selection;
 }
 
 [[nodiscard]] sqlite3* resolve_sqlite_writer_connection(IMemoryStore& store) {
@@ -137,7 +212,15 @@ std::unique_ptr<IMemoryManager> create_memory_manager(
     if (runtime_dependencies.summarizer_factory) {
       dependencies.summarizer = runtime_dependencies.summarizer_factory(config);
     }
-    dependencies.embedding_adapter = create_embedding_adapter(config);
+    auto embedding_adapter_selection = create_embedding_adapter(
+      config, runtime_dependencies);
+    emit_embedding_adapter_fallback_warning(
+      dependencies.observability,
+      runtime_dependencies,
+      config,
+      embedding_adapter_selection);
+    dependencies.embedding_adapter =
+      std::move(embedding_adapter_selection.adapter);
     dependencies.vector_index = create_vector_index(
         config, *dependencies.store, dependencies.embedding_adapter.get());
     dependencies.store_writer_mutex = std::make_shared<std::mutex>();

@@ -1,3 +1,40 @@
+## 记录 #876
+
+- 日期：2026-06-02
+- 阶段：memory / external embedding production closure
+- 任务：完成 WP-MEM-GAP-002“外部 Embedding Service 注入（GAP-P0-B）”
+- 状态：已完成（runtime_support owner glue、focused validation 与文档回写已闭合）
+
+### 执行前提
+
+1. [docs/deliverables/MEM-EVAL-2026-05-31-memory子系统落地评估与生产级缺口治理任务规划.md](../deliverables/MEM-EVAL-2026-05-31-memory子系统落地评估与生产级缺口治理任务规划.md) 已把 `WP-MEM-GAP-002` 固定为“外部 Embedding Service 注入”，但草案中把 concrete `LLMBackedEmbeddingAdapter` 放在 llm 模块的落点与 [tests/unit/llm/LLMBoundaryGuardComplianceTest.cpp](../../tests/unit/llm/LLMBoundaryGuardComplianceTest.cpp) 冲突；本轮必须先守住 llm 不 include / link memory 的现有边界。
+2. 真实缺口不在 sqlite-vss backend 本身，而在 [memory/include/MemoryDependencies.h](../../memory/include/MemoryDependencies.h) / [memory/src/MemoryManagerFactory.cpp](../../memory/src/MemoryManagerFactory.cpp) 缺少 runtime-facing embedding seam，以及 [apps/runtime_support/src/RuntimeLiveDependencyComposition.cpp](../../apps/runtime_support/src/RuntimeLiveDependencyComposition.cpp) 尚未给 memory 注入外部 embedding adapter。
+3. 现有生产 `/embeddings` HTTP 治理链已经存在于 runtime_support 的 knowledge query encoder 路径：provider asset、transport、secret manager 与 timeout 语义都可复用；本轮只能沿既有 llm transport / provider / secret seam 装配，不能扩张 `ILLMManager` public SPI 或把 llm concrete 类型暴露给 memory。
+
+### 改动
+
+1. 更新 [memory/include/MemoryDependencies.h](../../memory/include/MemoryDependencies.h) 与 [memory/src/MemoryManagerFactory.cpp](../../memory/src/MemoryManagerFactory.cpp)，新增 `embedding_adapter_factory` 窄注入面、factory 优先 / fallback 选择，以及 `factory.embedding_adapter.degraded` 降级 warning emit。
+2. 新增 [apps/runtime_support/src/LLMBackedEmbeddingAdapter.h](../../apps/runtime_support/src/LLMBackedEmbeddingAdapter.h) 与 [apps/runtime_support/src/LLMBackedEmbeddingAdapter.cpp](../../apps/runtime_support/src/LLMBackedEmbeddingAdapter.cpp)，并更新 [apps/runtime_support/src/RuntimeLiveDependencyComposition.cpp](../../apps/runtime_support/src/RuntimeLiveDependencyComposition.cpp) 与 [apps/runtime_support/CMakeLists.txt](../../apps/runtime_support/CMakeLists.txt)：runtime_support 现在复用 knowledge query encoder 的 provider / transport / secret 选择链，把 runtime-owned embedding adapter 注入 memory manager。
+3. 新增 [tests/unit/memory/LLMBackedEmbeddingAdapterCompileTest.cpp](../../tests/unit/memory/LLMBackedEmbeddingAdapterCompileTest.cpp) 与 [tests/unit/memory/MemoryVectorRecallQualityTest.cpp](../../tests/unit/memory/MemoryVectorRecallQualityTest.cpp)，并更新 [tests/unit/memory/CMakeLists.txt](../../tests/unit/memory/CMakeLists.txt)，把 compile seam 与 recall quality 两条 focused unit tests 接入 CTest。
+4. 更新 [docs/architecture/DASALL_memory子系统详细设计.md](../architecture/DASALL_memory子系统详细设计.md)、[docs/deliverables/MEM-EVAL-2026-05-31-memory子系统落地评估与生产级缺口治理任务规划.md](../deliverables/MEM-EVAL-2026-05-31-memory子系统落地评估与生产级缺口治理任务规划.md) 与 [docs/todos/DASALL_子系统查漏补缺专项记录.md](../todos/DASALL_子系统查漏补缺专项记录.md)，回写 `WP-MEM-GAP-002 / GAP-P0-B` 已闭合、草案中的 llm-owned adapter 修正为 runtime_support owner glue，以及剩余 P0 焦点转向并发长跑 / installed gate。
+
+### 验证
+
+1. `cmake --build build-ci --target dasall_memory`
+   - 结果：通过。
+2. `cmake --build build-ci --target dasall_apps_runtime_support`
+   - 结果：通过。
+3. `cmake -S . -B build-ci -G "Unix Makefiles" && cmake --build build-ci --target dasall_memory_llm_backed_embedding_adapter_compile_unit_test dasall_memory_vector_recall_quality_unit_test`
+   - 结果：通过。
+4. `ctest --test-dir build-ci -R "^(LLMBackedEmbeddingAdapterCompileTest|MemoryVectorRecallQualityTest)$" --output-on-failure`
+   - 结果：通过；`100% tests passed, 0 tests failed out of 2`。
+
+### 结果
+
+1. Memory 生产向量路径现在会优先使用 runtime_support 注入的外部 embedding adapter；当 provider / transport 不可用时，会回落 `SimpleLocalEmbeddingAdapter` 并发出 observability warning，不阻断主链。
+2. llm boundary guard 继续成立：concrete `LLMBackedEmbeddingAdapter` 没有进入 llm public surface，llm 仍只负责 transport / provider / secret 治理；runtime_support 才是持有真实 glue 并进行跨模块注入的 owner。
+3. `WP-MEM-GAP-002 / GAP-P0-B` 已闭合；Memory V1 剩余高优先级缺口转为并发 / 长跑压力门与 installed / qemu gate。
+
 ## 记录 #875
 
 - 日期：2026-06-02

@@ -70,10 +70,10 @@
 | Failure injection（BUSY / 损坏 / vector 缺失 / disk full / schema mismatch） | `MemoryFailureInjectionTest` 5 路径 | 达成 |
 | 生产 composition | RuntimeLiveDependencyComposition.cpp:3308 真实注入 logger/audit/metrics/tracer + profile_id | 达成 |
 
-**普遍性架构缺口**：memory 已经把"控制平面之下的状态层"做扎实；`GAP-P0-A` 已于 2026-06-02 通过 runtime_support owner glue 闭合，当前剩余缺口集中在**质量与运营**：
-1. 生产侧未注入外部 embedding service，导致向量召回质量受限（且默认关闭）；
-2. 生产侧未挂主动 maintenance ticker，导致 WAL/retention 依赖外部触发；
-3. 长跑 / 并发 / soak 证据偏弱。
+**普遍性架构缺口**：memory 已经把"控制平面之下的状态层"做扎实；`GAP-P0-A` 与 `GAP-P0-B` 已于 2026-06-02 通过 runtime_support owner glue 闭合，当前剩余缺口集中在**质量与运营**：
+1. 生产侧未挂主动 maintenance ticker，导致 WAL / retention 依赖外部触发；
+2. 长跑 / 并发 / soak 证据偏弱；
+3. 跨 session FactQuery、token 估算与向量质量增强仍属于后续质量演进项。
 
 ---
 
@@ -105,7 +105,7 @@
 | 设计 ID / 条款 | 现状 | 风险 | 关联缺口 |
 |---|---|---|---|
 | §6.3.1 阶段 2 ISummarizer 注入（MEM-E01） | 已通过 [memory/include/MemoryDependencies.h](../../memory/include/MemoryDependencies.h) `summarizer_factory` + [memory/src/MemoryManagerFactory.cpp](../../memory/src/MemoryManagerFactory.cpp) owner 装配 + [apps/runtime_support/src/RuntimeLiveDependencyComposition.cpp](../../apps/runtime_support/src/RuntimeLiveDependencyComposition.cpp) 注入 [apps/runtime_support/src/LLMBackedSummarizer.h](../../apps/runtime_support/src/LLMBackedSummarizer.h) / [apps/runtime_support/src/LLMBackedSummarizer.cpp](../../apps/runtime_support/src/LLMBackedSummarizer.cpp) 闭合 | 结构性缺口已清零；后续仅继续治理 prompt release / provider 质量与更高层 SLO | GAP-P0-A 已闭合（2026-06-02） |
-| §6.3.2 / MEM-E04 IEmbeddingAdapter 外部注入 | 仅 [SimpleLocalEmbeddingAdapter.cpp](../../memory/src/vector/SimpleLocalEmbeddingAdapter.cpp)（104 行 hash-based）；factory 内永远 `make_unique<SimpleLocalEmbeddingAdapter>` | 向量召回质量在生产用例下偏弱；当前默认 `vector.enabled=false` 已规避，但启用时质量不可期 | GAP-P0-B |
+| §6.3.2 / MEM-E04 IEmbeddingAdapter 外部注入 | 已通过 [memory/include/MemoryDependencies.h](../../memory/include/MemoryDependencies.h) `embedding_adapter_factory` + [memory/src/MemoryManagerFactory.cpp](../../memory/src/MemoryManagerFactory.cpp) factory 优先/本地 fallback 装配 + [apps/runtime_support/src/RuntimeLiveDependencyComposition.cpp](../../apps/runtime_support/src/RuntimeLiveDependencyComposition.cpp) 注入 [apps/runtime_support/src/LLMBackedEmbeddingAdapter.h](../../apps/runtime_support/src/LLMBackedEmbeddingAdapter.h) / [apps/runtime_support/src/LLMBackedEmbeddingAdapter.cpp](../../apps/runtime_support/src/LLMBackedEmbeddingAdapter.cpp) 闭合 | 结构性缺口已清零；后续仅继续补 installed / qemu / soak 证据与更高层质量指标 | GAP-P0-B 已闭合（2026-06-02） |
 | §6.12.2 token 估算 | `estimate_text_tokens` 使用 bytes/4 + chars*2 + 10% safety margin 启发式 | 边界场景下 over-budget 误差 ±20%；BudgetAllocator 裁剪决策可能失真 | GAP-P1-A（MEM-E08） |
 | §11.1 vector 失败拖垮主链路 | WritebackCoordinator 已把 vector 写入挪到 core transaction commit 后（best-effort）；**但 search_ann 失败的 fallback 路径在 CandidateCollector 内仅 best-effort 记录** | 与设计一致，已规避；唯一观察项：vector 重试与 retry budget 耦合度 | 无独立缺口 |
 | §6.23 maintenance 自动调度 | `MemoryMaintenanceWorker.start()` 支持 ticker，但 [MemoryManagerFactory.cpp](../../memory/src/MemoryManagerFactory.cpp) 与 RuntimeLiveDependencyComposition 都**未默认启用 ticker**；生产侧依赖 daemon 外部驱动 | 长跑场景 WAL 增长 / quarantine cleanup 延迟；与 runtime GAP-P1-A 同源 | GAP-P1-B |
@@ -144,7 +144,7 @@
 | Production logging 链 | memory 事件 | infra.log / audit / metric / trace | MemoryObservability.emit → MemoryRuntimeDependencies.{logger/audit_logger/metrics_provider/tracer_provider} | [MemoryProductionLoggingIntegrationTest.cpp](../../tests/integration/memory/MemoryProductionLoggingIntegrationTest.cpp) / [MemoryObservabilityBridgeTest.cpp](../../tests/integration/memory/MemoryObservabilityBridgeTest.cpp) | ✅ 完整 |
 | Topology smoke | top-level | memory subsystem 入口 | MemoryIntegrationTopologySmokeTest | ✅ 完整 |
 | 生成质量链 | turn 文本 → SummaryMemory.summary_text | CompressionCoordinator.template fallback + `LLMBackedSummarizer`（阶段 2 已注入） | `LLMBackedSummarizerCompileTest` / `MemoryCompressionLLMSummarizerIntegrationTest` / `MemoryProductionLoggingIntegrationTest` | ✅ 已闭合（原 GAP-P0-A） |
-| 向量召回质量链 | turn/fact text → embedding → search_ann | SimpleLocalEmbeddingAdapter（hash） | **未接外部 embedding service** | `VectorMemoryAdapterTest` 仅功能验证 | ❌ 缺，GAP-P0-B |
+| 向量召回质量链 | turn/fact text → embedding → search_ann | `MemoryRuntimeDependencies.embedding_adapter_factory` + `MemoryManagerFactory` factory selection/fallback + `RuntimeLiveDependencyComposition` 注入 `LLMBackedEmbeddingAdapter` | `LLMBackedEmbeddingAdapterCompileTest` / `MemoryVectorRecallQualityTest` | ✅ 已闭合（原 GAP-P0-B；更高层 installed / qemu 证据另归 GAP-P0-D） |
 | 跨 session FactQuery 链 | user/profile 维度 | Long-Term 共享事实 | **无 cross-session 接口** | 无 | ❌ 缺，GAP-P2-B |
 | Maintenance ticker 链 | 周期触发 | WAL gc / quarantine cleanup / vector rebuild | **生产侧未挂 ticker** | 无 | ❌ 缺，GAP-P1-B |
 
@@ -159,7 +159,7 @@
 | Working Memory 黑板 | shared_mutex + TTL + LRU + snapshot/restore | MemGPT main context；LangGraph state | ✅ 对齐 |
 | Long-Term Semantic 冲突检测 | 规则引擎（极性词 / 否定词 / 数字 / 锚点 token） | MemoryOS / 知识图谱风格 | ✅ 真实落地，**比多数 OSS Agent 强**（向量辅助缺，GAP-P2-A） |
 | 摘要质量 | 阶段 1 模板 fallback + 阶段 2 `LLMBackedSummarizer`（`responder@2026.06.02`） | MemGPT recursive summarization；MemoryOS dialog page | ✅ 生产装配已闭合；后续只剩 prompt/provider 质量指标治理 |
-| 向量召回 | sqlite-vss + 本地 hash embedding | OpenAI text-embedding-3 / bge / e5 | ⚠️ 需外部 service（GAP-P0-B） |
+| 向量召回 | sqlite-vss + runtime_support 注入外部 embedding service，缺 provider / transport 时回落本地 hash | OpenAI text-embedding-3 / bge / e5 | ✅ 生产装配已闭合；installed / qemu / soak 证据继续治理 |
 | 持久化 | SQLite WAL + 单 writer + reader pool + busy retry + PASSIVE checkpoint + sqlite-vss + schema_migrations | Akka Persistence / SQLite 官方推荐 | ✅ 对齐工业最佳实践 |
 | 错误分类 | 5 枚举 + retryable/audit_required/result_code/warning_key/audit_scope 元数据 | k8s admission errors / SQLite result codes | ✅ 比常见 Agent 实现完备 |
 | 可观测性 sink 直连 | MemoryObservability 同时驱动 log/metric/audit/trace bridges | OpenTelemetry mandatory exporter | ✅ 已强制（**比 runtime 子系统更完整**） |
@@ -188,10 +188,10 @@
   - 边界说明：deliverable 草案原写法是把 `LLMBackedSummarizer` 放进 llm 模块，但 [tests/unit/llm/LLMBoundaryGuardComplianceTest.cpp](../../tests/unit/llm/LLMBoundaryGuardComplianceTest.cpp) 已禁止 llm include/link memory；因此 concrete 实现实际落在 [apps/runtime_support/src/LLMBackedSummarizer.h](../../apps/runtime_support/src/LLMBackedSummarizer.h) / [apps/runtime_support/src/LLMBackedSummarizer.cpp](../../apps/runtime_support/src/LLMBackedSummarizer.cpp)，由 runtime_support 持有 `llm_manager` 并通过 composition 注入。
   - 验证证据：`LLMBackedSummarizerCompileTest`、`MemoryCompressionLLMSummarizerIntegrationTest`、`MemoryProductionLoggingIntegrationTest` 与 `DaemonRuntimeLiveDependencyCompositionTest` 已通过。
 
-- **GAP-P0-B 生产侧外部 Embedding Service 注入（MEM-E04）**
-  - 现状：[SimpleLocalEmbeddingAdapter.cpp](../../memory/src/vector/SimpleLocalEmbeddingAdapter.cpp) hash-based 占位；`MemoryManagerFactory.create_embedding_adapter` 永远返回 simple adapter。
-  - 风险：sqlite-vss 启用后召回质量低；当前默认 `vector.enabled=false` 仅是规避而非解决。
-  - 必要条件：llm 子系统提供 embedding service adapter；MemoryRuntimeDependencies 加 `embedding_adapter_factory` 字段。
+- **GAP-P0-B 生产侧外部 Embedding Service 注入（MEM-E04）**（已闭合，2026-06-02）
+  - 完成情况：[memory/include/MemoryDependencies.h](../../memory/include/MemoryDependencies.h) 已新增 `embedding_adapter_factory`；[memory/src/MemoryManagerFactory.cpp](../../memory/src/MemoryManagerFactory.cpp) 现优先调用 factory，factory 缺失或返回空时回落 `SimpleLocalEmbeddingAdapter`，并发出 `factory.embedding_adapter.degraded` warning；[apps/runtime_support/src/LLMBackedEmbeddingAdapter.h](../../apps/runtime_support/src/LLMBackedEmbeddingAdapter.h) / [apps/runtime_support/src/LLMBackedEmbeddingAdapter.cpp](../../apps/runtime_support/src/LLMBackedEmbeddingAdapter.cpp) 与 [apps/runtime_support/src/RuntimeLiveDependencyComposition.cpp](../../apps/runtime_support/src/RuntimeLiveDependencyComposition.cpp) 已把 runtime-owned 外部 embedding adapter 注入 live composition，并复用 knowledge query encoder 的 provider / transport 选择链。
+  - 边界说明：deliverable 草案原写法是把 `LLMBackedEmbeddingAdapter` 放进 llm 模块，但 [tests/unit/llm/LLMBoundaryGuardComplianceTest.cpp](../../tests/unit/llm/LLMBoundaryGuardComplianceTest.cpp) 已禁止 llm include / link memory；因此 concrete 实现实际落在 runtime_support，llm 继续只暴露 transport / provider / secret public SPI。
+  - 验证证据：`LLMBackedEmbeddingAdapterCompileTest`、`MemoryVectorRecallQualityTest` 已通过。
 
 - **GAP-P0-C 并发 / 长跑压力门 MEM-G**
   - 现状：仅 `WorkingMemoryBoardConcurrencyTest` / `SqliteMemoryStoreConcurrencyTest` 单测；无 1k+ 轮长跑、无 TSAN preset 复跑。
@@ -263,15 +263,19 @@
 
 #### WP-MEM-GAP-002 外部 Embedding Service 注入（GAP-P0-B）
 
-- **代码目标**
-  - 在 `MemoryRuntimeDependencies` 增加 `std::function<std::unique_ptr<IEmbeddingAdapter>(const MemoryConfig&)> embedding_adapter_factory`。
-  - [memory/src/MemoryManagerFactory.cpp:80-87 `create_embedding_adapter`](../../memory/src/MemoryManagerFactory.cpp) 改为优先调用 factory，未注入时回落 `SimpleLocalEmbeddingAdapter` 并打 warning。
-  - 在 llm 子系统新增 `LLMBackedEmbeddingAdapter`（实现 memory::IEmbeddingAdapter）；composition 层注入。
-- **测试目标**
-  - `LLMBackedEmbeddingAdapterCompileTest`；`MemoryVectorRecallQualityTest`（fake provider，验证 recall@k 在已注入 embedding 时显著提升）。
-- **验收命令**
-  - `ctest --test-dir build-ci -R "LLMBackedEmbedding|MemoryVectorRecallQuality" --output-on-failure`
-- **阻塞 / 解阻**：依赖 llm 子系统 embedding API（已具备 stub，需对接）。
+- **状态**：已完成（2026-06-02）。
+- **代码结果**
+  - [memory/include/MemoryDependencies.h](../../memory/include/MemoryDependencies.h) 与 [memory/src/MemoryManagerFactory.cpp](../../memory/src/MemoryManagerFactory.cpp) 已新增 `embedding_adapter_factory` seam、factory 优先 / fallback 选择与 `factory.embedding_adapter.degraded` warning emit；未注入或 factory 返回空时仍回落 `SimpleLocalEmbeddingAdapter`。
+  - [apps/runtime_support/src/LLMBackedEmbeddingAdapter.h](../../apps/runtime_support/src/LLMBackedEmbeddingAdapter.h)、[apps/runtime_support/src/LLMBackedEmbeddingAdapter.cpp](../../apps/runtime_support/src/LLMBackedEmbeddingAdapter.cpp)、[apps/runtime_support/src/RuntimeLiveDependencyComposition.cpp](../../apps/runtime_support/src/RuntimeLiveDependencyComposition.cpp) 与 [apps/runtime_support/CMakeLists.txt](../../apps/runtime_support/CMakeLists.txt) 已新增 runtime-owned 外部 embedding adapter，并在 live composition 中复用 knowledge query encoder 的 provider / transport / secret 选择链。
+- **测试结果**
+  - [tests/unit/memory/LLMBackedEmbeddingAdapterCompileTest.cpp](../../tests/unit/memory/LLMBackedEmbeddingAdapterCompileTest.cpp) 验证 `/embeddings` request 投影、auth / header / body 与 response parsing。
+  - [tests/unit/memory/MemoryVectorRecallQualityTest.cpp](../../tests/unit/memory/MemoryVectorRecallQualityTest.cpp) 用 fake provider + scoring sqlite-vss driver 证明注入语义 embedding 后 recall@1 相比本地 hash baseline 提升。
+  - [tests/unit/memory/CMakeLists.txt](../../tests/unit/memory/CMakeLists.txt) 已接入两个新 target 与 CTest。
+- **验收证据**
+  - `cmake -S . -B build-ci -G "Unix Makefiles"`：通过。
+  - `cmake --build build-ci --target dasall_memory_llm_backed_embedding_adapter_compile_unit_test dasall_memory_vector_recall_quality_unit_test`：通过。
+  - `ctest --test-dir build-ci -R "^(LLMBackedEmbeddingAdapterCompileTest|MemoryVectorRecallQualityTest)$" --output-on-failure`：通过，2/2。
+- **阻塞 / 解阻**：已解阻。草案中的“llm 子系统新增实现 `memory::IEmbeddingAdapter` 的 concrete”与 llm boundary guard / `ILLMManager` 当前 public SPI 不相容；本轮改为 runtime_support owner glue 持有 llm transport / secret seam 并注入 memory，保持 llm public surface 不感知 memory。
 
 #### WP-MEM-GAP-003 Memory 并发 / 长跑压力门（GAP-P0-C）
 
@@ -487,7 +491,7 @@ flowchart LR
 
 | 关联子系统 | 协同点 | 联动任务 |
 |---|---|---|
-| runtime_support + llm | runtime_support owner glue 持有 `llm_manager` 并注入 `LLMBackedSummarizer` / 后续 `LLMBackedEmbeddingAdapter`；llm 继续只暴露能力与 prompt/provider 治理 | WP-MEM-GAP-001 / -002 |
+| runtime_support + llm | runtime_support owner glue 持有 `llm_manager` / transport / secret seam，并注入 `LLMBackedSummarizer` 与 `LLMBackedEmbeddingAdapter`；llm 继续只暴露能力与 prompt/provider/transport 治理 | WP-MEM-GAP-001 / -002（均已闭合，2026-06-02） |
 | runtime | MaintenanceTicker 与 BackgroundMaintenanceTicker 协调；external_evidence projector 在 runtime 装配 | WP-MEM-GAP-006 / -007；与 RT-EVAL GAP-P1-A 联动 |
 | knowledge | structured evidence → `vector<string>` 投影规范 | WP-MEM-GAP-007 |
 | profiles | tokenizer / vector / retention / scoring 配置键扩展 | WP-MEM-GAP-005 / -011 / -012 / -013 |
@@ -501,10 +505,10 @@ flowchart LR
 memory 子系统已达到 **可生产部署 v1** 水位：架构 / 详设目标 100% 落地、无虚假实现、业务链贯通、ADR 边界守门、可观测性 sink 直连、profile 兼容齐备。
 
 距离 **GA 生产级** 的真实缺口集中在两个象限：
-1. **质量层**：`GAP-P0-A` 已于 2026-06-02 闭合，生产侧 LLM-backed Summarizer 已进入 live composition；当前剩余关键缺口是外部 Embedding service（GAP-P0-B）、跨 session FactQuery 与后续质量指标治理。
+1. **质量层**：`GAP-P0-A` 与 `GAP-P0-B` 已于 2026-06-02 闭合，生产侧 LLM-backed Summarizer 与外部 Embedding service 均已进入 live composition；当前剩余关键质量缺口转为跨 session FactQuery、token 估算、ConflictResolver 向量辅助与后续 scoring / retention 治理。
 2. **运营层**：并发 / 长跑证据（GAP-P0-C）、installed gate（GAP-P0-D）、生产 ticker（GAP-P1-B）、soak 采样（GAP-P3-E）需逐步收敛。
 
-其余 P2 / P3 缺口（MEM-E02..E09）为设计文档已显式声明的演进项，不属于实现缺陷。GA 收敛优先级建议：**P0 四项 → P1 四项 → P2 链式 → P3 选择性**。
+其余 P2 / P3 缺口（MEM-E02..E09）为设计文档已显式声明的演进项，不属于实现缺陷。GA 收敛优先级建议：**剩余 P0 两项 → P1 四项 → P2 链式 → P3 选择性**。
 
 ---
 
@@ -525,7 +529,7 @@ memory 子系统已达到 **可生产部署 v1** 水位：架构 / 详设目标 
 | 版本 | 任务 ID | 简述 |
 |---|---|---|
 | V1 | WP-MEM-GAP-001 | LLM-backed Summarizer 注入（生产装配，已完成 2026-06-02） |
-| V1 | WP-MEM-GAP-002 | 外部 Embedding Service 注入（生产装配） |
+| V1 | WP-MEM-GAP-002 | 外部 Embedding Service 注入（生产装配，已完成 2026-06-02） |
 | V1 | WP-MEM-GAP-003 | 并发 / 长跑压力门 + TSAN |
 | V1 | WP-MEM-GAP-004 | Memory installed / qemu gate |
 | V1 | WP-MEM-GAP-005 | tiktoken token 估算 |

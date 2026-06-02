@@ -486,9 +486,9 @@ public:
 
 1. **无 embedding 可用时**（edge_minimal / vector disabled）：VectorMemoryIndexAdapter 标记为 unavailable，所有操作 no-op。
 2. **本地轻量 embedding**：注入基于 TF-IDF / BM25 的 SimpleLocalEmbeddingAdapter（memory 内部实现），维度和质量有限但无外部依赖。
-3. **外部 embedding service**：runtime 在组装 MemoryManager 时注入 ExternalEmbeddingAdapter（通过 service adapter 间接使用 LLM/embedding API），memory 编译依赖图中不出现 embedding service 模块。
+3. **外部 embedding service**：runtime 在组装 MemoryManager 时通过 `MemoryRuntimeDependencies.embedding_adapter_factory` 注入外部 adapter；当前生产实现落在 runtime_support owner glue 的 `LLMBackedEmbeddingAdapter`，复用 llm transport / provider / secret seam，memory 编译依赖图中不出现 embedding service 模块。
 
-工厂函数根据 `VectorConfig.backend_type` 和可用的 IEmbeddingAdapter 决定创建哪种 VectorMemoryIndexAdapter 实现。
+工厂函数根据 `VectorConfig.backend_type` 和可用的 IEmbeddingAdapter 决定创建哪种 VectorMemoryIndexAdapter 实现。若 factory 缺失、返回空，或生产 composition 没有拿到可用 provider / transport，则回落 `SimpleLocalEmbeddingAdapter` 并发出降级 warning，保证向量路径不会阻断主链。
 
 MEM-TODO-023 冻结结论：
 

@@ -31,6 +31,7 @@ class ITracerProvider;
 namespace dasall::memory {
 
 struct MemoryConfig;
+class IEmbeddingAdapter;
 class ISummarizer;
 
 struct MemoryRuntimeDependencies {
@@ -40,6 +41,8 @@ struct MemoryRuntimeDependencies {
   std::shared_ptr<dasall::infra::tracing::ITracerProvider> tracer_provider;
   std::function<std::unique_ptr<ISummarizer>(const MemoryConfig&)>
       summarizer_factory;
+  std::function<std::unique_ptr<IEmbeddingAdapter>(const MemoryConfig&)>
+      embedding_adapter_factory;
   std::string profile_id = "unknown";
 };
 
