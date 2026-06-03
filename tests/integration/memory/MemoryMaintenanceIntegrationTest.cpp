@@ -13,6 +13,7 @@
 #endif
 
 #include "IMemoryManager.h"
+#include "MemoryMaintenanceTickerThread.h"
 #include "store/sqlite/SqliteMemoryStore.h"
 #include "support/TestAssertions.h"
 
@@ -188,12 +189,57 @@ void test_memory_manager_auto_schedule_runs_background_maintenance() {
   cleanup_database_artifacts(database_path);
 }
 
+void test_daemon_ticker_runs_background_maintenance_when_internal_auto_schedule_disabled() {
+  using dasall::tests::support::assert_equal;
+  using dasall::tests::support::assert_true;
+
+  const auto database_path = make_temp_database_path("dasall-memory-maintenance-daemon");
+  cleanup_database_artifacts(database_path);
+  seed_old_quarantine_record(database_path, "integration-quarantine-daemon");
+
+  auto config = make_sqlite_config(database_path);
+  config.maintenance.auto_schedule = false;
+
+  auto manager = dasall::memory::create_memory_manager(config);
+  const auto init_code = manager->init(config);
+  assert_equal(0,
+               static_cast<int>(init_code),
+               "sqlite-backed memory manager should initialize with daemon-owned maintenance ticker");
+
+    auto shared_manager = std::shared_ptr<dasall::memory::IMemoryManager>(
+      manager.release(),
+      [](dasall::memory::IMemoryManager* ptr) { delete ptr; });
+
+  dasall::apps::daemon::MemoryMaintenanceTickerThread ticker(
+      {.memory_manager = shared_manager},
+      {.enabled = true,
+       .interval_ms = 20,
+       .jitter_ms = 0,
+       .retention_ms = 20,
+       .checkpoint_strategy = "passive_each_tick",
+       .failure_backoff_ms = 40});
+
+  assert_true(ticker.start(),
+              "daemon-owned maintenance ticker should start when internal auto schedule is disabled");
+  assert_true(wait_for_quarantine_cleanup(database_path, "integration-quarantine-daemon"),
+              "daemon-owned maintenance ticker should eventually clean the seeded quarantine row");
+  ticker.stop();
+
+  assert_equal(0,
+               query_scalar_count(database_path,
+                                  "SELECT COUNT(*) FROM quarantined_records WHERE object_id = 'integration-quarantine-daemon'"),
+               "daemon-owned maintenance ticker should persist cleanup effects into sqlite");
+  shared_manager->shutdown();
+  cleanup_database_artifacts(database_path);
+}
+
 }  // namespace
 
 int main() {
   try {
     test_memory_manager_run_maintenance_executes_sqlite_worker();
     test_memory_manager_auto_schedule_runs_background_maintenance();
+    test_daemon_ticker_runs_background_maintenance_when_internal_auto_schedule_disabled();
   } catch (const std::exception& exception) {
     std::cerr << exception.what() << '\n';
     return 1;

@@ -168,6 +168,20 @@ template <typename T>
       get_bool(parsed_yaml.scalar_values, "degrade_policy.allow_budget_degrade");
   const auto multi_agent_enabled =
       get_bool(parsed_yaml.scalar_values, "enabled_modules.multi_agent");
+  const auto memory_maintenance_enabled =
+      get_bool(parsed_yaml.scalar_values, "memory.maintenance.enabled");
+  const auto memory_maintenance_interval_ms =
+      get_numeric<std::int64_t>(parsed_yaml.scalar_values,
+                                "memory.maintenance.interval_ms");
+  const auto memory_maintenance_jitter_ms =
+      get_numeric<std::int64_t>(parsed_yaml.scalar_values,
+                                "memory.maintenance.jitter_ms");
+  const auto memory_maintenance_retention_ms =
+      get_numeric<std::int64_t>(parsed_yaml.scalar_values,
+                                "memory.maintenance.retention_ms");
+  const auto memory_maintenance_checkpoint_strategy =
+      get_string(parsed_yaml.scalar_values,
+                 "memory.maintenance.checkpoint_strategy");
 
   const auto execution_requires_confirmation =
       get_bool(parsed_yaml.scalar_values, "execution_policy.requires_high_risk_confirmation");
@@ -205,8 +219,12 @@ template <typename T>
       !max_history_turns.has_value() || !compression_threshold.has_value() ||
       !cache_refresh_interval_ms.has_value() || !cache_expire_after_ms.has_value() ||
       !cache_stale_read_allowed.has_value() || !cache_failure_backoff_ms.has_value() ||
-    !allow_model_failover.has_value() || !allow_budget_degrade.has_value() ||
-    !multi_agent_enabled.has_value() ||
+            !allow_model_failover.has_value() || !allow_budget_degrade.has_value() ||
+            !multi_agent_enabled.has_value() || !memory_maintenance_enabled.has_value() ||
+            !memory_maintenance_interval_ms.has_value() ||
+            !memory_maintenance_jitter_ms.has_value() ||
+            !memory_maintenance_retention_ms.has_value() ||
+            !memory_maintenance_checkpoint_strategy.has_value() ||
       !execution_requires_confirmation.has_value() || !execution_safe_mode.has_value() ||
       !execution_audit_level.has_value() || !ops_log_level.has_value() ||
       !ops_metrics_granularity.has_value() || !ops_trace_sample_ratio.has_value() ||
@@ -333,6 +351,13 @@ template <typename T>
       },
       *worker_threads,
       *multi_agent_enabled,
+      MemoryMaintenancePolicy{
+          .enabled = *memory_maintenance_enabled,
+          .interval_ms = *memory_maintenance_interval_ms,
+          .jitter_ms = *memory_maintenance_jitter_ms,
+          .retention_ms = *memory_maintenance_retention_ms,
+          .checkpoint_strategy = *memory_maintenance_checkpoint_strategy,
+      },
   };
 
   if (!snapshot.has_consistent_values()) {

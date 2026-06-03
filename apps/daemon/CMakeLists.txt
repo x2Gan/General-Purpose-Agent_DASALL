@@ -1,6 +1,7 @@
 add_executable(dasall-daemon
   src/main.cpp
   src/DaemonBootstrap.cpp
+  src/MemoryMaintenanceTickerThread.cpp
   src/DaemonConfig.h
   src/DaemonEntryConfigLoader.cpp
   src/DaemonEntryConfigLoader.h
@@ -26,6 +27,7 @@ target_link_libraries(dasall-daemon
   PRIVATE
     dasall_access
     dasall_apps_runtime_support
+    dasall_memory
     dasall_runtime
     dasall_contracts
     dasall_infra
@@ -37,6 +39,7 @@ target_include_directories(dasall-daemon
   PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src
     ${CMAKE_SOURCE_DIR}/infra/src
+    ${CMAKE_SOURCE_DIR}/runtime/src
 )
 
 set_target_properties(dasall-daemon PROPERTIES

@@ -22,6 +22,9 @@ struct MutableRuntimePolicySnapshot {
   TimeoutPolicy timeout_policy;
   ExecutionPolicy execution_policy;
   OpsPolicy ops_policy;
+  std::uint32_t worker_threads;
+  bool multi_agent_enabled;
+  MemoryMaintenancePolicy memory_maintenance_policy;
 };
 
 [[nodiscard]] MutableRuntimePolicySnapshot make_mutable_snapshot(const RuntimePolicySnapshot& snapshot) {
@@ -37,6 +40,9 @@ struct MutableRuntimePolicySnapshot {
       .timeout_policy = snapshot.timeout_policy(),
       .execution_policy = snapshot.execution_policy(),
       .ops_policy = snapshot.ops_policy(),
+      .worker_threads = snapshot.worker_threads(),
+      .multi_agent_enabled = snapshot.multi_agent_enabled(),
+      .memory_maintenance_policy = snapshot.memory_maintenance_policy(),
   };
 }
 
@@ -53,6 +59,9 @@ struct MutableRuntimePolicySnapshot {
       snapshot.timeout_policy,
       snapshot.execution_policy,
       snapshot.ops_policy,
+      snapshot.worker_threads,
+      snapshot.multi_agent_enabled,
+      snapshot.memory_maintenance_policy,
   };
 }
 

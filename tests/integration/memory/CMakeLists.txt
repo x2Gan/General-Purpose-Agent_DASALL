@@ -144,7 +144,14 @@ target_link_libraries(dasall_memory_profile_compatibility_integration_test
 
 target_link_libraries(dasall_memory_maintenance_integration_test
   PRIVATE
+    dasall_infra
+    dasall_runtime
     dasall_sqlite3
+)
+
+target_sources(dasall_memory_maintenance_integration_test
+  PRIVATE
+    ${CMAKE_SOURCE_DIR}/apps/daemon/src/MemoryMaintenanceTickerThread.cpp
 )
 
 target_link_libraries(dasall_memory_observability_bridge_integration_test
@@ -195,7 +202,9 @@ target_include_directories(dasall_memory_profile_compatibility_integration_test
 
 target_include_directories(dasall_memory_maintenance_integration_test
   PRIVATE
+    ${CMAKE_SOURCE_DIR}/apps/daemon/src
     ${CMAKE_SOURCE_DIR}/memory/src
+    ${CMAKE_SOURCE_DIR}/runtime/src
 )
 
 target_include_directories(dasall_memory_observability_bridge_integration_test

@@ -35,6 +35,7 @@
 #include "DaemonConfigReloader.h"
 #include "DaemonConfigValidator.h"
 #include "DaemonSignalHandler.h"
+#include "MemoryMaintenanceTickerThread.h"
 #include "AccessErrors.h"
 #include "AccessGatewayFactory.h"
 #include "../../../access/src/AsyncTaskRegistry.h"
@@ -773,6 +774,33 @@ int main(int argc, char* argv[]) {
     return 1;
   }
 
+  dasall::apps::daemon::MemoryMaintenanceTickerThread memory_maintenance_ticker(
+      dasall::apps::daemon::MemoryMaintenanceTickerThread::Dependencies{
+          .memory_manager = runtime_init_request.request.dependency_set == nullptr
+                                ? nullptr
+                                : runtime_init_request.request.dependency_set->memory_manager,
+          .background_maintenance_hooks =
+              runtime_init_request.request.dependency_set == nullptr
+                  ? nullptr
+                  : runtime_init_request.request.dependency_set
+                        ->background_maintenance_hooks,
+          .logger = runtime_init_request.request.dependency_set == nullptr
+                        ? nullptr
+                        : runtime_init_request.request.dependency_set->logger,
+          .audit_logger = runtime_init_request.request.dependency_set == nullptr
+                              ? nullptr
+                              : runtime_init_request.request.dependency_set
+                                    ->audit_logger,
+      },
+      dasall::apps::daemon::project_memory_maintenance_ticker_config(
+          *entry.runtime_policy_snapshot));
+  const bool memory_maintenance_ticker_started =
+      memory_maintenance_ticker.start();
+  if (entry.runtime_policy_snapshot->memory_maintenance_policy().enabled &&
+      !memory_maintenance_ticker_started) {
+    std::cout << "[dasall-daemon] memory maintenance ticker=unavailable\n";
+  }
+
   // 4. 启动 UDS 服务端
   std::cout << "[dasall-daemon] starting on "
             << context->bootstrap_config.socket_path << "\n";
@@ -786,6 +814,7 @@ int main(int argc, char* argv[]) {
 
   while (!run_finished.load()) {
     if (signal_handler.shutdown_requested()) {
+      memory_maintenance_ticker.stop();
       bootstrap.stop(std::chrono::milliseconds(entry.bootstrap_config.shutdown_grace_ms));
       break;
     }
@@ -827,6 +856,7 @@ int main(int argc, char* argv[]) {
     std::this_thread::sleep_for(std::chrono::milliseconds(50));
   }
 
+  memory_maintenance_ticker.stop();
   daemon_thread.join();
 
   if (!run_ok) {

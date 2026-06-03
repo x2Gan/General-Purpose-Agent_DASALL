@@ -1,3 +1,43 @@
+## 记录 #880
+
+- 日期：2026-06-03
+- 阶段：memory / production maintenance ticker closure
+- 任务：完成 WP-MEM-GAP-006“生产侧 MaintenanceTicker 挂载（GAP-P1-B）”
+- 状态：已完成（daemon-owned ticker、profile 投影、double-ticker root cause 修复、focused tests 与文档回写已闭合）
+
+### 执行前提
+
+1. [docs/deliverables/MEM-EVAL-2026-05-31-memory子系统落地评估与生产级缺口治理任务规划.md](../deliverables/MEM-EVAL-2026-05-31-memory子系统落地评估与生产级缺口治理任务规划.md) 已将 `WP-MEM-GAP-006` 固定为“在 daemon 挂 production MaintenanceTicker”，但当前树此前只有 `MemoryMaintenanceWorker` internal auto_schedule 与 runtime `BackgroundMaintenanceHooks` publish seam，没有真正的 production scheduler owner。
+2. 本轮先在本地证实 `apps/runtime_support/src/RuntimeLiveDependencyComposition.cpp` 仍直接沿用 `project_memory_config()` 的 `maintenance.auto_schedule`，若 daemon 直接额外挂 ticker 会形成双调度；根因必须先收口，而不是只补一条线程。
+3. `GAP-P0-D` 的当前 authoritative 内容已在上一轮收口为 installed gate wrapper regression，不再是本轮编码 blocker；本轮可以直接推进 daemon ticker、本地 focused tests 与文档闭环。
+
+### 改动
+
+1. 新增 [apps/daemon/src/MemoryMaintenanceTickerThread.h](../../apps/daemon/src/MemoryMaintenanceTickerThread.h) 与 [apps/daemon/src/MemoryMaintenanceTickerThread.cpp](../../apps/daemon/src/MemoryMaintenanceTickerThread.cpp)，并更新 [apps/daemon/src/main.cpp](../../apps/daemon/src/main.cpp)、[apps/daemon/CMakeLists.txt](../../apps/daemon/CMakeLists.txt)：daemon 现拥有单线程 maintenance ticker、runtime idle hook publish、warning/exception audit + backoff 与非阻断式启停。
+2. 更新 [profiles/include/RuntimePolicySnapshot.h](../../profiles/include/RuntimePolicySnapshot.h)、[profiles/src/RuntimePolicyProvider.cpp](../../profiles/src/RuntimePolicyProvider.cpp)、[profiles/src/ProfileOverlayComposer.cpp](../../profiles/src/ProfileOverlayComposer.cpp) 与五档 [profiles](../../profiles) `runtime_policy.yaml`，新增 `memory.maintenance.{enabled, interval_ms, jitter_ms, retention_ms, checkpoint_strategy}` 显式 runtime policy；同时更新 [memory/src/config/MemoryConfigProjector.cpp](../../memory/src/config/MemoryConfigProjector.cpp)，让 MemoryConfig 从该 policy 投影 cadence。
+3. 更新 [apps/runtime_support/src/RuntimeLiveDependencyComposition.cpp](../../apps/runtime_support/src/RuntimeLiveDependencyComposition.cpp)，在 live composition 中显式关闭 `memory_config.maintenance.auto_schedule`，把 production cadence owner 固定到 daemon，消除双 ticker 根因。
+4. 新增 [tests/unit/apps/daemon/MemoryMaintenanceTickerThreadTest.cpp](../../tests/unit/apps/daemon/MemoryMaintenanceTickerThreadTest.cpp)，并更新 [tests/unit/apps/daemon/CMakeLists.txt](../../tests/unit/apps/daemon/CMakeLists.txt)；`MemoryMaintenanceTickerCadenceTest` 与 `MemoryMaintenanceTickerFailureBackoffTest` 现已注册到 CTest。
+5. 扩展 [tests/integration/memory/MemoryMaintenanceIntegrationTest.cpp](../../tests/integration/memory/MemoryMaintenanceIntegrationTest.cpp) 与 [tests/integration/memory/CMakeLists.txt](../../tests/integration/memory/CMakeLists.txt)，新增 internal auto_schedule 关闭后由 daemon ticker 驱动真实 sqlite maintenance 的集成证明；同时新增 [docs/todos/memory/deliverables/WP-MEM-GAP-006-maintenance-ticker-closeout.md](../todos/memory/deliverables/WP-MEM-GAP-006-maintenance-ticker-closeout.md)，并回写规划文档与总账。
+
+### 验证
+
+1. `cmake --build build-ci --target dasall_apps_runtime_support`
+   - 结果：通过；关闭 live composition `maintenance.auto_schedule` 的第一笔根因修正未破坏 runtime_support 构建。
+2. `cmake --build build-ci --target dasall_runtime_policy_snapshot_unit_test dasall_runtime_policy_provider_unit_test dasall_profile_overlay_composer_unit_test dasall_contract_profile_runtime_policy_schema_test && ctest --test-dir build-ci --output-on-failure -R "RuntimePolicySnapshotTest|RuntimePolicyProviderTest|ProfileOverlayComposerTest|ProfileRuntimePolicySchemaContractTest"`
+   - 结果：通过，4/4。
+3. `cmake --build build-ci --target dasall_memory_profile_compatibility_integration_test && ctest --test-dir build-ci --output-on-failure -R "MemoryProfileCompatibilityTest"`
+   - 结果：通过，1/1。
+4. `cmake --build build-ci --target dasall-daemon`
+   - 结果：通过；daemon 主程序已成功编译并接线新的 ticker thread。
+5. `cmake -S . -B build-ci && cmake --build build-ci --target "dasall-daemon_memory_maintenance_ticker_unit_test" dasall_memory_maintenance_integration_test && ctest --test-dir build-ci --output-on-failure -R "MemoryMaintenanceTickerCadenceTest|MemoryMaintenanceTickerFailureBackoffTest|MemoryMaintenanceIntegrationTest"`
+   - 结果：通过，3/3。
+
+### 结果
+
+1. `WP-MEM-GAP-006 / GAP-P1-B` 已闭合；production maintenance cadence 现由 daemon 显式持有，并通过 profile policy 与 focused tests 固定下来。
+2. `RuntimeLiveDependencyComposition` 已在 production path 关闭 `maintenance.auto_schedule`，双 ticker 根因已被修复，不再允许 internal worker 与 daemon ticker 并存。
+3. Memory 当前剩余 P1 焦点收敛为 `WP-MEM-GAP-007 / -008` 与更高层 soak / GA 绿色记录；MaintenanceTicker 不再是本轮后的高优先级 blocker。
+
 ## 记录 #879
 
 - 日期：2026-06-03

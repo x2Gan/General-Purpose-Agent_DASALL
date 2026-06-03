@@ -74,6 +74,13 @@ degrade_policy:
 		- lan.general
 	allow_model_failover: true
 	allow_budget_degrade: true
+memory:
+	maintenance:
+		enabled: true
+		interval_ms: 60000
+		jitter_ms: 5000
+		retention_ms: 300000
+		checkpoint_strategy: passive_each_tick
 timeout_policy:
 	llm:
 		timeout_ms: 30000

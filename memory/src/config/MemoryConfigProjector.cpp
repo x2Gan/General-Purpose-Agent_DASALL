@@ -23,6 +23,7 @@ std::optional<MemoryConfig> project_memory_config(
   const auto max_input_tokens = snapshot.token_budget_policy().max_input_tokens;
   const auto max_history_turns = snapshot.token_budget_policy().max_history_turns;
   const auto compression_threshold = snapshot.token_budget_policy().compression_threshold;
+  const auto& maintenance_policy = snapshot.memory_maintenance_policy();
   if (max_turns == 0U || max_input_tokens == 0U || max_history_turns == 0U ||
       compression_threshold == 0U) {
     return std::nullopt;
@@ -48,9 +49,6 @@ std::optional<MemoryConfig> project_memory_config(
       static_cast<int>(max_turns) * 20,
       120,
       480);
-  const auto schedule_interval_ms = snapshot.worker_threads() >= 8U
-                                        ? 60000
-                                        : (snapshot.worker_threads() >= 4U ? 90000 : 120000);
   const auto busy_timeout_ms =
       snapshot.capability_cache_policy().stale_read_allowed ? 75 : 50;
   const auto search_top_k = !vector_enabled ? 0 : (snapshot.worker_threads() >= 8U ? 8 : 5);
@@ -88,8 +86,8 @@ std::optional<MemoryConfig> project_memory_config(
 
   config.maintenance.retention_turns = retention_turns;
   config.maintenance.quarantine_enabled = true;
-  config.maintenance.auto_schedule = snapshot.worker_threads() >= 4U;
-  config.maintenance.schedule_interval_ms = schedule_interval_ms;
+  config.maintenance.auto_schedule = maintenance_policy.enabled;
+  config.maintenance.schedule_interval_ms = maintenance_policy.interval_ms;
 
   return config;
 }

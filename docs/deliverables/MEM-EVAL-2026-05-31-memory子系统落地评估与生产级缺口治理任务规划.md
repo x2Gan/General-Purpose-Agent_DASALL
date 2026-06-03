@@ -41,7 +41,7 @@
 | 可观测性（log/metric/audit/trace） | [memory/src/observability/MemoryObservability.cpp](../../memory/src/observability/MemoryObservability.cpp) 482 行；`MemoryProductionLoggingIntegrationTest` / `MemoryObservabilityBridgeTest` 端到端覆盖 | **达成**（生产侧 sink 已直连，**比 runtime 子系统更完整**） |
 | 业务链贯通（Runtime ↔ Memory ↔ SQLite ↔ Vector ↔ Profile ↔ Observability） | unary、resume、recovery、context-assemble、writeback、maintenance、failure-injection、checkpoint-busy、profile-compat、production-logging 等 11 条集成测全部存在 | **可贯通** |
 | 真实落地 vs 桩 | 无空壳实现；`memory/src/MemoryBuildSkeleton.cpp` 仅 4 行历史 namespace 文件可清理；所有主要组件均含真实业务体（store 1493 / orchestrator 814 / writeback 693 / vector backend 713 / observability 482 / manager 482 / schema migrator 406 / row mappers 408 / conflict resolver 371 / compression coordinator 320 / budget allocator 313 / detached vector factory 280 / candidate collector 246 / working board 244） | **无虚假实现** |
-| 距离生产级 GA | 仍欠：installed gate 绿色记录、跨 session FactQuery、MaintenanceTicker 生产挂载、external_evidence 投影 v1、ProductionLogging 字段断言补强、向量相似度辅助冲突检测、ProgrammaticMemory 持久化、composite scoring、遗忘曲线 | **未到生产级** |
+| 距离生产级 GA | 仍欠：installed gate 绿色记录、跨 session FactQuery、external_evidence 投影 v1、ProductionLogging 字段断言补强、向量相似度辅助冲突检测、ProgrammaticMemory 持久化、composite scoring、遗忘曲线 | **未到生产级** |
 
 总体结论：memory 已完成**架构 / 接口 / 持久化 / 上下文装配 / 写回 / 维护 / 观测性**的真实落地，与 runtime 同处"骨架达成、深度需补"水位；区别于 runtime 缺口的"信号外送 / 跨版本 / 并发证据"，memory 当前剩余缺口集中在**质量层（embedding / 跨 session 召回 / 冲突精度）与运营层（长跑证据 / 演进契约）**。GA 前仍需继续收敛剩余 P0 项。
 
@@ -108,7 +108,7 @@
 | §6.3.2 / MEM-E04 IEmbeddingAdapter 外部注入 | 已通过 [memory/include/MemoryDependencies.h](../../memory/include/MemoryDependencies.h) `embedding_adapter_factory` + [memory/src/MemoryManagerFactory.cpp](../../memory/src/MemoryManagerFactory.cpp) factory 优先/本地 fallback 装配 + [apps/runtime_support/src/RuntimeLiveDependencyComposition.cpp](../../apps/runtime_support/src/RuntimeLiveDependencyComposition.cpp) 注入 [apps/runtime_support/src/LLMBackedEmbeddingAdapter.h](../../apps/runtime_support/src/LLMBackedEmbeddingAdapter.h) / [apps/runtime_support/src/LLMBackedEmbeddingAdapter.cpp](../../apps/runtime_support/src/LLMBackedEmbeddingAdapter.cpp) 闭合 | 结构性缺口已清零；后续仅继续补 installed / qemu / soak 证据与更高层质量指标 | GAP-P0-B 已闭合（2026-06-02） |
 | §6.12.2 token 估算 | 已通过 [memory/src/util/TokenEstimator.cpp](../../memory/src/util/TokenEstimator.cpp) `ITokenEstimator` + vendored `cl100k_base` 兼容 tokenizer 收口，`BudgetAllocator` / `CandidateCollector` / `ContextOrchestrator` / `CompressionCoordinator` 统一走 shared estimator | 结构性缺口已清零；后续只继续扩展更多 tokenizer/profile 演进键，不再停留在启发式粗估 | GAP-P1-A 已闭合（2026-06-03） |
 | §11.1 vector 失败拖垮主链路 | WritebackCoordinator 已把 vector 写入挪到 core transaction commit 后（best-effort）；**但 search_ann 失败的 fallback 路径在 CandidateCollector 内仅 best-effort 记录** | 与设计一致，已规避；唯一观察项：vector 重试与 retry budget 耦合度 | 无独立缺口 |
-| §6.23 maintenance 自动调度 | `MemoryMaintenanceWorker.start()` 支持 ticker，但 [MemoryManagerFactory.cpp](../../memory/src/MemoryManagerFactory.cpp) 与 RuntimeLiveDependencyComposition 都**未默认启用 ticker**；生产侧依赖 daemon 外部驱动 | 长跑场景 WAL 增长 / quarantine cleanup 延迟；与 runtime GAP-P1-A 同源 | GAP-P1-B |
+| §6.23 maintenance 自动调度 | `MemoryMaintenanceWorker.start()` 的 internal worker 仍保留，但 [apps/daemon/src/MemoryMaintenanceTickerThread.cpp](../../apps/daemon/src/MemoryMaintenanceTickerThread.cpp) 已成为 production cadence owner；[RuntimeLiveDependencyComposition.cpp](../../apps/runtime_support/src/RuntimeLiveDependencyComposition.cpp) 显式关闭 `maintenance.auto_schedule` 避免双 ticker | 结构性缺口已清零；更高层 24h stable / soak 证据仍留在 GA gate | GAP-P1-B 已闭合（2026-06-03） |
 | §6.12.3 ConflictResolver | 关键词重叠 + 极性词 + 否定词；未引入向量相似度 | 跨语言 / 同义改写型冲突会误判为 Coexist | GAP-P2-A（MEM-E09） |
 | §6.12.5 FactQuery 跨 session | 当前 store query 默认 session-scoped；**无跨 session / user-level 共享接口** | 多 session 下用户偏好无法持久化共享 | GAP-P2-B（MEM-E05） |
 | §4.1.1 / MemoryOS 对齐 遗忘曲线权重衰减 | retention 仅按 turn 数和 TTL；无衰减权重 | Long-Term 数据量增长后召回相关性下降 | GAP-P2-C（MEM-E02） |
@@ -137,7 +137,7 @@
 |---|---|---|---|---|---|
 | Context 装配主链 | runtime.AgentOrchestrator | ContextPacket | `IMemoryManager::prepare_context` → ContextOrchestrator.assemble → CandidateCollector.collect → BudgetAllocator.allocate → CompressionCoordinator (when triggered) → ContextPacketGuards → 11 槽位 build_packet | [MemoryContextAssembleIntegrationTest.cpp](../../tests/integration/memory/MemoryContextAssembleIntegrationTest.cpp) / [MemoryContextIntegrationTest.cpp](../../tests/integration/memory/MemoryContextIntegrationTest.cpp) | ✅ 完整 |
 | 写回主链 | runtime（turn 完成 / recovery 结果 / tool digest） | 持久化 + observability + working board update | `IMemoryManager::write_back` → WritebackCoordinator.execute → core txn (Turn+Session+Summary) → derived (Fact+Experience+ConflictAction) → vector sidecar (best-effort) → working board update → emit telemetry | [MemoryWritebackIntegrationTest.cpp](../../tests/integration/memory/MemoryWritebackIntegrationTest.cpp) | ✅ 完整 |
-| Maintenance 链 | runtime / daemon idle | checkpoint + retention + quarantine + vector rebuild | `IMemoryManager::run_maintenance` → MemoryMaintenanceWorker → SqliteMemoryStore.checkpoint / retention / quarantine | [MemoryMaintenanceIntegrationTest.cpp](../../tests/integration/memory/MemoryMaintenanceIntegrationTest.cpp) / [MemoryCheckpointBusyTest.cpp](../../tests/integration/memory/MemoryCheckpointBusyTest.cpp) | ✅ 完整（生产 ticker 缺，GAP-P1-B） |
+| Maintenance 链 | runtime / daemon idle | checkpoint + retention + quarantine + vector rebuild | `IMemoryManager::run_maintenance` → MemoryMaintenanceWorker → SqliteMemoryStore.checkpoint / retention / quarantine | [MemoryMaintenanceIntegrationTest.cpp](../../tests/integration/memory/MemoryMaintenanceIntegrationTest.cpp) / [MemoryCheckpointBusyTest.cpp](../../tests/integration/memory/MemoryCheckpointBusyTest.cpp) | ✅ 完整（daemon ticker 已闭合，原 GAP-P1-B） |
 | Failure 注入链 | 故障 inject | 显式错误码 / quarantine / degrade | SqliteMemoryStore map_sqlite_result → MemoryError → MemoryErrorMapping | [MemoryFailureInjectionTest.cpp](../../tests/integration/memory/MemoryFailureInjectionTest.cpp) 5 路径 | ✅ 完整 |
 | Working 快照 / 恢复链 | runtime resume | export/restore working snapshot | `IMemoryManager::export_working_memory_snapshot` → WorkingMemoryBoard.export_snapshot/restore_snapshot | `WorkingMemorySnapshotTest` + 在 [MemoryContextIntegrationTest.cpp](../../tests/integration/memory/MemoryContextIntegrationTest.cpp) 联动 | ✅ 完整 |
 | Profile 链 | profiles.MemoryConfig | assemble/writeback/checkpoint 行为 | MemoryConfigProjector → MemoryConfig → 各 component | [MemoryProfileCompatibilityTest.cpp](../../tests/integration/memory/MemoryProfileCompatibilityTest.cpp) | ✅ 完整 |
@@ -146,7 +146,7 @@
 | 生成质量链 | turn 文本 → SummaryMemory.summary_text | CompressionCoordinator.template fallback + `LLMBackedSummarizer`（阶段 2 已注入） | `LLMBackedSummarizerCompileTest` / `MemoryCompressionLLMSummarizerIntegrationTest` / `MemoryProductionLoggingIntegrationTest` | ✅ 已闭合（原 GAP-P0-A） |
 | 向量召回质量链 | turn/fact text → embedding → search_ann | `MemoryRuntimeDependencies.embedding_adapter_factory` + `MemoryManagerFactory` factory selection/fallback + `RuntimeLiveDependencyComposition` 注入 `LLMBackedEmbeddingAdapter` | `LLMBackedEmbeddingAdapterCompileTest` / `MemoryVectorRecallQualityTest` | ✅ 已闭合（原 GAP-P0-B；更高层 installed authoritative gate / optional qemu chaining 证据另归 GAP-P0-D） |
 | 跨 session FactQuery 链 | user/profile 维度 | Long-Term 共享事实 | **无 cross-session 接口** | 无 | ❌ 缺，GAP-P2-B |
-| Maintenance ticker 链 | 周期触发 | WAL gc / quarantine cleanup / vector rebuild | **生产侧未挂 ticker** | 无 | ❌ 缺，GAP-P1-B |
+| Maintenance ticker 链 | 周期触发 | WAL gc / quarantine cleanup / vector rebuild | [MemoryMaintenanceTickerThread.cpp](../../apps/daemon/src/MemoryMaintenanceTickerThread.cpp) + daemon main lifecycle wiring + live composition internal auto_schedule off | [MemoryMaintenanceTickerThreadTest.cpp](../../tests/unit/apps/daemon/MemoryMaintenanceTickerThreadTest.cpp) / [MemoryMaintenanceIntegrationTest.cpp](../../tests/integration/memory/MemoryMaintenanceIntegrationTest.cpp) | ✅ 已闭合（2026-06-03） |
 
 ---
 
@@ -163,7 +163,7 @@
 | 持久化 | SQLite WAL + 单 writer + reader pool + busy retry + PASSIVE checkpoint + sqlite-vss + schema_migrations | Akka Persistence / SQLite 官方推荐 | ✅ 对齐工业最佳实践 |
 | 错误分类 | 5 枚举 + retryable/audit_required/result_code/warning_key/audit_scope 元数据 | k8s admission errors / SQLite result codes | ✅ 比常见 Agent 实现完备 |
 | 可观测性 sink 直连 | MemoryObservability 同时驱动 log/metric/audit/trace bridges | OpenTelemetry mandatory exporter | ✅ 已强制（**比 runtime 子系统更完整**） |
-| Maintenance | checkpoint / retention / quarantine / vector rebuild；被动调度 + 可选 ticker | k8s GC controllers / Temporal periodic | ⚠️ 生产侧未挂 ticker（GAP-P1-B） |
+| Maintenance | checkpoint / retention / quarantine / vector rebuild；被动调度 + 可选 ticker | k8s GC controllers / Temporal periodic | ✅ production daemon ticker 已挂载；更高层 24h stable / soak 仍在 GA gate |
 | 跨 profile 裁剪 | desktop_full / edge_balanced / edge_minimal | k8s feature gates | ✅ 对齐 |
 | 跨 session 事实共享 | 当前仅 session-scoped query | MemoryOS user profile / Letta core memory | ❌ 缺（GAP-P2-B） |
 | 遗忘曲线 / 衰减权重 | 仅 TTL + turn 数 retention | MemoryOS heat 衰减 / Ebbinghaus | ❌ 缺（GAP-P2-C） |
@@ -329,15 +329,17 @@
 
 #### WP-MEM-GAP-006 生产侧 MaintenanceTicker 挂载（GAP-P1-B）
 
-- **代码目标**
-  - 在 [apps/daemon/src/](../../apps/daemon/src/) 内挂 `MemoryMaintenanceTickerThread`（单线程；周期可配；与 runtime BackgroundMaintenanceTicker 协调，避免双 ticker）。
-  - profile 投影：`memory.maintenance.{enabled, interval_ms, jitter_ms, retention_ms, checkpoint_strategy}`。
-  - 失败时打 audit + 退避；不影响主链路。
-- **测试目标**
-  - `MemoryMaintenanceTickerCadenceTest`、`MemoryMaintenanceTickerFailureBackoffTest`；扩展 `MemoryMaintenanceIntegrationTest` 加 ticker 验证。
-- **验收命令**
-  - `ctest --test-dir build-ci -R "MemoryMaintenanceTicker|MemoryMaintenanceIntegration" --output-on-failure`
-- **阻塞 / 解阻**：依赖 GAP-P0-D（installed gate）以验证生产 cadence；与 runtime GAP-P1-A 联动。
+- **代码结果**
+  - [apps/daemon/src/MemoryMaintenanceTickerThread.h](../../apps/daemon/src/MemoryMaintenanceTickerThread.h) / [apps/daemon/src/MemoryMaintenanceTickerThread.cpp](../../apps/daemon/src/MemoryMaintenanceTickerThread.cpp) 已新增 daemon-owned ticker：单线程 cadence、runtime idle hook publish、warning/exception audit + backoff 全部落盘；[apps/daemon/src/main.cpp](../../apps/daemon/src/main.cpp) 已在 daemon 生命周期中接线启停。
+  - [profiles/include/RuntimePolicySnapshot.h](../../profiles/include/RuntimePolicySnapshot.h)、[profiles/src/RuntimePolicyProvider.cpp](../../profiles/src/RuntimePolicyProvider.cpp)、[profiles/src/ProfileOverlayComposer.cpp](../../profiles/src/ProfileOverlayComposer.cpp) 与五档 [profiles](../../profiles) `runtime_policy.yaml` 已新增 `memory.maintenance.{enabled, interval_ms, jitter_ms, retention_ms, checkpoint_strategy}`。
+  - [memory/src/config/MemoryConfigProjector.cpp](../../memory/src/config/MemoryConfigProjector.cpp) 现从 `snapshot.memory_maintenance_policy()` 投影 maintenance cadence；[apps/runtime_support/src/RuntimeLiveDependencyComposition.cpp](../../apps/runtime_support/src/RuntimeLiveDependencyComposition.cpp) 显式关闭 `maintenance.auto_schedule`，消除 production 双 ticker 根因。
+- **测试结果**
+  - [tests/unit/apps/daemon/MemoryMaintenanceTickerThreadTest.cpp](../../tests/unit/apps/daemon/MemoryMaintenanceTickerThreadTest.cpp) 已新增 `MemoryMaintenanceTickerCadenceTest` 与 `MemoryMaintenanceTickerFailureBackoffTest`。
+  - [tests/integration/memory/MemoryMaintenanceIntegrationTest.cpp](../../tests/integration/memory/MemoryMaintenanceIntegrationTest.cpp) 已扩展 daemon-owned ticker 驱动真实 sqlite maintenance 的集成验证。
+- **验收证据**
+  - `cmake --build build-ci --target dasall-daemon`：通过。
+  - `cmake -S . -B build-ci && cmake --build build-ci --target "dasall-daemon_memory_maintenance_ticker_unit_test" dasall_memory_maintenance_integration_test && ctest --test-dir build-ci --output-on-failure -R "MemoryMaintenanceTickerCadenceTest|MemoryMaintenanceTickerFailureBackoffTest|MemoryMaintenanceIntegrationTest"`：通过，3/3。
+- **阻塞 / 解阻**：已解阻。GAP-P0-D 当前 authoritative 内容已是 installed gate wrapper regression，不再阻断本任务；runtime GAP-P1-A 仍是 sibling capability，但非本任务前置。
 
 #### WP-MEM-GAP-007 external_evidence 投影 v1 端到端（GAP-P1-C / MEM-B06）
 
@@ -452,7 +454,7 @@
 #### WP-MEM-GAP-018 Long-running soak gate 增强（GAP-P3-E）
 
 - **代码目标**：在 infra release-soak 套件内加 memory 维度采样（store latency / wal size / maintenance lag / writeback partial rate / vector recall@k / summary fallback rate）；soak 报告归档。
-- **阻塞 / 解阻**：依赖 GAP-P0-C、GAP-P1-B、GAP-P0-A、GAP-P0-B。
+- **阻塞 / 解阻**：GAP-P0-C、GAP-P1-B、GAP-P0-A、GAP-P0-B 已闭合；后续只保留更高层 soak 指标设计与 release 环境采样联动。
 
 ---
 
@@ -503,7 +505,7 @@ flowchart LR
 | 关联子系统 | 协同点 | 联动任务 |
 |---|---|---|
 | runtime_support + llm | runtime_support owner glue 持有 `llm_manager` / transport / secret seam，并注入 `LLMBackedSummarizer` 与 `LLMBackedEmbeddingAdapter`；llm 继续只暴露能力与 prompt/provider/transport 治理 | WP-MEM-GAP-001 / -002（均已闭合，2026-06-02） |
-| runtime | MaintenanceTicker 与 BackgroundMaintenanceTicker 协调；external_evidence projector 在 runtime 装配 | WP-MEM-GAP-006 / -007；与 RT-EVAL GAP-P1-A 联动 |
+| runtime | daemon-owned MaintenanceTicker 已通过 BackgroundMaintenanceHooks 协调；external_evidence projector 在 runtime 装配 | WP-MEM-GAP-006（已闭合，2026-06-03） / -007；与 RT-EVAL GAP-P1-A 联动 |
 | knowledge | structured evidence → `vector<string>` 投影规范 | WP-MEM-GAP-007 |
 | profiles | tokenizer / vector / retention / scoring 配置键扩展 | WP-MEM-GAP-005 / -011 / -012 / -013 |
 | contracts | `MemoryContextRequest` / `ContextAssemblyResult` 提升时机 | WP-MEM-GAP-016 |
@@ -517,9 +519,9 @@ memory 子系统已达到 **可生产部署 v1** 水位：架构 / 详设目标 
 
 距离 **GA 生产级** 的真实缺口集中在两个象限：
 1. **质量层**：`GAP-P0-A` 与 `GAP-P0-B` 已于 2026-06-02 闭合，`GAP-P1-A` 已于 2026-06-03 把 token 估算收口到 `cl100k_base` 兼容实现；当前剩余关键质量缺口转为跨 session FactQuery、ConflictResolver 向量辅助与后续 scoring / retention 治理。
-2. **运营层**：并发 / 长跑 / TSAN 压力门（GAP-P0-C）已于 2026-06-02 通过 build-tree + TSAN 证据闭合；当前剩余运营焦点是 installed gate（GAP-P0-D）、生产 ticker（GAP-P1-B）与更高层 soak 采样（GAP-P3-E）。
+2. **运营层**：并发 / 长跑 / TSAN 压力门（GAP-P0-C）已于 2026-06-02 通过 build-tree + TSAN 证据闭合；`GAP-P1-B` 已于 2026-06-03 完成 daemon-owned MaintenanceTicker 挂载；当前剩余运营焦点收敛为 installed gate（GAP-P0-D）的更高层绿色记录与 soak 采样（GAP-P3-E）。
 
-其余 P2 / P3 缺口（MEM-E02..E09）为设计文档已显式声明的演进项，不属于实现缺陷。GA 收敛优先级建议：**剩余 P0 两项 → P1 四项 → P2 链式 → P3 选择性**。
+其余 P2 / P3 缺口（MEM-E02..E09）为设计文档已显式声明的演进项，不属于实现缺陷。GA 收敛优先级建议：**剩余 P0 一项 → P1 两项 → P2 链式 → P3 选择性**。
 
 ---
 
@@ -544,7 +546,7 @@ memory 子系统已达到 **可生产部署 v1** 水位：架构 / 详设目标 
 | V1 | WP-MEM-GAP-003 | 并发 / 长跑压力门 + TSAN（已完成 2026-06-02） |
 | V1 | WP-MEM-GAP-004 | Memory installed gate（qemu optional chaining） |
 | V1 | WP-MEM-GAP-005 | tiktoken token 估算（已完成 2026-06-03） |
-| V1 | WP-MEM-GAP-006 | 生产侧 MaintenanceTicker 挂载 |
+| V1 | WP-MEM-GAP-006 | 生产侧 MaintenanceTicker 挂载（已完成 2026-06-03） |
 | V1 | WP-MEM-GAP-007 | external_evidence 投影 v1 端到端 |
 | V1 | WP-MEM-GAP-008 | ProductionLogging 字段断言补强 |
 | **V2** | **WP-MEM-GAP-009** | ConflictResolver 向量相似度辅助（MEM-E09） |

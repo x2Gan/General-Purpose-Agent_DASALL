@@ -12,6 +12,7 @@ namespace {
   using dasall::profiles::CapabilityCachePolicy;
   using dasall::profiles::DegradePolicy;
   using dasall::profiles::ExecutionPolicy;
+  using dasall::profiles::MemoryMaintenancePolicy;
   using dasall::profiles::ModelProfile;
   using dasall::profiles::ModelRoutePolicy;
   using dasall::profiles::OpsPolicy;
@@ -66,6 +67,13 @@ namespace {
                 .trace_sample_ratio = 0.2,
                 .remote_diagnostics_enabled = true,
                 .upgrade_strategy = "rolling"},
+      8U,
+      false,
+      MemoryMaintenancePolicy{.enabled = true,
+                              .interval_ms = 60000,
+                              .jitter_ms = 5000,
+                              .retention_ms = 300000,
+                              .checkpoint_strategy = "passive_each_tick"},
   };
 }
 
@@ -141,6 +149,11 @@ void test_overlay_composer_applies_deployment_then_runtime_precedence() {
                "deployment override should remain effective when runtime override does not replace the same key");
   assert_equal(250, static_cast<int>(result.snapshot->capability_cache_policy().refresh_interval_ms),
                "runtime override should update runtime-tunable cache policy field");
+  assert_equal(8, static_cast<int>(result.snapshot->worker_threads()),
+               "overlay composer should preserve worker thread count when no override touches it");
+  assert_equal(60000,
+               static_cast<int>(result.snapshot->memory_maintenance_policy().interval_ms),
+               "overlay composer should preserve memory maintenance policy when no override touches it");
 }
 
 void test_overlay_composer_rejects_runtime_override_without_ttl() {

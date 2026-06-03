@@ -88,6 +88,25 @@ struct DegradePolicy {
   }
 };
 
+struct MemoryMaintenancePolicy {
+  bool enabled = true;
+  std::int64_t interval_ms = 120000;
+  std::int64_t jitter_ms = 0;
+  std::int64_t retention_ms = 300000;
+  std::string checkpoint_strategy = "passive_each_tick";
+
+  [[nodiscard]] bool has_consistent_values() const {
+    return interval_ms > 0 && jitter_ms >= 0 && retention_ms >= 0 &&
+           is_supported_checkpoint_strategy(checkpoint_strategy);
+  }
+
+  [[nodiscard]] static bool is_supported_checkpoint_strategy(
+      const std::string& value) {
+    return value == "passive_each_tick" || value == "passive_on_retention" ||
+           value == "disabled";
+  }
+};
+
 struct TimeoutBudget {
   std::int64_t timeout_ms = 0;
   std::uint32_t retry_budget = 0;
@@ -167,7 +186,8 @@ class RuntimePolicySnapshot {
                         ExecutionPolicy execution_policy,
                         OpsPolicy ops_policy,
                         std::uint32_t worker_threads = 1U,
-                        bool multi_agent_enabled = false)
+                        bool multi_agent_enabled = false,
+                        MemoryMaintenancePolicy memory_maintenance_policy = {})
       : generation_(generation),
         effective_profile_id_(std::move(effective_profile_id)),
         runtime_budget_(std::move(runtime_budget)),
@@ -180,7 +200,8 @@ class RuntimePolicySnapshot {
         execution_policy_(std::move(execution_policy)),
         ops_policy_(std::move(ops_policy)),
         worker_threads_(worker_threads),
-        multi_agent_enabled_(multi_agent_enabled) {}
+        multi_agent_enabled_(multi_agent_enabled),
+        memory_maintenance_policy_(std::move(memory_maintenance_policy)) {}
 
   [[nodiscard]] std::uint64_t generation() const {
     return generation_;
@@ -234,6 +255,10 @@ class RuntimePolicySnapshot {
     return multi_agent_enabled_;
   }
 
+  [[nodiscard]] const MemoryMaintenancePolicy& memory_maintenance_policy() const {
+    return memory_maintenance_policy_;
+  }
+
   [[nodiscard]] bool has_consistent_values() const {
     return generation_ > 0U && !effective_profile_id_.empty() &&
            runtime_budget_.max_tokens.has_value() && runtime_budget_.max_turns.has_value() &&
@@ -244,7 +269,7 @@ class RuntimePolicySnapshot {
            capability_cache_policy_.has_consistent_values() &&
            degrade_policy_.has_consistent_values() && timeout_policy_.has_consistent_values() &&
            execution_policy_.has_consistent_values() && ops_policy_.has_consistent_values() &&
-           worker_threads_ > 0U;
+           worker_threads_ > 0U && memory_maintenance_policy_.has_consistent_values();
   }
 
  private:
@@ -261,6 +286,7 @@ class RuntimePolicySnapshot {
   OpsPolicy ops_policy_;
   std::uint32_t worker_threads_;
   bool multi_agent_enabled_;
+  MemoryMaintenancePolicy memory_maintenance_policy_;
 };
 
 }  // namespace dasall::profiles

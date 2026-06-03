@@ -73,6 +73,13 @@ degrade_policy:
 		- builtin_only
 	allow_model_failover: true
 	allow_budget_degrade: true
+memory:
+	maintenance:
+		enabled: true
+		interval_ms: 90000
+		jitter_ms: 8000
+		retention_ms: 450000
+		checkpoint_strategy: passive_each_tick
 timeout_policy:
 	llm:
 		timeout_ms: 2500

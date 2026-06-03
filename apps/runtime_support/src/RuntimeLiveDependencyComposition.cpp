@@ -2726,6 +2726,8 @@ struct KnowledgeAutoRefreshArmResult {
     return std::nullopt;
   }
 
+  memory_config->maintenance.auto_schedule = false;
+
   memory_config->storage.db_path = (state_root / "memory" / "memory.db").string();
   memory_config->storage.migrations_dir =
       (readonly_assets_root / "sql" / "memory").string();

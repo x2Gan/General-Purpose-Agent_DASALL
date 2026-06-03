@@ -60,6 +60,14 @@ void test_runtime_policy_provider_loads_snapshot_for_valid_profile() {
   assert_equal(std::string("file"),
                load_result.snapshot->ops_policy().optional_backends.secret_backend_type,
                "loaded snapshot should preserve the secret backend selected by the runtime policy asset");
+  assert_true(load_result.snapshot->memory_maintenance_policy().enabled,
+              "loaded snapshot should preserve memory maintenance enablement");
+  assert_equal(60000,
+               static_cast<int>(load_result.snapshot->memory_maintenance_policy().interval_ms),
+               "loaded snapshot should preserve memory maintenance cadence interval");
+  assert_equal(std::string("passive_each_tick"),
+               load_result.snapshot->memory_maintenance_policy().checkpoint_strategy,
+               "loaded snapshot should preserve memory maintenance checkpoint strategy");
 }
 
 void test_runtime_policy_provider_rejects_unknown_profile_requests() {
@@ -98,7 +106,14 @@ void test_runtime_policy_provider_rejects_invalid_schema_content() {
              "profile_meta:\n"
              "\tprofile_id: invalid\n"
              "\ttarget_platform: linux-x86_64\n"
-             "\tsupport_level: ga\n");
+             "\tsupport_level: ga\n"
+             "memory:\n"
+             "\tmaintenance:\n"
+             "\t\tenabled: true\n"
+             "\t\tinterval_ms: 60000\n"
+             "\t\tjitter_ms: 5000\n"
+             "\t\tretention_ms: 300000\n"
+             "\t\tcheckpoint_strategy: passive_each_tick\n");
 
   const ProfileCatalog catalog(temp_root);
   const RuntimePolicyProvider provider(catalog);
@@ -140,7 +155,14 @@ void test_runtime_policy_provider_uses_last_known_good_fallback_when_schema_inva
              "profile_meta:\n"
              "\tprofile_id: desktop_full\n"
              "\ttarget_platform: linux-x86_64-workstation\n"
-             "\tsupport_level: ga\n");
+             "\tsupport_level: ga\n"
+             "memory:\n"
+             "\tmaintenance:\n"
+             "\t\tenabled: true\n"
+             "\t\tinterval_ms: 60000\n"
+             "\t\tjitter_ms: 5000\n"
+             "\t\tretention_ms: 300000\n"
+             "\t\tcheckpoint_strategy: passive_each_tick\n");
 
   const ProfileCatalog broken_catalog(temp_root);
   const RuntimePolicyProvider fallback_provider(broken_catalog, lkg_store);

@@ -548,3 +548,40 @@ set_tests_properties(RuntimeInstalledProofRunnerTest PROPERTIES LABELS "unit;dae
 list(APPEND DASALL_APPS_DAEMON_UNIT_TEST_EXECUTABLE_TARGETS
   dasall-daemon_runtime_installed_proof_runner_unit_test
 )
+
+add_executable(dasall-daemon_memory_maintenance_ticker_unit_test
+  MemoryMaintenanceTickerThreadTest.cpp
+  ${CMAKE_SOURCE_DIR}/apps/daemon/src/MemoryMaintenanceTickerThread.cpp
+)
+
+target_include_directories(dasall-daemon_memory_maintenance_ticker_unit_test
+  PRIVATE
+    ${CMAKE_SOURCE_DIR}/apps/daemon/src
+    ${CMAKE_SOURCE_DIR}/runtime/src
+)
+
+target_link_libraries(dasall-daemon_memory_maintenance_ticker_unit_test
+  PRIVATE
+    dasall_test_support
+    dasall_memory
+    dasall_runtime
+    dasall_infra
+)
+
+dasall_apply_common_options(dasall-daemon_memory_maintenance_ticker_unit_test)
+
+add_test(NAME MemoryMaintenanceTickerCadenceTest
+  COMMAND dasall-daemon_memory_maintenance_ticker_unit_test cadence
+)
+add_test(NAME MemoryMaintenanceTickerFailureBackoffTest
+  COMMAND dasall-daemon_memory_maintenance_ticker_unit_test failure_backoff
+)
+set_tests_properties(
+  MemoryMaintenanceTickerCadenceTest
+  MemoryMaintenanceTickerFailureBackoffTest
+  PROPERTIES LABELS "unit;daemon"
+)
+
+list(APPEND DASALL_APPS_DAEMON_UNIT_TEST_EXECUTABLE_TARGETS
+  dasall-daemon_memory_maintenance_ticker_unit_test
+)

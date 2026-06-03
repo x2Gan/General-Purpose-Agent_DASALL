@@ -173,6 +173,13 @@ void test_memory_profile_projection_tracks_vector_maintenance_and_budget_differe
                "edge_balanced should project the mid-tier maintenance cadence");
   assert_equal(std::int64_t{120000}, edge_minimal.config.maintenance.schedule_interval_ms,
                "edge_minimal should project the slowest maintenance cadence");
+  assert_equal(std::int64_t{60000}, desktop.snapshot->memory_maintenance_policy().interval_ms,
+               "desktop_full runtime snapshot should expose the explicit memory maintenance interval");
+  assert_equal(std::int64_t{8000}, edge_balanced.snapshot->memory_maintenance_policy().jitter_ms,
+               "edge_balanced runtime snapshot should expose the explicit memory maintenance jitter");
+  assert_equal(std::string("passive_on_retention"),
+               edge_minimal.snapshot->memory_maintenance_policy().checkpoint_strategy,
+               "edge_minimal runtime snapshot should expose the reduced checkpoint strategy");
 
   // --- L13: cloud_full and factory_test profile coverage ---
   assert_equal(std::string("cloud_full"), cloud.snapshot->effective_profile_id(),
@@ -201,6 +208,8 @@ void test_memory_profile_projection_tracks_vector_maintenance_and_budget_differe
               "cloud_full should keep maintenance auto-schedule enabled");
   assert_true(factory.config.maintenance.auto_schedule,
               "factory_test should keep maintenance auto-schedule enabled with 4 worker threads");
+  assert_equal(std::int64_t{90000}, factory.config.maintenance.schedule_interval_ms,
+               "factory_test should project the explicit memory maintenance cadence from runtime policy");
 }
 
 void test_memory_profile_projection_stays_compatible_with_profile_validator() {

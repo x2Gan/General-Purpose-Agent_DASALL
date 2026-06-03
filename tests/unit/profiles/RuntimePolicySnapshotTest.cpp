@@ -11,6 +11,7 @@ dasall::profiles::RuntimePolicySnapshot make_snapshot() {
   using dasall::profiles::CapabilityCachePolicy;
   using dasall::profiles::DegradePolicy;
   using dasall::profiles::ExecutionPolicy;
+    using dasall::profiles::MemoryMaintenancePolicy;
   using dasall::profiles::ModelProfile;
   using dasall::profiles::ModelRoutePolicy;
   using dasall::profiles::OpsPolicy;
@@ -81,6 +82,15 @@ dasall::profiles::RuntimePolicySnapshot make_snapshot() {
           .remote_diagnostics_enabled = false,
           .upgrade_strategy = "manual",
       },
+      1U,
+      false,
+      MemoryMaintenancePolicy{
+          .enabled = true,
+          .interval_ms = 45000,
+          .jitter_ms = 5000,
+          .retention_ms = 240000,
+          .checkpoint_strategy = "passive_each_tick",
+      },
   };
 }
 
@@ -101,6 +111,8 @@ void test_runtime_policy_snapshot_exposes_read_only_policy_fields() {
               "runtime policy snapshot should preserve model route map");
   assert_true(snapshot.timeout_policy().workflow.timeout_ms == 2500,
               "runtime policy snapshot should preserve workflow timeout policy");
+    assert_true(snapshot.memory_maintenance_policy().interval_ms == 45000,
+                            "runtime policy snapshot should preserve memory maintenance cadence policy");
 }
 
 void test_runtime_policy_snapshot_interface_is_const_only() {
@@ -116,6 +128,10 @@ void test_runtime_policy_snapshot_interface_is_const_only() {
   static_assert(std::is_same_v<decltype(std::declval<const RuntimePolicySnapshot&>().ops_policy()),
                                const dasall::profiles::OpsPolicy&>,
                 "ops_policy getter should expose const reference only");
+    static_assert(
+            std::is_same_v<decltype(std::declval<const RuntimePolicySnapshot&>().memory_maintenance_policy()),
+                                         const dasall::profiles::MemoryMaintenancePolicy&>,
+            "memory_maintenance_policy getter should expose const reference only");
 
   assert_true(std::is_constructible_v<RuntimePolicySnapshot,
                                       std::uint64_t,
@@ -144,6 +160,8 @@ void test_runtime_policy_snapshot_rejects_incomplete_budget_or_policy_domains() 
 
   auto invalid_prompt_policy = duplicate_prompt_rules.prompt_policy();
   invalid_prompt_policy.trusted_sources = {"profiles", "profiles"};
+    auto invalid_memory_policy = duplicate_prompt_rules.memory_maintenance_policy();
+    invalid_memory_policy.checkpoint_strategy = "not-supported";
 
   const RuntimePolicySnapshot rebuilt_missing_budget{
       missing_budget.generation(),
@@ -173,10 +191,29 @@ void test_runtime_policy_snapshot_rejects_incomplete_budget_or_policy_domains() 
       duplicate_prompt_rules.ops_policy(),
   };
 
+  const RuntimePolicySnapshot rebuilt_invalid_memory_policy{
+      duplicate_prompt_rules.generation(),
+      duplicate_prompt_rules.effective_profile_id(),
+      duplicate_prompt_rules.runtime_budget(),
+      duplicate_prompt_rules.model_profile(),
+      duplicate_prompt_rules.token_budget_policy(),
+      duplicate_prompt_rules.prompt_policy(),
+      duplicate_prompt_rules.capability_cache_policy(),
+      duplicate_prompt_rules.degrade_policy(),
+      duplicate_prompt_rules.timeout_policy(),
+      duplicate_prompt_rules.execution_policy(),
+      duplicate_prompt_rules.ops_policy(),
+      duplicate_prompt_rules.worker_threads(),
+      duplicate_prompt_rules.multi_agent_enabled(),
+      invalid_memory_policy,
+  };
+
   assert_true(!rebuilt_missing_budget.has_consistent_values(),
               "runtime policy snapshot should reject missing runtime budget dimensions");
   assert_true(!rebuilt_duplicate_prompt_rules.has_consistent_values(),
               "runtime policy snapshot should reject duplicate prompt trust sources");
+  assert_true(!rebuilt_invalid_memory_policy.has_consistent_values(),
+              "runtime policy snapshot should reject unsupported memory maintenance checkpoint strategies");
 }
 
 }  // namespace
