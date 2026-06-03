@@ -41,7 +41,7 @@
 | 可观测性（log/metric/audit/trace） | [memory/src/observability/MemoryObservability.cpp](../../memory/src/observability/MemoryObservability.cpp) 482 行；`MemoryProductionLoggingIntegrationTest` / `MemoryObservabilityBridgeTest` 端到端覆盖 | **达成**（生产侧 sink 已直连，**比 runtime 子系统更完整**） |
 | 业务链贯通（Runtime ↔ Memory ↔ SQLite ↔ Vector ↔ Profile ↔ Observability） | unary、resume、recovery、context-assemble、writeback、maintenance、failure-injection、checkpoint-busy、profile-compat、production-logging 等 11 条集成测全部存在 | **可贯通** |
 | 真实落地 vs 桩 | 无空壳实现；`memory/src/MemoryBuildSkeleton.cpp` 仅 4 行历史 namespace 文件可清理；所有主要组件均含真实业务体（store 1493 / orchestrator 814 / writeback 693 / vector backend 713 / observability 482 / manager 482 / schema migrator 406 / row mappers 408 / conflict resolver 371 / compression coordinator 320 / budget allocator 313 / detached vector factory 280 / candidate collector 246 / working board 244） | **无虚假实现** |
-| 距离生产级 GA | 仍欠：installed gate 绿色记录、跨 session FactQuery、ProductionLogging 字段断言补强、向量相似度辅助冲突检测、ProgrammaticMemory 持久化、composite scoring、遗忘曲线 | **未到生产级** |
+| 距离生产级 GA | 仍欠：installed gate 绿色记录、跨 session FactQuery、向量相似度辅助冲突检测、ProgrammaticMemory 持久化、composite scoring、遗忘曲线 | **未到生产级** |
 
 总体结论：memory 已完成**架构 / 接口 / 持久化 / 上下文装配 / 写回 / 维护 / 观测性**的真实落地，与 runtime 同处"骨架达成、深度需补"水位；区别于 runtime 缺口的"信号外送 / 跨版本 / 并发证据"，memory 当前剩余缺口集中在**质量层（embedding / 跨 session 召回 / 冲突精度）与运营层（长跑证据 / 演进契约）**。GA 前仍需继续收敛剩余 P0 项。
 
@@ -216,8 +216,9 @@
   - 完成情况：已新增 [runtime/src/KnowledgeEvidenceProjector.h](../../runtime/src/KnowledgeEvidenceProjector.h) / [runtime/src/KnowledgeEvidenceProjector.cpp](../../runtime/src/KnowledgeEvidenceProjector.cpp)，并更新 [runtime/src/AgentOrchestrator.cpp](../../runtime/src/AgentOrchestrator.cpp) / [runtime/CMakeLists.txt](../../runtime/CMakeLists.txt)，把 knowledge structured evidence 到 `MemoryContextRequest.external_evidence` / `retrieval_evidence_refs` 的投影 owner 收口到 runtime 单一 projector。
   - 验证证据：已新增 [tests/unit/runtime/KnowledgeEvidenceProjectorTest.cpp](../../tests/unit/runtime/KnowledgeEvidenceProjectorTest.cpp) 与 [tests/integration/memory/MemoryExternalEvidenceProjectionEndToEndTest.cpp](../../tests/integration/memory/MemoryExternalEvidenceProjectionEndToEndTest.cpp)；`KnowledgeEvidenceProjectorTest` 与 `MemoryExternalEvidenceProjectionEndToEndTest` 已通过。
 
-- **GAP-P1-D ProductionLogging assert 字段补强**
-  - 现状：`MemoryProductionLoggingIntegrationTest` 已存在，但**字段断言面**（recovery_required / writeback_partial / maintenance_*）可加强；与 GAP-P0-A 联动。
+- **GAP-P1-D ProductionLogging assert 字段补强**（已闭合，2026-06-03）
+  - 完成情况：已更新 [tests/integration/memory/MemoryProductionLoggingIntegrationTest.cpp](../../tests/integration/memory/MemoryProductionLoggingIntegrationTest.cpp)，补齐 `writeback_partial` / `vector_unavailable` / `maintenance_tick` / `summarizer_fallback` / `schema_mismatch` 场景下的 metric / audit / trace 字段断言；其中 context degraded 场景新增第二轮 writeback seed，稳定触发 `summarizer_fallback` 与 `strategy:template`，schema mismatch 场景按实际 manager preopen 路径固定 `failure_reason=store_preopen_failed`。
+  - 验证证据：`Build_CMakeTools(buildTargets=["dasall_memory_production_logging_integration_test"])` 与 `RunCtest_CMakeTools(tests=["MemoryProductionLoggingIntegrationTest"])` 已通过。
 
 ### 6.3 P2（演进项 / MEM-E 系列）
 
@@ -357,14 +358,17 @@
 
 #### WP-MEM-GAP-008 ProductionLogging assert 字段补强（GAP-P1-D）
 
-- **代码目标**
-  - [tests/integration/memory/MemoryProductionLoggingIntegrationTest.cpp](../../tests/integration/memory/MemoryProductionLoggingIntegrationTest.cpp) 增加：writeback_partial / vector_unavailable / maintenance_tick / summarizer_fallback / schema_mismatch 等场景的 metric / audit / trace 字段断言。
-  - 不修改实现代码；仅增强证据。
-- **测试目标**
-  - `MemoryProductionLoggingIntegrationTest` 增加场景覆盖。
-- **验收命令**
-  - `ctest --test-dir build-ci -R "MemoryProductionLogging" --output-on-failure`
-- **阻塞 / 解阻**：与 GAP-P0-A 联动（summarizer 切换后增加 strategy 字段断言）。
+- **状态**：已完成（2026-06-03）。
+- **代码结果**
+  - 已更新 [tests/integration/memory/MemoryProductionLoggingIntegrationTest.cpp](../../tests/integration/memory/MemoryProductionLoggingIntegrationTest.cpp)，把 `writeback_partial`、`vector_unavailable`、`maintenance_tick`、`summarizer_fallback` 与 `schema_mismatch` 五类场景的 metric / audit / trace 字段断言固定到同一条 production logging focused integration test；本轮未修改 memory 实现代码。
+  - context degraded 场景现增加第二轮正常 writeback 作为 compression seed，确保 `prepare_context()` 稳定进入 compression path，并对 `compression_note_count=2`、`compression_strategy=template`、`warning_codes=vector_unavailable` 做 log / audit / trace 断言。
+  - maintenance degraded 场景现锁定 `checkpoint_requested`、`retention_requested`、`quarantine_requested`、`vector_rebuild_requested` 与 `warning_codes=vector_rebuild_skipped`；schema mismatch 场景则按真实 manager preopen 路径固定 `result_code`、`failure_reason=store_preopen_failed` 与 `storage_backend=sqlite` 的 audit / trace 字段。
+- **测试结果**
+  - `MemoryProductionLoggingIntegrationTest` 现同时覆盖 redacted persisted/query artifact、LLM summarizer success strategy、partial writeback degraded fields、vector unavailable + summarizer fallback degraded fields、maintenance tick requested fields 与 schema mismatch lifecycle fields。
+- **验收证据**
+  - `Build_CMakeTools(buildTargets=["dasall_memory_production_logging_integration_test"])`：通过。
+  - `RunCtest_CMakeTools(tests=["MemoryProductionLoggingIntegrationTest"])`：通过，1/1。
+- **阻塞 / 解阻**：已解阻。初版字段断言在单轮 writeback 下不会稳定触发 compression fallback；本轮通过测试前置补一轮 compression seed writeback 收口，不改 owner 实现。 
 
 ### 7.3 P2 任务
 
@@ -486,7 +490,7 @@ flowchart LR
 
 执行建议：
 1. **剩余 P0**：WP-MEM-GAP-004 继续单独推进；WP-MEM-GAP-001 / -002 / -003 已于 2026-06-02 闭合。
-2. **第二批（P1）**：WP-MEM-GAP-005 / -006 / -007 / -008；其中 -006 与 runtime GAP-P1-A 联动落地。
+2. **第二批（P1）**：WP-MEM-GAP-005 / -006 / -007 / -008 已于 2026-06-03 全部闭合；P1 entry tasks 不再剩余未收口项。
 3. **第三批（P2 演进）**：WP-MEM-GAP-009 ← -002；WP-MEM-GAP-010 / -011 / -012 / -013（链式依赖）。
 4. **第四批（P3 清理与运营）**：WP-MEM-GAP-014 ← llm 资产；WP-MEM-GAP-015 / -016 / -017；WP-MEM-GAP-018 在 P0/P1 全部 Done 后执行。
 
@@ -551,7 +555,7 @@ memory 子系统已达到 **可生产部署 v1** 水位：架构 / 详设目标 
 | V1 | WP-MEM-GAP-005 | tiktoken token 估算（已完成 2026-06-03） |
 | V1 | WP-MEM-GAP-006 | 生产侧 MaintenanceTicker 挂载（已完成 2026-06-03） |
 | V1 | WP-MEM-GAP-007 | external_evidence 投影 v1 端到端（已完成 2026-06-03） |
-| V1 | WP-MEM-GAP-008 | ProductionLogging 字段断言补强 |
+| V1 | WP-MEM-GAP-008 | ProductionLogging 字段断言补强（已完成 2026-06-03） |
 | **V2** | **WP-MEM-GAP-009** | ConflictResolver 向量相似度辅助（MEM-E09） |
 | **V2** | **WP-MEM-GAP-010** | 跨 session FactQuery（MEM-E05） |
 | **V2** | **WP-MEM-GAP-011** | 遗忘曲线 / 权重衰减（MEM-E02） |

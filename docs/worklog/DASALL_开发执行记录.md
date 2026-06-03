@@ -1,3 +1,36 @@
+## 记录 #882
+
+- 日期：2026-06-03
+- 阶段：memory / production logging assert closure
+- 任务：完成 WP-MEM-GAP-008“ProductionLogging assert 字段补强（GAP-P1-D）”
+- 状态：已完成（focused telemetry-field regression、closeout 文档与规划回写已闭合）
+
+### 执行前提
+
+1. [docs/deliverables/MEM-EVAL-2026-05-31-memory子系统落地评估与生产级缺口治理任务规划.md](../deliverables/MEM-EVAL-2026-05-31-memory子系统落地评估与生产级缺口治理任务规划.md) 已将 `WP-MEM-GAP-008` 固定为“只增强 `MemoryProductionLoggingIntegrationTest` 证据，不改实现代码”。
+2. 现有 [tests/integration/memory/MemoryProductionLoggingIntegrationTest.cpp](../../tests/integration/memory/MemoryProductionLoggingIntegrationTest.cpp) 已覆盖 runtime.log 落盘、query artifact 与 `compression_strategy=summarizer` happy path，但对 `writeback_partial`、`vector_unavailable`、`maintenance_tick`、`summarizer_fallback`、`schema_mismatch` 的字段面仍不完整。
+3. 首轮 focused validation 直接暴露出 context degraded 场景没有稳定进入 compression path；根因在测试前置不足，而不是 memory 实现缺字段，因此本轮必须通过测试 setup 收口，而不是改 owner 逻辑。
+
+### 改动
+
+1. 更新 [tests/integration/memory/MemoryProductionLoggingIntegrationTest.cpp](../../tests/integration/memory/MemoryProductionLoggingIntegrationTest.cpp)，补强 `writeback_partial` 场景的 partial / warning telemetry 断言，补强 context degraded 场景的 `compression_note_count`、`compression_strategy=template` 与 `warning_codes=vector_unavailable`，并补强 maintenance degraded 场景的 `checkpoint_requested`、`retention_requested`、`quarantine_requested`、`vector_rebuild_requested`。
+2. 同一测试新增第二轮正常 writeback 作为 compression seed，使 `prepare_context()` 稳定进入 compression path，从而可重复验证 `summarizer_fallback` 对应的 degraded telemetry 字段，而不依赖偶发 token/turn 条件。
+3. 同一测试将 schema mismatch 场景的 lifecycle telemetry 断言对齐到真实 manager preopen 路径，固定 `failure_reason=store_preopen_failed`，并继续锁定 `result_code` 与 `storage_backend=sqlite` 的 audit / trace 字段。
+4. 新增 [docs/todos/memory/deliverables/WP-MEM-GAP-008-production-logging-assert-closeout.md](../todos/memory/deliverables/WP-MEM-GAP-008-production-logging-assert-closeout.md)，并回写 [docs/deliverables/MEM-EVAL-2026-05-31-memory子系统落地评估与生产级缺口治理任务规划.md](../deliverables/MEM-EVAL-2026-05-31-memory子系统落地评估与生产级缺口治理任务规划.md) 与 [docs/todos/DASALL_子系统查漏补缺专项记录.md](../todos/DASALL_子系统查漏补缺专项记录.md)。
+
+### 验证
+
+1. `Build_CMakeTools(buildTargets=["dasall_memory_production_logging_integration_test"])`
+   - 结果：通过。
+2. `RunCtest_CMakeTools(tests=["MemoryProductionLoggingIntegrationTest"])`
+   - 结果：通过，1/1。
+
+### 结果
+
+1. `WP-MEM-GAP-008 / GAP-P1-D` 已闭合；Memory 现有 focused production logging 证据已锁定 partial writeback、vector unavailable、maintenance tick、summarizer fallback 与 schema mismatch 的字段面。
+2. 本轮通过测试前置补一轮 compression seed writeback，避免为了迁就断言去改 owner 实现；schema mismatch 的 `failure_reason` 也已按真实 emit 值 `store_preopen_failed` 收口。
+3. Memory 当前 P1 entry tasks（`WP-MEM-GAP-005..008`）已全部闭合；剩余高优先级焦点回到 installed gate / GA 绿色记录与后续 V2 质量演进项。
+
 ## 记录 #881
 
 - 日期：2026-06-03
