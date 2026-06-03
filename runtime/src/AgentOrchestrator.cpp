@@ -15,6 +15,7 @@
 #include "ILLMManager.h"
 #include "IMemoryManager.h"
 #include "IResponseBuilder.h"
+#include "KnowledgeEvidenceProjector.h"
 #include "LLMGenerateRequest.h"
 #include "RuntimeErrorCode.h"
 #include "RuntimeDependencySet.h"
@@ -818,22 +819,6 @@ void append_runtime_checkpoint_execution_model_tags(std::vector<std::string>& ta
   append_unique_string(tags, kRuntimeCheckpointEffectiveMaxWorkersTag);
 }
 
-void append_retrieval_evidence_ref(
-    std::vector<contracts::RetrievalEvidenceRef>& destination,
-    const contracts::RetrievalEvidenceRef& value) {
-  if (!value.has_consistent_values()) {
-    return;
-  }
-
-  const auto duplicate = std::find_if(destination.begin(), destination.end(),
-                                      [&value](const auto& existing) {
-                                        return existing.evidence_ref == value.evidence_ref;
-                                      });
-  if (duplicate == destination.end()) {
-    destination.push_back(value);
-  }
-}
-
 [[nodiscard]] knowledge::KnowledgeQuery make_knowledge_query(
     const contracts::AgentRequest& request,
     const std::string& goal_id,
@@ -927,16 +912,10 @@ void append_retrieval_evidence_ref(
       budget_value(runtime_budget.max_latency_ms, 1500U));
   context_request.external_evidence = composition.dependency_set->external_evidence;
   if (composition.dependency_set->knowledge_service != nullptr) {
+    const KnowledgeEvidenceProjector projector;
     const auto knowledge_result = composition.dependency_set->knowledge_service->retrieve(
         make_knowledge_query(request, goal_id, composition.policy_snapshot));
-    if (knowledge_result.ok && knowledge_result.evidence.has_value()) {
-      for (const auto& projection_line : knowledge_result.evidence->context_projection) {
-        append_unique_string(context_request.external_evidence, projection_line);
-      }
-      for (const auto& ref : knowledge_result.retrieval_evidence_refs) {
-        append_retrieval_evidence_ref(context_request.retrieval_evidence_refs, ref);
-      }
-    }
+    projector.project(knowledge_result, context_request);
   }
   return context_request;
 }

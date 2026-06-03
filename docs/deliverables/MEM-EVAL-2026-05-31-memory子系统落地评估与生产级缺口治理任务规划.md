@@ -41,7 +41,7 @@
 | 可观测性（log/metric/audit/trace） | [memory/src/observability/MemoryObservability.cpp](../../memory/src/observability/MemoryObservability.cpp) 482 行；`MemoryProductionLoggingIntegrationTest` / `MemoryObservabilityBridgeTest` 端到端覆盖 | **达成**（生产侧 sink 已直连，**比 runtime 子系统更完整**） |
 | 业务链贯通（Runtime ↔ Memory ↔ SQLite ↔ Vector ↔ Profile ↔ Observability） | unary、resume、recovery、context-assemble、writeback、maintenance、failure-injection、checkpoint-busy、profile-compat、production-logging 等 11 条集成测全部存在 | **可贯通** |
 | 真实落地 vs 桩 | 无空壳实现；`memory/src/MemoryBuildSkeleton.cpp` 仅 4 行历史 namespace 文件可清理；所有主要组件均含真实业务体（store 1493 / orchestrator 814 / writeback 693 / vector backend 713 / observability 482 / manager 482 / schema migrator 406 / row mappers 408 / conflict resolver 371 / compression coordinator 320 / budget allocator 313 / detached vector factory 280 / candidate collector 246 / working board 244） | **无虚假实现** |
-| 距离生产级 GA | 仍欠：installed gate 绿色记录、跨 session FactQuery、external_evidence 投影 v1、ProductionLogging 字段断言补强、向量相似度辅助冲突检测、ProgrammaticMemory 持久化、composite scoring、遗忘曲线 | **未到生产级** |
+| 距离生产级 GA | 仍欠：installed gate 绿色记录、跨 session FactQuery、ProductionLogging 字段断言补强、向量相似度辅助冲突检测、ProgrammaticMemory 持久化、composite scoring、遗忘曲线 | **未到生产级** |
 
 总体结论：memory 已完成**架构 / 接口 / 持久化 / 上下文装配 / 写回 / 维护 / 观测性**的真实落地，与 runtime 同处"骨架达成、深度需补"水位；区别于 runtime 缺口的"信号外送 / 跨版本 / 并发证据"，memory 当前剩余缺口集中在**质量层（embedding / 跨 session 召回 / 冲突精度）与运营层（长跑证据 / 演进契约）**。GA 前仍需继续收敛剩余 P0 项。
 
@@ -212,9 +212,9 @@
   - 现状：MaintenanceWorker.start() 已实现 ticker，但 RuntimeLiveDependencyComposition 与 MemoryManagerFactory 未默认启用。
   - 风险：长跑 WAL 增长 / quarantine 累积 / vector rebuild 滞后；与 runtime GAP-P1-A 同源，可联动落地。
 
-- **GAP-P1-C external_evidence 投影 v1 端到端**
-  - 现状：MEM-B06 已冻结 `external_evidence: vector<string>`；CandidateCollector 已消费；runtime 侧投影 v1 实现链路待端到端打通。
-  - 必要条件：与 knowledge / runtime owner 协作。
+- **GAP-P1-C external_evidence 投影 v1 端到端**（已闭合，2026-06-03）
+  - 完成情况：已新增 [runtime/src/KnowledgeEvidenceProjector.h](../../runtime/src/KnowledgeEvidenceProjector.h) / [runtime/src/KnowledgeEvidenceProjector.cpp](../../runtime/src/KnowledgeEvidenceProjector.cpp)，并更新 [runtime/src/AgentOrchestrator.cpp](../../runtime/src/AgentOrchestrator.cpp) / [runtime/CMakeLists.txt](../../runtime/CMakeLists.txt)，把 knowledge structured evidence 到 `MemoryContextRequest.external_evidence` / `retrieval_evidence_refs` 的投影 owner 收口到 runtime 单一 projector。
+  - 验证证据：已新增 [tests/unit/runtime/KnowledgeEvidenceProjectorTest.cpp](../../tests/unit/runtime/KnowledgeEvidenceProjectorTest.cpp) 与 [tests/integration/memory/MemoryExternalEvidenceProjectionEndToEndTest.cpp](../../tests/integration/memory/MemoryExternalEvidenceProjectionEndToEndTest.cpp)；`KnowledgeEvidenceProjectorTest` 与 `MemoryExternalEvidenceProjectionEndToEndTest` 已通过。
 
 - **GAP-P1-D ProductionLogging assert 字段补强**
   - 现状：`MemoryProductionLoggingIntegrationTest` 已存在，但**字段断言面**（recovery_required / writeback_partial / maintenance_*）可加强；与 GAP-P0-A 联动。
@@ -343,14 +343,17 @@
 
 #### WP-MEM-GAP-007 external_evidence 投影 v1 端到端（GAP-P1-C / MEM-B06）
 
-- **代码目标**
-  - 在 runtime 侧增加 `KnowledgeEvidenceProjector`，将 knowledge 返回的 structured evidence 按 [docs/ssot/CrossModuleDataProjectionMatrix.md](../ssot/CrossModuleDataProjectionMatrix.md) 投影为 `vector<string>`。
-  - 通过 `MemoryContextRequest.external_evidence` 注入 ContextOrchestrator；CandidateCollector 已具备消费路径。
-- **测试目标**
-  - `KnowledgeEvidenceProjectorTest`、`MemoryExternalEvidenceProjectionEndToEndTest`。
-- **验收命令**
-  - `ctest --test-dir build-ci -R "KnowledgeEvidenceProjector|MemoryExternalEvidenceProjection" --output-on-failure`
-- **阻塞 / 解阻**：依赖 knowledge 子系统 structured evidence schema 稳定（已冻结）。
+- **状态**：已完成（2026-06-03）。
+- **代码结果**
+  - 新增 [runtime/src/KnowledgeEvidenceProjector.h](../../runtime/src/KnowledgeEvidenceProjector.h) 与 [runtime/src/KnowledgeEvidenceProjector.cpp](../../runtime/src/KnowledgeEvidenceProjector.cpp)，并更新 [runtime/src/AgentOrchestrator.cpp](../../runtime/src/AgentOrchestrator.cpp) / [runtime/CMakeLists.txt](../../runtime/CMakeLists.txt)，把 knowledge structured evidence 的 text/ref 投影 owner 从 `AgentOrchestrator` 内联循环收口为 runtime 单一 projector。
+  - 新增 [tests/unit/runtime/KnowledgeEvidenceProjectorTest.cpp](../../tests/unit/runtime/KnowledgeEvidenceProjectorTest.cpp) 与 [tests/integration/memory/MemoryExternalEvidenceProjectionEndToEndTest.cpp](../../tests/integration/memory/MemoryExternalEvidenceProjectionEndToEndTest.cpp)，并更新 [tests/unit/runtime/CMakeLists.txt](../../tests/unit/runtime/CMakeLists.txt) / [tests/integration/memory/CMakeLists.txt](../../tests/integration/memory/CMakeLists.txt)，锁定文本投影去重、invalid ref 过滤与 `memory_manager->prepare_context()` 边界的 end-to-end 证据。
+- **测试结果**
+  - `KnowledgeEvidenceProjectorTest` 已验证 baseline evidence 保留、`context_projection` 去重与 `retrieval_evidence_refs` 的重复/无效项过滤。
+  - `MemoryExternalEvidenceProjectionEndToEndTest` 已通过 recording memory manager 证明 runtime 在 knowledge -> memory `prepare_context()` 边界会同时保留 runtime baseline evidence、knowledge 文本投影与结构化 refs。
+- **验收证据**
+  - `Build_CMakeTools(buildTargets=["dasall_runtime_knowledge_evidence_projector_unit_test","dasall_memory_external_evidence_projection_integration_test"])`：通过。
+  - `RunCtest_CMakeTools(tests=["KnowledgeEvidenceProjectorTest","MemoryExternalEvidenceProjectionEndToEndTest"])`：通过，2/2。
+- **阻塞 / 解阻**：已解阻。knowledge structured evidence schema 已冻结；本轮把验收边界固定在 `prepare_context()` 请求已收到正确 projection，避免把不属于本任务的 full unary terminal-state 噪声误判为 blocker。
 
 #### WP-MEM-GAP-008 ProductionLogging assert 字段补强（GAP-P1-D）
 
@@ -547,7 +550,7 @@ memory 子系统已达到 **可生产部署 v1** 水位：架构 / 详设目标 
 | V1 | WP-MEM-GAP-004 | Memory installed gate（qemu optional chaining） |
 | V1 | WP-MEM-GAP-005 | tiktoken token 估算（已完成 2026-06-03） |
 | V1 | WP-MEM-GAP-006 | 生产侧 MaintenanceTicker 挂载（已完成 2026-06-03） |
-| V1 | WP-MEM-GAP-007 | external_evidence 投影 v1 端到端 |
+| V1 | WP-MEM-GAP-007 | external_evidence 投影 v1 端到端（已完成 2026-06-03） |
 | V1 | WP-MEM-GAP-008 | ProductionLogging 字段断言补强 |
 | **V2** | **WP-MEM-GAP-009** | ConflictResolver 向量相似度辅助（MEM-E09） |
 | **V2** | **WP-MEM-GAP-010** | 跨 session FactQuery（MEM-E05） |

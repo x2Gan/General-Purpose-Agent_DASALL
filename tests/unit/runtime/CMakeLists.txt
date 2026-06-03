@@ -24,6 +24,10 @@ add_executable(dasall_runtime_agent_orchestrator_controller_assembly_unit_test
   AgentOrchestratorControllerAssemblyTest.cpp
 )
 
+add_executable(dasall_runtime_knowledge_evidence_projector_unit_test
+  KnowledgeEvidenceProjectorTest.cpp
+)
+
 add_executable(dasall_runtime_agent_orchestrator_logging_unit_test
   AgentOrchestratorLoggingTest.cpp
 )
@@ -163,6 +167,19 @@ target_link_libraries(dasall_runtime_agent_orchestrator_controller_assembly_unit
 target_include_directories(dasall_runtime_agent_orchestrator_controller_assembly_unit_test
   PRIVATE
     ${PROJECT_SOURCE_DIR}/runtime/src
+)
+
+target_link_libraries(dasall_runtime_knowledge_evidence_projector_unit_test
+  PRIVATE
+    dasall_test_support
+    dasall_runtime
+)
+
+target_include_directories(dasall_runtime_knowledge_evidence_projector_unit_test
+  PRIVATE
+    ${PROJECT_SOURCE_DIR}/runtime/src
+    ${PROJECT_SOURCE_DIR}/knowledge/include
+    ${PROJECT_SOURCE_DIR}/memory/include
 )
 
 target_link_libraries(dasall_runtime_agent_orchestrator_logging_unit_test
@@ -409,6 +426,7 @@ dasall_apply_common_options(dasall_runtime_dependency_set_readiness_unit_test)
 dasall_apply_common_options(dasall_runtime_agent_init_result_readiness_unit_test)
 dasall_apply_common_options(dasall_runtime_agent_orchestrator_skeleton_unit_test)
 dasall_apply_common_options(dasall_runtime_agent_orchestrator_controller_assembly_unit_test)
+dasall_apply_common_options(dasall_runtime_knowledge_evidence_projector_unit_test)
 dasall_apply_common_options(dasall_runtime_agent_orchestrator_logging_unit_test)
 dasall_apply_common_options(dasall_runtime_manager_logging_unit_test)
 dasall_apply_common_options(dasall_runtime_owner_logging_unit_test)
@@ -448,6 +466,9 @@ set_tests_properties(AgentOrchestratorSkeletonTest PROPERTIES LABELS "unit")
 
 add_test(NAME AgentOrchestratorControllerAssemblyTest COMMAND dasall_runtime_agent_orchestrator_controller_assembly_unit_test)
 set_tests_properties(AgentOrchestratorControllerAssemblyTest PROPERTIES LABELS "unit")
+
+add_test(NAME KnowledgeEvidenceProjectorTest COMMAND dasall_runtime_knowledge_evidence_projector_unit_test)
+set_tests_properties(KnowledgeEvidenceProjectorTest PROPERTIES LABELS "unit;runtime")
 
 add_test(NAME AgentOrchestratorLoggingTest COMMAND dasall_runtime_agent_orchestrator_logging_unit_test)
 set_tests_properties(AgentOrchestratorLoggingTest PROPERTIES LABELS "unit;runtime")

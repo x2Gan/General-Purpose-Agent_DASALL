@@ -1,3 +1,42 @@
+## 记录 #881
+
+- 日期：2026-06-03
+- 阶段：memory / external evidence projection closure
+- 任务：完成 WP-MEM-GAP-007“external_evidence 投影 v1 端到端（GAP-P1-C / MEM-B06）”
+- 状态：已完成（runtime projector owner、focused unit/integration gates 与文档回写已闭合）
+
+### 执行前提
+
+1. [docs/deliverables/MEM-EVAL-2026-05-31-memory子系统落地评估与生产级缺口治理任务规划.md](../deliverables/MEM-EVAL-2026-05-31-memory子系统落地评估与生产级缺口治理任务规划.md) 已将 `WP-MEM-GAP-007` 固定为“runtime 侧增加 `KnowledgeEvidenceProjector`，把 knowledge structured evidence 投影到 `MemoryContextRequest.external_evidence`”。
+2. 本地代码基线已存在 `AgentOrchestrator` 内联 `context_projection -> external_evidence` 循环与 `retrieval_evidence_refs` 透传，但 owner 仍散落在主链函数内，且缺少与任务验收名对齐的 focused test。
+3. [docs/ssot/CrossModuleDataProjectionMatrix.md](../ssot/CrossModuleDataProjectionMatrix.md) 已冻结 knowledge -> runtime -> memory 的 projection matrix；本轮只收口 owner 与 focused acceptance，不扩 shared contracts。
+
+### 改动
+
+1. 新增 [runtime/src/KnowledgeEvidenceProjector.h](../../runtime/src/KnowledgeEvidenceProjector.h) 与 [runtime/src/KnowledgeEvidenceProjector.cpp](../../runtime/src/KnowledgeEvidenceProjector.cpp)，并更新 [runtime/src/AgentOrchestrator.cpp](../../runtime/src/AgentOrchestrator.cpp)、[runtime/CMakeLists.txt](../../runtime/CMakeLists.txt)：knowledge structured evidence 到 `external_evidence` / `retrieval_evidence_refs` 的投影现统一收口到 runtime 单一 projector。
+2. 新增 [tests/unit/runtime/KnowledgeEvidenceProjectorTest.cpp](../../tests/unit/runtime/KnowledgeEvidenceProjectorTest.cpp)，并更新 [tests/unit/runtime/CMakeLists.txt](../../tests/unit/runtime/CMakeLists.txt)：unit gate 现锁定 baseline evidence 保留、`context_projection` 去重与 invalid structured ref 过滤。
+3. 新增 [tests/integration/memory/MemoryExternalEvidenceProjectionEndToEndTest.cpp](../../tests/integration/memory/MemoryExternalEvidenceProjectionEndToEndTest.cpp)，并更新 [tests/integration/memory/CMakeLists.txt](../../tests/integration/memory/CMakeLists.txt)：通过 recording memory manager 直接验证 runtime 在 `prepare_context()` 边界把 runtime baseline evidence、knowledge 文本投影与 `retrieval_evidence_refs` 一并送入 memory。
+4. 新增 [docs/todos/memory/deliverables/WP-MEM-GAP-007-external-evidence-projection-closeout.md](../todos/memory/deliverables/WP-MEM-GAP-007-external-evidence-projection-closeout.md)，并回写 [docs/deliverables/MEM-EVAL-2026-05-31-memory子系统落地评估与生产级缺口治理任务规划.md](../deliverables/MEM-EVAL-2026-05-31-memory子系统落地评估与生产级缺口治理任务规划.md) 与 [docs/todos/DASALL_子系统查漏补缺专项记录.md](../todos/DASALL_子系统查漏补缺专项记录.md)。
+
+### 验证
+
+1. `Build_CMakeTools(buildTargets=["dasall_runtime_knowledge_evidence_projector_unit_test"])`
+   - 结果：通过。
+2. `RunCtest_CMakeTools(tests=["KnowledgeEvidenceProjectorTest"])`
+   - 结果：通过，1/1。
+3. `Build_CMakeTools(buildTargets=["dasall_memory_external_evidence_projection_integration_test"])`
+   - 结果：通过。
+4. `RunCtest_CMakeTools(tests=["MemoryExternalEvidenceProjectionEndToEndTest"])`
+   - 结果：通过，1/1。
+5. `Build_CMakeTools(buildTargets=["dasall_runtime_knowledge_evidence_projector_unit_test","dasall_memory_external_evidence_projection_integration_test"])` + `RunCtest_CMakeTools(tests=["KnowledgeEvidenceProjectorTest","MemoryExternalEvidenceProjectionEndToEndTest"])`
+   - 结果：通过，2/2。
+
+### 结果
+
+1. `WP-MEM-GAP-007 / GAP-P1-C / MEM-B06` 已闭合；runtime 现拥有 knowledge -> memory external evidence projection 的单一 owner。
+2. focused end-to-end 验收已固定在 `memory_manager->prepare_context()` 边界，避免把不属于本任务的 full unary terminal-state 噪声混入 blocker 判定。
+3. Memory 当前剩余 P1 焦点收敛为 `WP-MEM-GAP-008` 与更高层 installed / GA 绿色记录；external evidence projection 不再是本轮后的高优先级 blocker。
+
 ## 记录 #880
 
 - 日期：2026-06-03
