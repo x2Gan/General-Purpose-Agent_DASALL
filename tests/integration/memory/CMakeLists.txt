@@ -34,6 +34,13 @@ dasall_add_memory_integration_test(
 )
 
 dasall_add_memory_integration_test(
+  dasall_memory_installed_smoke_integration_test
+  MemoryInstalledSmokeTest
+  MemoryInstalledSmokeTest.cpp
+  "integration;memory"
+)
+
+dasall_add_memory_integration_test(
   dasall_memory_context_assemble_integration_test
   MemoryContextAssembleIntegrationTest
   MemoryContextAssembleIntegrationTest.cpp
@@ -221,6 +228,11 @@ target_include_directories(dasall_memory_checkpoint_busy_integration_test
 target_include_directories(dasall_memory_long_running_soak_integration_test
   PRIVATE
     ${CMAKE_SOURCE_DIR}/memory/src
+)
+
+add_custom_target(memory_installed_smoke
+  COMMAND ${CMAKE_COMMAND} -E chdir ${CMAKE_BINARY_DIR} ${CMAKE_CTEST_COMMAND} --output-on-failure -R "^MemoryInstalledSmokeTest$"
+  DEPENDS dasall_memory_installed_smoke_integration_test
 )
 
 target_compile_definitions(dasall_memory_context_assemble_integration_test

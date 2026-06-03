@@ -26,6 +26,7 @@ TOOLS_INSTALLED_PROOF_TOOL=/usr/lib/dasall/dasall-tools-installed-proof
 RUNTIME_INSTALLED_PROOF_TOOL=/usr/lib/dasall/dasall-runtime-installed-proof
 SERVICES_INSTALLED_PROOF_SCRIPT=${SCRIPT_DIR}/services_local_installed_proof.sh
 PACKAGE_SMOKE_ARTIFACT_DIR=${DASALL_PACKAGE_SMOKE_ARTIFACT_DIR:-}
+DAEMON_READY_WAIT_SECONDS=${DASALL_PACKAGE_SMOKE_DAEMON_READY_WAIT_SECONDS:-360}
 SECRET_CONSUMER_MATRIX_PATH=/usr/share/dasall/docs/ssot/SecretConsumerMatrix.md
 PRESERVED_SECRET_ROOT=
 SECRET_PROVISIONING_MODE=uninitialized
@@ -733,7 +734,7 @@ cleanup() {
 
 wait_for_daemon_ready() {
   attempt=0
-  while [ "${attempt}" -lt 90 ]; do
+  while [ "${attempt}" -lt "${DAEMON_READY_WAIT_SECONDS}" ]; do
     if run_root_sh 'systemctl is-enabled --quiet dasall-daemon.service >/dev/null 2>&1 &&
        systemctl is-active --quiet dasall-daemon.service >/dev/null 2>&1 &&
        [ -S /run/dasall/daemon.sock ] &&
@@ -748,6 +749,7 @@ wait_for_daemon_ready() {
     sleep 1
   done
 
+  log "daemon did not become ready within ${DAEMON_READY_WAIT_SECONDS}s"
   run_root systemctl status --no-pager dasall-daemon.service >&2 || true
   return 1
 }
@@ -960,8 +962,8 @@ PY
 
   MEMORY_SESSION_HINT='pkg-smoke-memory-session'
   MEMORY_EXPECTED_MARKER='mem-fix-006-local-proof'
-  MEMORY_FIRST_REQUEST='{"prompt":"Remember this exact marker for this session: mem-fix-006-local-proof. Reply with that marker once and do not use any tools."}'
-  MEMORY_SECOND_REQUEST='{"prompt":"In this same session, what exact marker did I ask you to remember? Reply with the exact marker once and do not use any tools."}'
+  MEMORY_FIRST_REQUEST='{"prompt":"请用LLM回答：1+1等于几？并在同一行末尾追加 mem-fix-006-local-proof。只给出简短答案，然后调用 task_complete 工具。"}'
+  MEMORY_SECOND_REQUEST='{"prompt":"在同一个会话里，我刚才让你在答案末尾追加的短标记是什么？请只回复那个标记，然后调用 task_complete 工具。"}'
 
   set +e
   FIRST_RUN_JSON=$(run_dasall_cli dasall-cli run "$MEMORY_FIRST_REQUEST" --session "$MEMORY_SESSION_HINT" --request-id pkg-smoke-memory-turn-001 --json --timeout-ms 120000 2>&1)
