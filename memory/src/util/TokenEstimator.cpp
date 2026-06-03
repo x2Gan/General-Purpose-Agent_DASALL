@@ -70,6 +70,41 @@ constexpr std::string_view kCl100kAssetName = "cl100k_base.tiktoken";
 #endif
 }
 
+[[nodiscard]] bool path_has_prefix(const std::filesystem::path& path,
+                                   const std::filesystem::path& prefix) {
+  const auto normalized_path = path.lexically_normal();
+  const auto normalized_prefix = prefix.lexically_normal();
+
+  auto path_iterator = normalized_path.begin();
+  auto prefix_iterator = normalized_prefix.begin();
+  for (; prefix_iterator != normalized_prefix.end(); ++prefix_iterator, ++path_iterator) {
+    if (path_iterator == normalized_path.end() || *path_iterator != *prefix_iterator) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+[[nodiscard]] bool should_probe_build_tree_asset_root() {
+#ifdef DASALL_MEMORY_TIKTOKEN_BUILD_ASSET_DIR
+  const auto bin_dir = executable_dir();
+  if (!bin_dir.has_value()) {
+    return false;
+  }
+
+  auto build_root = std::filesystem::path(DASALL_MEMORY_TIKTOKEN_BUILD_ASSET_DIR)
+                        .lexically_normal();
+  for (int index = 0; index < 4 && !build_root.empty(); ++index) {
+    build_root = build_root.parent_path();
+  }
+
+  return !build_root.empty() && path_has_prefix(*bin_dir, build_root);
+#else
+  return false;
+#endif
+}
+
 [[nodiscard]] std::vector<std::filesystem::path> candidate_asset_roots() {
   std::vector<std::filesystem::path> roots;
 
@@ -78,26 +113,14 @@ constexpr std::string_view kCl100kAssetName = "cl100k_base.tiktoken";
     roots.emplace_back(env_dir);
   }
 
-#ifdef DASALL_MEMORY_TIKTOKEN_BUILD_ASSET_DIR
-  roots.emplace_back(DASALL_MEMORY_TIKTOKEN_BUILD_ASSET_DIR);
-#endif
-
 #ifdef DASALL_MEMORY_TIKTOKEN_INSTALL_ASSET_DIR
   roots.emplace_back(DASALL_MEMORY_TIKTOKEN_INSTALL_ASSET_DIR);
 #endif
 
-  if (const auto bin_dir = executable_dir(); bin_dir.has_value()) {
-    roots.push_back((*bin_dir / "tokenizers").lexically_normal());
-    roots.push_back((bin_dir->parent_path() / "share" / "dasall" / "memory" /
-                     "tokenizers")
-                        .lexically_normal());
-  }
-
-  std::error_code error_code;
-  const auto current_dir = std::filesystem::current_path(error_code);
-  if (!error_code) {
-    roots.push_back((current_dir / "share" / "dasall" / "memory" / "tokenizers")
-                        .lexically_normal());
+  if (should_probe_build_tree_asset_root()) {
+#ifdef DASALL_MEMORY_TIKTOKEN_BUILD_ASSET_DIR
+    roots.emplace_back(DASALL_MEMORY_TIKTOKEN_BUILD_ASSET_DIR);
+#endif
   }
 
   std::vector<std::filesystem::path> deduplicated_roots;
@@ -114,18 +137,23 @@ constexpr std::string_view kCl100kAssetName = "cl100k_base.tiktoken";
   return deduplicated_roots;
 }
 
+[[nodiscard]] bool is_regular_file_noexcept(const std::filesystem::path& path) {
+  std::error_code error_code;
+  return std::filesystem::is_regular_file(path, error_code) && !error_code;
+}
+
 [[nodiscard]] std::optional<std::filesystem::path> resolve_asset_path(
     std::string_view asset_name) {
   const auto asset_file_name = std::string(asset_name);
   for (const auto& root : candidate_asset_roots()) {
     const auto direct_file = root;
-    if (std::filesystem::is_regular_file(direct_file) &&
+    if (is_regular_file_noexcept(direct_file) &&
         direct_file.filename() == asset_file_name) {
       return direct_file;
     }
 
     const auto candidate = root / asset_file_name;
-    if (std::filesystem::is_regular_file(candidate)) {
+    if (is_regular_file_noexcept(candidate)) {
       return candidate;
     }
   }
