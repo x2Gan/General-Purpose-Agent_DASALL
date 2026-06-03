@@ -1,6 +1,7 @@
 usr/sbin/dasall-daemon
 usr/sbin/dasall-gateway
 debian/tmp/usr/lib/dasall/dasall-memory-maintenance-proof usr/lib/dasall/
+debian/tmp/usr/lib/dasall/dasall-memory-installed-proof usr/lib/dasall/
 debian/tmp/usr/lib/dasall/dasall-tools-installed-proof usr/lib/dasall/
 debian/tmp/usr/lib/dasall/dasall-runtime-installed-proof usr/lib/dasall/
 usr/lib/dasall/sqlite-vss/

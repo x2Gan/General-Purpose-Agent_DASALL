@@ -1,6 +1,7 @@
 usr/share/dasall/profiles/
 usr/share/dasall/llm/prompts/
 usr/share/dasall/llm/providers/
+usr/share/dasall/memory/tokenizers/
 usr/share/dasall/docs/
 usr/share/dasall/sql/
 usr/share/dasall/skills/
