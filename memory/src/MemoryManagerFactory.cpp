@@ -13,6 +13,7 @@
 #include "maintenance/MemoryMaintenanceWorker.h"
 #include "observability/MemoryObservability.h"
 #include "store/sqlite/SqliteMemoryStore.h"
+#include "util/TokenEstimator.h"
 #include "vector/SimpleLocalEmbeddingAdapter.h"
 #include "vector/SqliteVssVectorBackend.h"
 #include "vector/UnavailableVectorMemoryIndexAdapter.h"
@@ -219,6 +220,7 @@ std::unique_ptr<IMemoryManager> create_memory_manager(
       runtime_dependencies,
       config,
       embedding_adapter_selection);
+    const auto token_estimator = util::create_token_estimator(config);
     dependencies.embedding_adapter =
       std::move(embedding_adapter_selection.adapter);
     dependencies.vector_index = create_vector_index(
@@ -227,15 +229,15 @@ std::unique_ptr<IMemoryManager> create_memory_manager(
     auto collector = std::make_unique<CandidateCollector>(
         *dependencies.working_memory_board, *dependencies.store, *dependencies.store,
         *dependencies.store, *dependencies.store, config,
-        dependencies.vector_index.get());
-    auto allocator = std::make_unique<BudgetAllocator>(config);
+        dependencies.vector_index.get(), token_estimator);
+    auto allocator = std::make_unique<BudgetAllocator>(config, token_estimator);
     auto compressor = std::make_unique<CompressionCoordinator>(
-        *dependencies.store, dependencies.summarizer.get());
+        *dependencies.store, dependencies.summarizer.get(), token_estimator);
     auto conflict_resolver =
       std::make_unique<MemoryConflictResolver>(*dependencies.store);
     dependencies.context_orchestrator = std::make_unique<ContextOrchestrator>(
         std::move(collector), std::move(allocator), std::move(compressor),
-        config, dependencies.observability);
+        config, dependencies.observability, token_estimator);
     dependencies.writeback_coordinator = std::make_unique<WritebackCoordinator>(
       *dependencies.store, *dependencies.store, *dependencies.store,
       *dependencies.store, *dependencies.store, std::move(conflict_resolver),

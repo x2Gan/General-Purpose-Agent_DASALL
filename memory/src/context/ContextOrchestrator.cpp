@@ -16,7 +16,6 @@
 namespace dasall::memory {
 namespace {
 
-using util::estimate_text_tokens;
 using observability::MemoryTelemetryContext;
 using observability::MemoryTelemetryField;
 
@@ -169,7 +168,18 @@ std::vector<contracts::Turn> make_chronological_turns(
   return turns;
 }
 
-std::string trim_text_to_token_limit(const std::string& text, int token_limit) {
+int estimate_string_vector_tokens(const util::ITokenEstimator& token_estimator,
+                                  const std::vector<std::string>& values) {
+  int total = 0;
+  for (const auto& value : values) {
+    total += token_estimator.estimate_text_tokens(value);
+  }
+  return total;
+}
+
+std::string trim_text_to_token_limit(const util::ITokenEstimator& token_estimator,
+                                     const std::string& text,
+                                     int token_limit) {
   if (text.empty()) {
     return {};
   }
@@ -178,7 +188,7 @@ std::string trim_text_to_token_limit(const std::string& text, int token_limit) {
     return {};
   }
 
-  const auto estimated_tokens = estimate_text_tokens(text);
+  const auto estimated_tokens = token_estimator.estimate_text_tokens(text);
   if (estimated_tokens <= token_limit) {
     return text;
   }
@@ -199,6 +209,7 @@ std::string trim_text_to_token_limit(const std::string& text, int token_limit) {
 }
 
 std::vector<std::string> trim_vector_to_token_limit(
+  const util::ITokenEstimator& token_estimator,
     const std::vector<std::string>& values,
     int token_limit,
     bool keep_tail) {
@@ -215,7 +226,7 @@ std::vector<std::string> trim_vector_to_token_limit(
 
   if (keep_tail) {
     for (auto it = values.rbegin(); it != values.rend(); ++it) {
-      const auto item_tokens = estimate_text_tokens(*it);
+      const auto item_tokens = token_estimator.estimate_text_tokens(*it);
       if (used_tokens + item_tokens <= token_limit) {
         trimmed.push_back(*it);
         used_tokens += item_tokens;
@@ -223,7 +234,8 @@ std::vector<std::string> trim_vector_to_token_limit(
       }
 
       const auto remaining_tokens = token_limit - used_tokens;
-      const auto truncated = trim_text_to_token_limit(*it, remaining_tokens);
+      const auto truncated =
+          trim_text_to_token_limit(token_estimator, *it, remaining_tokens);
       if (!truncated.empty()) {
         trimmed.push_back(truncated);
       }
@@ -235,7 +247,7 @@ std::vector<std::string> trim_vector_to_token_limit(
   }
 
   for (const auto& value : values) {
-    const auto item_tokens = estimate_text_tokens(value);
+    const auto item_tokens = token_estimator.estimate_text_tokens(value);
     if (used_tokens + item_tokens <= token_limit) {
       trimmed.push_back(value);
       used_tokens += item_tokens;
@@ -243,7 +255,8 @@ std::vector<std::string> trim_vector_to_token_limit(
     }
 
     const auto remaining_tokens = token_limit - used_tokens;
-    const auto truncated = trim_text_to_token_limit(value, remaining_tokens);
+    const auto truncated =
+        trim_text_to_token_limit(token_estimator, value, remaining_tokens);
     if (!truncated.empty()) {
       trimmed.push_back(truncated);
     }
@@ -593,6 +606,7 @@ SlotProjection project_slots(const CandidateSet& candidates,
 }
 
 std::string build_budget_report(const BudgetPlan& plan,
+                                const util::ITokenEstimator& token_estimator,
                                 const contracts::ContextPacket& packet) {
   std::vector<std::string> items;
   const auto add_item = [&items](const std::string& slot_name,
@@ -605,37 +619,35 @@ std::string build_budget_report(const BudgetPlan& plan,
   for (const auto& slot_budget : plan.slot_budgets) {
     int used_tokens = 0;
     if (slot_budget.slot_name == "user_turn") {
-      used_tokens = estimate_text_tokens(packet.user_turn.value_or(std::string{}));
+      used_tokens = token_estimator.estimate_text_tokens(
+          packet.user_turn.value_or(std::string{}));
     } else if (slot_budget.slot_name == "current_goal_summary") {
-      used_tokens = estimate_text_tokens(
+      used_tokens = token_estimator.estimate_text_tokens(
           packet.current_goal_summary.value_or(std::string{}));
     } else if (slot_budget.slot_name == "policy_digest") {
-      used_tokens = estimate_text_tokens(packet.policy_digest.value_or(std::string{}));
+      used_tokens = token_estimator.estimate_text_tokens(
+          packet.policy_digest.value_or(std::string{}));
     } else if (slot_budget.slot_name == "latest_observation_digest_summary") {
-      used_tokens = estimate_text_tokens(
+      used_tokens = token_estimator.estimate_text_tokens(
           packet.latest_observation_digest_summary.value_or(std::string{}));
     } else if (slot_budget.slot_name == "recent_history") {
       if (packet.recent_history.has_value()) {
-        for (const auto& item : *packet.recent_history) {
-          used_tokens += estimate_text_tokens(item);
-        }
+        used_tokens = estimate_string_vector_tokens(token_estimator, *packet.recent_history);
       }
     } else if (slot_budget.slot_name == "summary_memory") {
-      used_tokens = estimate_text_tokens(packet.summary_memory.value_or(std::string{}));
+      used_tokens = token_estimator.estimate_text_tokens(
+          packet.summary_memory.value_or(std::string{}));
     } else if (slot_budget.slot_name == "belief_state_summary") {
-      used_tokens = estimate_text_tokens(
+      used_tokens = token_estimator.estimate_text_tokens(
           packet.belief_state_summary.value_or(std::string{}));
     } else if (slot_budget.slot_name == "retrieval_evidence") {
       if (packet.retrieval_evidence.has_value()) {
-        for (const auto& item : *packet.retrieval_evidence) {
-          used_tokens += estimate_text_tokens(item);
-        }
+        used_tokens = estimate_string_vector_tokens(
+            token_estimator, *packet.retrieval_evidence);
       }
     } else if (slot_budget.slot_name == "active_tools") {
       if (packet.active_tools.has_value()) {
-        for (const auto& tool : *packet.active_tools) {
-          used_tokens += estimate_text_tokens(tool);
-        }
+        used_tokens = estimate_string_vector_tokens(token_estimator, *packet.active_tools);
       }
     }
 
@@ -708,12 +720,15 @@ ContextOrchestrator::ContextOrchestrator(
     std::unique_ptr<BudgetAllocator> allocator,
     std::unique_ptr<CompressionCoordinator> compressor,
     const MemoryConfig& config,
-    std::shared_ptr<observability::MemoryObservability> observability)
+    std::shared_ptr<observability::MemoryObservability> observability,
+    std::shared_ptr<const util::ITokenEstimator> token_estimator)
     : collector_(std::move(collector)),
       allocator_(std::move(allocator)),
       compressor_(std::move(compressor)),
       context_config_(config.context),
-      observability_(std::move(observability)) {}
+      observability_(std::move(observability)),
+      token_estimator_(token_estimator != nullptr ? token_estimator
+                                                  : util::create_token_estimator(config)) {}
 
 ContextAssemblyResult ContextOrchestrator::assemble(
     const MemoryContextRequest& request) {
@@ -801,7 +816,8 @@ ContextAssemblyResult ContextOrchestrator::assemble(
   const auto packet = build_packet(candidates, plan, request);
   const auto slot_projection = project_slots(candidates, request);
   result.context_packet = packet;
-  result.context_packet.token_budget_report = build_budget_report(plan, result.context_packet);
+  result.context_packet.token_budget_report = build_budget_report(
+      plan, *token_estimator_, result.context_packet);
   result.context_packet.created_at = current_time_ms();
   result.context_packet.tags = std::vector<std::string>{"memory", "context"};
   result.dropped_sections = detect_dropped_sections(slot_projection, result.context_packet);
@@ -861,11 +877,13 @@ contracts::ContextPacket ContextOrchestrator::build_packet(
   packet.input_safety_signal =
       make_input_safety_signal(packet.user_turn.value_or(std::string{}));
   packet.recent_history = trim_vector_to_token_limit(
+      *token_estimator_,
       projection.recent_history,
       effective_slot_limit(plan, "recent_history"),
       true);
 
   const auto summary_memory = trim_text_to_token_limit(
+      *token_estimator_,
       projection.summary_memory,
       effective_slot_limit(plan, "summary_memory"));
   if (!summary_memory.empty()) {
@@ -873,6 +891,7 @@ contracts::ContextPacket ContextOrchestrator::build_packet(
   }
 
   const auto retrieval_evidence = trim_vector_to_token_limit(
+    *token_estimator_,
       projection.retrieval_evidence,
       effective_slot_limit(plan, "retrieval_evidence"),
       false);
@@ -885,6 +904,7 @@ contracts::ContextPacket ContextOrchestrator::build_packet(
   }
 
   const auto latest_observation = trim_text_to_token_limit(
+      *token_estimator_,
       projection.latest_observation_digest_summary,
       effective_slot_limit(plan, "latest_observation_digest_summary"));
   if (!latest_observation.empty()) {
@@ -892,6 +912,7 @@ contracts::ContextPacket ContextOrchestrator::build_packet(
   }
 
   const auto active_tools = trim_vector_to_token_limit(
+    *token_estimator_,
       projection.active_tools,
       effective_slot_limit(plan, "active_tools"),
       false);
@@ -900,6 +921,7 @@ contracts::ContextPacket ContextOrchestrator::build_packet(
   }
 
   const auto policy_digest = trim_text_to_token_limit(
+      *token_estimator_,
       projection.policy_digest,
       effective_slot_limit(plan, "policy_digest"));
   if (!policy_digest.empty()) {
@@ -907,6 +929,7 @@ contracts::ContextPacket ContextOrchestrator::build_packet(
   }
 
   const auto belief_state_summary = trim_text_to_token_limit(
+      *token_estimator_,
       projection.belief_state_summary,
       effective_slot_limit(plan, "belief_state_summary"));
   if (!belief_state_summary.empty()) {

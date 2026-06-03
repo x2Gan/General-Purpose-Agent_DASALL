@@ -119,6 +119,15 @@ void test_memory_profile_projection_tracks_vector_maintenance_and_budget_differe
                "edge_balanced should tighten the vector search window relative to desktop");
   assert_equal(0, edge_minimal.config.vector.search_top_k,
                "edge_minimal should fully disable vector search fanout");
+  assert_equal(std::string("tiktoken"),
+               std::string(dasall::memory::to_string_view(desktop.config.token_estimator)),
+               "desktop_full should project tiktoken token estimation");
+  assert_equal(std::string("tiktoken"),
+               std::string(dasall::memory::to_string_view(edge_balanced.config.token_estimator)),
+               "edge_balanced should project tiktoken token estimation");
+  assert_equal(std::string("tiktoken"),
+               std::string(dasall::memory::to_string_view(edge_minimal.config.token_estimator)),
+               "edge_minimal should project tiktoken token estimation");
 
   assert_equal(18, desktop.config.context.recent_turn_limit,
                "desktop_full should project the broader history window from runtime policy");
@@ -176,11 +185,17 @@ void test_memory_profile_projection_tracks_vector_maintenance_and_budget_differe
   assert_equal(std::string("sqlite-vss"),
                std::string(dasall::memory::to_string_view(cloud.config.vector.backend_type)),
                "cloud_full should keep sqlite-vss as the projected vector backend");
+  assert_equal(std::string("tiktoken"),
+               std::string(dasall::memory::to_string_view(cloud.config.token_estimator)),
+               "cloud_full should project tiktoken token estimation");
   assert_true(!factory.config.vector.enabled,
               "factory_test should project vector as disabled");
   assert_equal(std::string("none"),
                std::string(dasall::memory::to_string_view(factory.config.vector.backend_type)),
                "factory_test should downgrade the projected vector backend to none");
+  assert_equal(std::string("tiktoken"),
+               std::string(dasall::memory::to_string_view(factory.config.token_estimator)),
+               "factory_test should project tiktoken token estimation");
 
   assert_true(cloud.config.maintenance.auto_schedule,
               "cloud_full should keep maintenance auto-schedule enabled");

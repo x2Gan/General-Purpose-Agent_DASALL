@@ -1,10 +1,17 @@
 #pragma once
 
+#include <memory>
 #include <string>
 #include <vector>
 
 #include "config/MemoryConfig.h"
 #include "context/CandidateCollector.h"
+
+namespace dasall::memory::util {
+
+class ITokenEstimator;
+
+}  // namespace dasall::memory::util
 
 namespace dasall::memory {
 
@@ -37,7 +44,9 @@ struct BudgetPlan {
 
 class BudgetAllocator {
  public:
-  explicit BudgetAllocator(const MemoryConfig& config);
+  explicit BudgetAllocator(
+      const MemoryConfig& config,
+      std::shared_ptr<const util::ITokenEstimator> token_estimator = nullptr);
 
   [[nodiscard]] BudgetPlan allocate(const CandidateSet& candidates,
                                     const BudgetPolicy& policy) const;
@@ -52,6 +61,7 @@ class BudgetAllocator {
       int total_estimated_tokens) const;
 
   ContextConfig context_config_{};
+  std::shared_ptr<const util::ITokenEstimator> token_estimator_;
 };
 
 }  // namespace dasall::memory

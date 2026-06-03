@@ -10,8 +10,6 @@
 namespace dasall::memory {
 namespace {
 
-using util::estimate_text_tokens;
-
 std::int64_t current_time_ms() {
   return std::chrono::duration_cast<std::chrono::milliseconds>(
              std::chrono::system_clock::now().time_since_epoch())
@@ -52,19 +50,20 @@ bool contains_any_keyword(std::string_view text,
                      });
 }
 
-int estimate_projection_tokens(const SummaryProjection& projection) {
-  int total = estimate_text_tokens(projection.summary_text);
+int estimate_projection_tokens(const util::ITokenEstimator& token_estimator,
+                               const SummaryProjection& projection) {
+  int total = token_estimator.estimate_text_tokens(projection.summary_text);
   for (const auto& decision : projection.decisions_made) {
-    total += estimate_text_tokens(decision);
+    total += token_estimator.estimate_text_tokens(decision);
   }
   for (const auto& fact : projection.confirmed_facts) {
-    total += estimate_text_tokens(fact);
+    total += token_estimator.estimate_text_tokens(fact);
   }
   for (const auto& outcome : projection.tool_outcomes) {
-    total += estimate_text_tokens(outcome);
+    total += token_estimator.estimate_text_tokens(outcome);
   }
   for (const auto& turn_id : projection.source_turn_ids) {
-    total += estimate_text_tokens(turn_id);
+    total += token_estimator.estimate_text_tokens(turn_id);
   }
   if (total <= 0) {
     return 0;
@@ -90,8 +89,13 @@ std::string build_summary_id(const CompressionInput& input) {
 }  // namespace
 
 CompressionCoordinator::CompressionCoordinator(ISummaryStore& store,
-                                               ISummarizer* summarizer)
-    : store_(store), summarizer_(summarizer) {}
+                                               ISummarizer* summarizer,
+                                               std::shared_ptr<const util::ITokenEstimator> token_estimator)
+    : store_(store),
+      summarizer_(summarizer),
+      token_estimator_(token_estimator != nullptr
+                           ? token_estimator
+                           : util::create_token_estimator(TokenEstimatorBackend::Tiktoken)) {}
 
 CompressionOutput CompressionCoordinator::compress(const CompressionInput& input) {
   CompressionOutput output;
@@ -133,7 +137,7 @@ CompressionOutput CompressionCoordinator::compress(const CompressionInput& input
   if (projection.summary_text.empty()) {
     projection.summary_text = build_summary_text(input, projection);
   }
-  projection.estimated_tokens = estimate_projection_tokens(projection);
+  projection.estimated_tokens = estimate_projection_tokens(*token_estimator_, projection);
 
   output.projection = projection;
   output.summary = materialize_summary(input, output.projection);
@@ -168,7 +172,7 @@ SummaryProjection CompressionCoordinator::extract_structured_summary(
   }
 
   projection.summary_text = build_summary_text(input, projection);
-  projection.estimated_tokens = estimate_projection_tokens(projection);
+  projection.estimated_tokens = estimate_projection_tokens(*token_estimator_, projection);
   return projection;
 }
 
@@ -290,7 +294,7 @@ SummaryProjection CompressionCoordinator::merge_with_existing(
     merge_unique(projection.tool_outcomes, *existing_summary->tool_outcomes);
   }
 
-  projection.estimated_tokens = estimate_projection_tokens(projection);
+  projection.estimated_tokens = estimate_projection_tokens(*token_estimator_, projection);
   return projection;
 }
 

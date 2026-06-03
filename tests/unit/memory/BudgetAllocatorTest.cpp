@@ -11,6 +11,10 @@
 
 namespace {
 
+std::string backend_name(dasall::memory::TokenEstimatorBackend backend) {
+  return std::string(dasall::memory::to_string_view(backend));
+}
+
 const dasall::memory::SlotBudget& find_slot_budget(
     const dasall::memory::BudgetPlan& plan,
     const std::string& slot_name) {
@@ -72,10 +76,12 @@ dasall::memory::CandidateSet make_pressure_candidate_set() {
   return set;
 }
 
-void test_budget_allocator_prioritizes_goal_and_policy_in_planning_stage() {
+void test_budget_allocator_prioritizes_goal_and_policy_in_planning_stage(
+    dasall::memory::TokenEstimatorBackend backend) {
   using dasall::tests::support::assert_true;
 
   dasall::memory::MemoryConfig config;
+  config.token_estimator = backend;
   dasall::memory::BudgetAllocator allocator(config);
 
   const auto plan = allocator.allocate(
@@ -89,23 +95,26 @@ void test_budget_allocator_prioritizes_goal_and_policy_in_planning_stage() {
   const auto policy = find_slot_budget(plan, "policy_digest");
   const auto active_tools = find_slot_budget(plan, "active_tools");
   const auto retrieval = find_slot_budget(plan, "retrieval_evidence");
+  const auto backend_label = backend_name(backend);
 
   assert_true(current_goal.allocated_tokens > active_tools.allocated_tokens,
-              "planning stage should reserve more budget for current goal than active tools");
+              backend_label + ": planning stage should reserve more budget for current goal than active tools");
   assert_true(policy.allocated_tokens > retrieval.allocated_tokens,
-              "planning stage should reserve more budget for policy digest than retrieval evidence");
+              backend_label + ": planning stage should reserve more budget for policy digest than retrieval evidence");
   assert_true(!plan.trim_actions.empty(),
-              "planning stage should emit trim actions when candidate tokens exceed the total budget");
+              backend_label + ": planning stage should emit trim actions when candidate tokens exceed the total budget");
   assert_true(contains_trim_action(plan, "recent_history"),
-              "planning stage trim actions should target recent history under budget pressure");
+              backend_label + ": planning stage trim actions should target recent history under budget pressure");
   assert_true(!plan.over_budget,
-              "planning stage should produce a non-over-budget plan when trim actions can absorb the excess");
+              backend_label + ": planning stage should produce a non-over-budget plan when trim actions can absorb the excess");
 }
 
-void test_budget_allocator_uses_estimated_slot_usage_in_trim_targets() {
+void test_budget_allocator_uses_estimated_slot_usage_in_trim_targets(
+    dasall::memory::TokenEstimatorBackend backend) {
   using dasall::tests::support::assert_true;
 
   dasall::memory::MemoryConfig config;
+  config.token_estimator = backend;
   dasall::memory::BudgetAllocator allocator(config);
 
   const auto plan = allocator.allocate(
@@ -121,21 +130,28 @@ void test_budget_allocator_uses_estimated_slot_usage_in_trim_targets() {
       [](const dasall::memory::TrimAction& action) {
         return action.slot_name == "recent_history";
       });
+  const auto backend_label = backend_name(backend);
 
   assert_true(trim_it != plan.trim_actions.end(),
-              "recent history should receive a trim target when it dominates estimated usage");
+              backend_label + ": recent history should receive a trim target when it dominates estimated usage");
   assert_true(trim_it->target_tokens <= recent_history.estimated_tokens,
-              "trim target should never exceed the estimated slot usage");
+              backend_label + ": trim target should never exceed the estimated slot usage");
   assert_true(trim_it->target_tokens >= recent_history.allocated_tokens,
-              "trim target should not cut below the slot's allocated budget floor");
+              backend_label + ": trim target should not cut below the slot's allocated budget floor");
 }
 
 }  // namespace
 
 int main() {
   try {
-    test_budget_allocator_prioritizes_goal_and_policy_in_planning_stage();
-    test_budget_allocator_uses_estimated_slot_usage_in_trim_targets();
+    test_budget_allocator_prioritizes_goal_and_policy_in_planning_stage(
+        dasall::memory::TokenEstimatorBackend::Tiktoken);
+    test_budget_allocator_uses_estimated_slot_usage_in_trim_targets(
+        dasall::memory::TokenEstimatorBackend::Tiktoken);
+    test_budget_allocator_prioritizes_goal_and_policy_in_planning_stage(
+        dasall::memory::TokenEstimatorBackend::Heuristic);
+    test_budget_allocator_uses_estimated_slot_usage_in_trim_targets(
+        dasall::memory::TokenEstimatorBackend::Heuristic);
   } catch (const std::exception& exception) {
     std::cerr << exception.what() << '\n';
     return 1;

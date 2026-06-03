@@ -147,6 +147,80 @@ if(NOT TARGET dasall_sqlite3)
   )
 endif()
 
+set(DASALL_MEMORY_TIKTOKEN_ASSET_NAME "cl100k_base.tiktoken")
+set(DASALL_MEMORY_TIKTOKEN_INSTALL_DIR
+  "${DASALL_INSTALL_DASALL_DATADIR}/memory/tokenizers"
+)
+set(DASALL_MEMORY_TIKTOKEN_BUILD_DIR
+  "${CMAKE_BINARY_DIR}/${DASALL_MEMORY_TIKTOKEN_INSTALL_DIR}"
+)
+
+find_path(DASALL_PCRE2_INCLUDE_DIR NAMES pcre2.h)
+find_library(DASALL_PCRE2_8_LIBRARY NAMES pcre2-8)
+
+if(NOT DASALL_PCRE2_INCLUDE_DIR OR NOT DASALL_PCRE2_8_LIBRARY)
+  message(FATAL_ERROR
+    "dasall_memory requires the system PCRE2 8-bit development package to build the vendored cpp-tiktoken tokenizer"
+  )
+endif()
+
+if(NOT TARGET dasall_cpp_tiktoken)
+  set(DASALL_CPP_TIKTOKEN_COMMIT "9323db528d52e48900c75ce197c3251085b18480")
+  FetchContent_Declare(dasall_cpp_tiktoken_source
+    URL "https://github.com/gh-markt/cpp-tiktoken/archive/${DASALL_CPP_TIKTOKEN_COMMIT}.tar.gz"
+    DOWNLOAD_EXTRACT_TIMESTAMP TRUE
+  )
+  FetchContent_GetProperties(dasall_cpp_tiktoken_source)
+  if(NOT dasall_cpp_tiktoken_source_POPULATED)
+    FetchContent_Populate(dasall_cpp_tiktoken_source)
+  endif()
+
+  set(DASALL_CPP_TIKTOKEN_SOURCES
+    ${dasall_cpp_tiktoken_source_SOURCE_DIR}/byte_pair_encoding.cc
+    ${dasall_cpp_tiktoken_source_SOURCE_DIR}/emdedded_resource_reader.cc
+    ${dasall_cpp_tiktoken_source_SOURCE_DIR}/modelparams.cc
+    ${dasall_cpp_tiktoken_source_SOURCE_DIR}/encoding.cc
+    ${dasall_cpp_tiktoken_source_SOURCE_DIR}/encoding_utils.cc
+    ${dasall_cpp_tiktoken_source_SOURCE_DIR}/pcre2_regex.cc
+  )
+
+  add_library(dasall_cpp_tiktoken STATIC
+    ${DASALL_CPP_TIKTOKEN_SOURCES}
+  )
+  target_compile_features(dasall_cpp_tiktoken PUBLIC cxx_std_20)
+  target_include_directories(dasall_cpp_tiktoken
+    PUBLIC
+      ${dasall_cpp_tiktoken_source_SOURCE_DIR}
+    PRIVATE
+      ${DASALL_PCRE2_INCLUDE_DIR}
+  )
+  target_link_libraries(dasall_cpp_tiktoken
+    PUBLIC
+      ${DASALL_PCRE2_8_LIBRARY}
+  )
+  dasall_apply_common_options(dasall_cpp_tiktoken)
+
+  set(DASALL_MEMORY_TIKTOKEN_ASSET_SOURCE
+    "${dasall_cpp_tiktoken_source_SOURCE_DIR}/${DASALL_MEMORY_TIKTOKEN_ASSET_NAME}"
+  )
+  if(NOT EXISTS ${DASALL_MEMORY_TIKTOKEN_ASSET_SOURCE})
+    message(FATAL_ERROR
+      "cpp-tiktoken vendored source is missing ${DASALL_MEMORY_TIKTOKEN_ASSET_NAME}"
+    )
+  endif()
+
+  file(MAKE_DIRECTORY "${DASALL_MEMORY_TIKTOKEN_BUILD_DIR}")
+  configure_file(
+    "${DASALL_MEMORY_TIKTOKEN_ASSET_SOURCE}"
+    "${DASALL_MEMORY_TIKTOKEN_BUILD_DIR}/${DASALL_MEMORY_TIKTOKEN_ASSET_NAME}"
+    COPYONLY
+  )
+  install(FILES
+    "${DASALL_MEMORY_TIKTOKEN_ASSET_SOURCE}"
+    DESTINATION "${DASALL_MEMORY_TIKTOKEN_INSTALL_DIR}"
+  )
+endif()
+
 set(DASALL_MEMORY_PUBLIC_INCLUDE_DIR
   ${CMAKE_CURRENT_SOURCE_DIR}/include
 )
@@ -175,6 +249,7 @@ set(DASALL_MEMORY_SKELETON_SOURCES
   src/store/sqlite/RowMappers.cpp
   src/store/sqlite/SqliteMemoryStore.cpp
   src/store/sqlite/SqliteSchemaMigrator.cpp
+  src/util/TokenEstimator.cpp
   src/working/WorkingMemoryBoard.cpp
   src/writeback/CompressionCoordinator.cpp
   src/writeback/WritebackCoordinator.cpp
@@ -209,6 +284,12 @@ target_sources(dasall_memory
 
 target_compile_features(dasall_memory PUBLIC cxx_std_20)
 
+target_compile_definitions(dasall_memory
+  PRIVATE
+    DASALL_MEMORY_TIKTOKEN_BUILD_ASSET_DIR="${DASALL_MEMORY_TIKTOKEN_BUILD_DIR}"
+    DASALL_MEMORY_TIKTOKEN_INSTALL_ASSET_DIR="${CMAKE_INSTALL_FULL_DATADIR}/dasall/memory/tokenizers"
+)
+
 target_include_directories(dasall_memory
   PUBLIC
     $<BUILD_INTERFACE:${DASALL_MEMORY_PUBLIC_INCLUDE_DIR}>
@@ -222,6 +303,7 @@ target_link_libraries(dasall_memory
   PUBLIC
     dasall_contracts
   PRIVATE
+    dasall_cpp_tiktoken
     dasall_infra
     dasall_sqlite3
 )

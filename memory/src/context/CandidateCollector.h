@@ -1,5 +1,6 @@
 #pragma once
 
+#include <memory>
 #include <optional>
 #include <string>
 #include <vector>
@@ -12,6 +13,12 @@
 #include "ISummaryStore.h"
 #include "vector/VectorMemoryIndexAdapter.h"
 #include "working/IWorkingMemoryBoard.h"
+
+namespace dasall::memory::util {
+
+class ITokenEstimator;
+
+}  // namespace dasall::memory::util
 
 namespace dasall::memory {
 
@@ -44,7 +51,8 @@ class CandidateCollector {
                      IFactStore& fact_store,
                      IExperienceStore& experience_store,
                      const MemoryConfig& config,
-                     VectorMemoryIndexAdapter* vector_index = nullptr);
+                     VectorMemoryIndexAdapter* vector_index = nullptr,
+                     std::shared_ptr<const util::ITokenEstimator> token_estimator = nullptr);
 
   [[nodiscard]] CandidateSet collect(const CandidateCollectRequest& request);
 
@@ -69,6 +77,7 @@ class CandidateCollector {
   ContextConfig context_config_{};
   VectorConfig vector_config_{};
   VectorMemoryIndexAdapter* vector_index_ = nullptr;
+  std::shared_ptr<const util::ITokenEstimator> token_estimator_;
 };
 
 }  // namespace dasall::memory

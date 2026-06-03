@@ -74,6 +74,10 @@ add_executable(dasall_memory_budget_allocator_unit_test
 	BudgetAllocatorTest.cpp
 )
 
+add_executable(dasall_memory_tiktoken_estimator_accuracy_unit_test
+	TiktokenEstimatorAccuracyTest.cpp
+)
+
 add_executable(dasall_memory_context_budget_unit_test
 	ContextOrchestratorBudgetTest.cpp
 )
@@ -263,6 +267,12 @@ target_link_libraries(dasall_memory_budget_allocator_unit_test
 		dasall_test_support
 )
 
+target_link_libraries(dasall_memory_tiktoken_estimator_accuracy_unit_test
+	PRIVATE
+		dasall_memory
+		dasall_test_support
+)
+
 target_link_libraries(dasall_memory_context_budget_unit_test
 	PRIVATE
 		dasall_memory
@@ -439,6 +449,11 @@ target_include_directories(dasall_memory_budget_allocator_unit_test
 		${CMAKE_SOURCE_DIR}/memory/src
 )
 
+target_include_directories(dasall_memory_tiktoken_estimator_accuracy_unit_test
+	PRIVATE
+		${CMAKE_SOURCE_DIR}/memory/src
+)
+
 target_include_directories(dasall_memory_context_budget_unit_test
 	PRIVATE
 		${CMAKE_SOURCE_DIR}/memory/src
@@ -606,6 +621,7 @@ dasall_apply_common_options(dasall_memory_concurrency_stress_unit_test)
 dasall_apply_common_options(dasall_memory_candidate_collector_unit_test)
 dasall_apply_common_options(dasall_memory_candidate_collector_vector_off_unit_test)
 dasall_apply_common_options(dasall_memory_budget_allocator_unit_test)
+dasall_apply_common_options(dasall_memory_tiktoken_estimator_accuracy_unit_test)
 dasall_apply_common_options(dasall_memory_context_budget_unit_test)
 dasall_apply_common_options(dasall_memory_compression_coordinator_unit_test)
 dasall_apply_common_options(dasall_memory_compression_summarizer_unit_test)
@@ -681,6 +697,9 @@ set_tests_properties(CandidateCollectorVectorOffTest PROPERTIES LABELS "unit;mem
 add_test(NAME BudgetAllocatorTest COMMAND dasall_memory_budget_allocator_unit_test)
 set_tests_properties(BudgetAllocatorTest PROPERTIES LABELS "unit;memory")
 
+add_test(NAME TiktokenEstimatorAccuracyTest COMMAND dasall_memory_tiktoken_estimator_accuracy_unit_test)
+set_tests_properties(TiktokenEstimatorAccuracyTest PROPERTIES LABELS "unit;memory")
+
 add_test(NAME ContextOrchestratorBudgetTest COMMAND dasall_memory_context_budget_unit_test)
 set_tests_properties(ContextOrchestratorBudgetTest PROPERTIES LABELS "unit;memory")
 
@@ -751,6 +770,7 @@ set(DASALL_MEMORY_UNIT_TEST_EXECUTABLE_TARGETS
 	dasall_memory_candidate_collector_unit_test
 	dasall_memory_candidate_collector_vector_off_unit_test
 	dasall_memory_budget_allocator_unit_test
+	dasall_memory_tiktoken_estimator_accuracy_unit_test
 	dasall_memory_context_budget_unit_test
 	dasall_memory_compression_coordinator_unit_test
 	dasall_memory_compression_summarizer_unit_test

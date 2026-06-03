@@ -10,6 +10,12 @@
 
 namespace dasall::memory {
 
+namespace util {
+
+class ITokenEstimator;
+
+}  // namespace util
+
 namespace observability {
 
 class MemoryObservability;
@@ -22,7 +28,8 @@ class ContextOrchestrator final : public IContextOrchestrator {
                       std::unique_ptr<BudgetAllocator> allocator,
                       std::unique_ptr<CompressionCoordinator> compressor,
                       const MemoryConfig& config,
-                      std::shared_ptr<observability::MemoryObservability> observability = nullptr);
+                      std::shared_ptr<observability::MemoryObservability> observability = nullptr,
+                      std::shared_ptr<const util::ITokenEstimator> token_estimator = nullptr);
 
   [[nodiscard]] ContextAssemblyResult assemble(
       const MemoryContextRequest& request) override;
@@ -40,6 +47,7 @@ class ContextOrchestrator final : public IContextOrchestrator {
   std::unique_ptr<CompressionCoordinator> compressor_;
   ContextConfig context_config_{};
     std::shared_ptr<observability::MemoryObservability> observability_;
+    std::shared_ptr<const util::ITokenEstimator> token_estimator_;
 };
 
 }  // namespace dasall::memory

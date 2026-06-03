@@ -41,7 +41,7 @@
 | 可观测性（log/metric/audit/trace） | [memory/src/observability/MemoryObservability.cpp](../../memory/src/observability/MemoryObservability.cpp) 482 行；`MemoryProductionLoggingIntegrationTest` / `MemoryObservabilityBridgeTest` 端到端覆盖 | **达成**（生产侧 sink 已直连，**比 runtime 子系统更完整**） |
 | 业务链贯通（Runtime ↔ Memory ↔ SQLite ↔ Vector ↔ Profile ↔ Observability） | unary、resume、recovery、context-assemble、writeback、maintenance、failure-injection、checkpoint-busy、profile-compat、production-logging 等 11 条集成测全部存在 | **可贯通** |
 | 真实落地 vs 桩 | 无空壳实现；`memory/src/MemoryBuildSkeleton.cpp` 仅 4 行历史 namespace 文件可清理；所有主要组件均含真实业务体（store 1493 / orchestrator 814 / writeback 693 / vector backend 713 / observability 482 / manager 482 / schema migrator 406 / row mappers 408 / conflict resolver 371 / compression coordinator 320 / budget allocator 313 / detached vector factory 280 / candidate collector 246 / working board 244） | **无虚假实现** |
-| 距离生产级 GA | 仍欠：外部 embedding service 注入、跨 session FactQuery、tiktoken token 估算、向量相似度辅助冲突检测、ProgrammaticMemory 持久化、composite scoring、遗忘曲线、ConcurrencyStress / Soak 长跑证据 | **未到生产级** |
+| 距离生产级 GA | 仍欠：installed gate 绿色记录、跨 session FactQuery、MaintenanceTicker 生产挂载、external_evidence 投影 v1、ProductionLogging 字段断言补强、向量相似度辅助冲突检测、ProgrammaticMemory 持久化、composite scoring、遗忘曲线 | **未到生产级** |
 
 总体结论：memory 已完成**架构 / 接口 / 持久化 / 上下文装配 / 写回 / 维护 / 观测性**的真实落地，与 runtime 同处"骨架达成、深度需补"水位；区别于 runtime 缺口的"信号外送 / 跨版本 / 并发证据"，memory 当前剩余缺口集中在**质量层（embedding / 跨 session 召回 / 冲突精度）与运营层（长跑证据 / 演进契约）**。GA 前仍需继续收敛剩余 P0 项。
 
@@ -73,7 +73,7 @@
 **普遍性架构缺口**：memory 已经把"控制平面之下的状态层"做扎实；`GAP-P0-A` 与 `GAP-P0-B` 已于 2026-06-02 通过 runtime_support owner glue 闭合，当前剩余缺口集中在**质量与运营**：
 1. 生产侧未挂主动 maintenance ticker，导致 WAL / retention 依赖外部触发；
 2. 长跑 / 并发 / soak 证据偏弱；
-3. 跨 session FactQuery、token 估算与向量质量增强仍属于后续质量演进项。
+3. 跨 session FactQuery 与向量质量增强仍属于后续质量演进项；token 估算已于 2026-06-03 收口到 `cl100k_base` 兼容实现。
 
 ---
 
@@ -106,7 +106,7 @@
 |---|---|---|---|
 | §6.3.1 阶段 2 ISummarizer 注入（MEM-E01） | 已通过 [memory/include/MemoryDependencies.h](../../memory/include/MemoryDependencies.h) `summarizer_factory` + [memory/src/MemoryManagerFactory.cpp](../../memory/src/MemoryManagerFactory.cpp) owner 装配 + [apps/runtime_support/src/RuntimeLiveDependencyComposition.cpp](../../apps/runtime_support/src/RuntimeLiveDependencyComposition.cpp) 注入 [apps/runtime_support/src/LLMBackedSummarizer.h](../../apps/runtime_support/src/LLMBackedSummarizer.h) / [apps/runtime_support/src/LLMBackedSummarizer.cpp](../../apps/runtime_support/src/LLMBackedSummarizer.cpp) 闭合 | 结构性缺口已清零；后续仅继续治理 prompt release / provider 质量与更高层 SLO | GAP-P0-A 已闭合（2026-06-02） |
 | §6.3.2 / MEM-E04 IEmbeddingAdapter 外部注入 | 已通过 [memory/include/MemoryDependencies.h](../../memory/include/MemoryDependencies.h) `embedding_adapter_factory` + [memory/src/MemoryManagerFactory.cpp](../../memory/src/MemoryManagerFactory.cpp) factory 优先/本地 fallback 装配 + [apps/runtime_support/src/RuntimeLiveDependencyComposition.cpp](../../apps/runtime_support/src/RuntimeLiveDependencyComposition.cpp) 注入 [apps/runtime_support/src/LLMBackedEmbeddingAdapter.h](../../apps/runtime_support/src/LLMBackedEmbeddingAdapter.h) / [apps/runtime_support/src/LLMBackedEmbeddingAdapter.cpp](../../apps/runtime_support/src/LLMBackedEmbeddingAdapter.cpp) 闭合 | 结构性缺口已清零；后续仅继续补 installed / qemu / soak 证据与更高层质量指标 | GAP-P0-B 已闭合（2026-06-02） |
-| §6.12.2 token 估算 | `estimate_text_tokens` 使用 bytes/4 + chars*2 + 10% safety margin 启发式 | 边界场景下 over-budget 误差 ±20%；BudgetAllocator 裁剪决策可能失真 | GAP-P1-A（MEM-E08） |
+| §6.12.2 token 估算 | 已通过 [memory/src/util/TokenEstimator.cpp](../../memory/src/util/TokenEstimator.cpp) `ITokenEstimator` + vendored `cl100k_base` 兼容 tokenizer 收口，`BudgetAllocator` / `CandidateCollector` / `ContextOrchestrator` / `CompressionCoordinator` 统一走 shared estimator | 结构性缺口已清零；后续只继续扩展更多 tokenizer/profile 演进键，不再停留在启发式粗估 | GAP-P1-A 已闭合（2026-06-03） |
 | §11.1 vector 失败拖垮主链路 | WritebackCoordinator 已把 vector 写入挪到 core transaction commit 后（best-effort）；**但 search_ann 失败的 fallback 路径在 CandidateCollector 内仅 best-effort 记录** | 与设计一致，已规避；唯一观察项：vector 重试与 retry budget 耦合度 | 无独立缺口 |
 | §6.23 maintenance 自动调度 | `MemoryMaintenanceWorker.start()` 支持 ticker，但 [MemoryManagerFactory.cpp](../../memory/src/MemoryManagerFactory.cpp) 与 RuntimeLiveDependencyComposition 都**未默认启用 ticker**；生产侧依赖 daemon 外部驱动 | 长跑场景 WAL 增长 / quarantine cleanup 延迟；与 runtime GAP-P1-A 同源 | GAP-P1-B |
 | §6.12.3 ConflictResolver | 关键词重叠 + 极性词 + 否定词；未引入向量相似度 | 跨语言 / 同义改写型冲突会误判为 Coexist | GAP-P2-A（MEM-E09） |
@@ -204,9 +204,9 @@
 
 ### 6.2 P1（GA 强烈建议）
 
-- **GAP-P1-A tiktoken token 估算（MEM-E08）**
-  - 现状：`estimate_text_tokens` 使用启发式；BudgetAllocator 在边界场景下误差 ±20%。
-  - 风险：trim 过激 / 不足；token_budget_report 字段失真。
+- **GAP-P1-A tiktoken token 估算（MEM-E08）**（已闭合，2026-06-03）
+  - 完成情况：[memory/CMakeLists.txt](../../memory/CMakeLists.txt) 已 pin vendored `cpp-tiktoken` source 并装配 `cl100k_base.tiktoken` 到 build/install `share/dasall/memory/tokenizers`；[memory/src/util/TokenEstimator.cpp](../../memory/src/util/TokenEstimator.cpp) 已新增 `ITokenEstimator` / `TiktokenTokenEstimator` / heuristic fallback；[memory/src/MemoryManagerFactory.cpp](../../memory/src/MemoryManagerFactory.cpp) 现统一创建 shared estimator 并注入 `BudgetAllocator`、`CandidateCollector`、`ContextOrchestrator` 与 `CompressionCoordinator`。
+  - 验证证据：`TiktokenEstimatorAccuracyTest`、双 backend `BudgetAllocatorTest`、`MemoryInterfaceCompileTest` 与 `MemoryProfileCompatibilityTest` 已通过；`CandidateCollectorTest`、`ContextOrchestratorTest`、`CompressionCoordinatorTest` 等相关 slice tests 也已通过。
 
 - **GAP-P1-B 生产侧 MaintenanceTicker 挂载**
   - 现状：MaintenanceWorker.start() 已实现 ticker，但 RuntimeLiveDependencyComposition 与 MemoryManagerFactory 未默认启用。
@@ -313,15 +313,19 @@
 
 #### WP-MEM-GAP-005 tiktoken token 估算（GAP-P1-A / MEM-E08）
 
-- **代码目标**
-  - 第三方依赖 vendored `cpp-tiktoken` 或等价 BPE 实现，纳入 [memory/CMakeLists.txt](../../memory/CMakeLists.txt) FetchContent。
-  - `memory/src/util/TokenEstimator.cpp` 新增 `TiktokenEstimator` 实现 `estimate_text_tokens`；MemoryConfig 增加 `token_estimator` 选择字段，默认 `tiktoken`，回落 heuristic。
-  - BudgetAllocator 改为依赖 `ITokenEstimator` 抽象。
-- **测试目标**
-  - `TiktokenEstimatorAccuracyTest`（误差 ≤5%）；扩展 `BudgetAllocatorTest` 双 tokenizer 跑通。
-- **验收命令**
-  - `ctest --test-dir build-ci -R "TiktokenEstimatorAccuracy|BudgetAllocatorTest" --output-on-failure`
-- **阻塞 / 解阻**：评估 tiktoken 与 ABI / installed package 兼容性（与打包 owner 协作）。
+- **状态**：已完成（2026-06-03）。
+- **代码结果**
+  - [memory/CMakeLists.txt](../../memory/CMakeLists.txt) 已 pin vendored `cpp-tiktoken` source，并把 `cl100k_base.tiktoken` 复制到 build-tree / install-tree `share/dasall/memory/tokenizers`；系统 `pcre2-8` 作为底层 regex 依赖复用，不再把整套 PCRE2 install 规则引入 Memory package。
+  - [memory/include/config/MemoryConfig.h](../../memory/include/config/MemoryConfig.h) 与 [memory/src/config/MemoryConfigProjector.cpp](../../memory/src/config/MemoryConfigProjector.cpp) 已新增 `token_estimator` 配置字段，默认 `tiktoken`。
+  - [memory/src/util/TokenEstimator.h](../../memory/src/util/TokenEstimator.h) / [memory/src/util/TokenEstimator.cpp](../../memory/src/util/TokenEstimator.cpp) 已引入 `ITokenEstimator`、`HeuristicTokenEstimator`、vendored `TiktokenTokenEstimator` 与 shared factory；[memory/src/MemoryManagerFactory.cpp](../../memory/src/MemoryManagerFactory.cpp) 会只创建一次 shared estimator，并统一注入 [memory/src/context/BudgetAllocator.cpp](../../memory/src/context/BudgetAllocator.cpp)、[memory/src/context/CandidateCollector.cpp](../../memory/src/context/CandidateCollector.cpp)、[memory/src/context/ContextOrchestrator.cpp](../../memory/src/context/ContextOrchestrator.cpp) 与 [memory/src/writeback/CompressionCoordinator.cpp](../../memory/src/writeback/CompressionCoordinator.cpp)。
+- **测试结果**
+  - [tests/unit/memory/TiktokenEstimatorAccuracyTest.cpp](../../tests/unit/memory/TiktokenEstimatorAccuracyTest.cpp) 已验证 `cl100k_base` 参考样例 token 数；[tests/unit/memory/BudgetAllocatorTest.cpp](../../tests/unit/memory/BudgetAllocatorTest.cpp) 已扩展为 tiktoken / heuristic 双 backend 跑通。
+  - [tests/unit/memory/MemoryInterfaceCompileTest.cpp](../../tests/unit/memory/MemoryInterfaceCompileTest.cpp) 与 [tests/integration/memory/MemoryProfileCompatibilityTest.cpp](../../tests/integration/memory/MemoryProfileCompatibilityTest.cpp) 已把 `token_estimator=tiktoken` 纳入默认值与 profile projection 断言。
+- **验收证据**
+  - `Build_CMakeTools(buildTargets=["dasall_memory_tiktoken_estimator_accuracy_unit_test","dasall_memory_budget_allocator_unit_test","dasall_memory_interface_compile_unit_test","dasall_memory_profile_compatibility_integration_test"])`：通过。
+  - `RunCtest_CMakeTools(tests=["TiktokenEstimatorAccuracyTest","BudgetAllocatorTest","MemoryInterfaceCompileTest","MemoryProfileCompatibilityTest"])`：通过，4/4。
+  - `RunCtest_CMakeTools(tests=["CandidateCollectorTest","CandidateCollectorVectorOffTest","ContextOrchestratorBudgetTest","ContextOrchestratorTest","CompressionCoordinatorTest","CompressionCoordinatorSummarizerTest"])`：通过，6/6。
+- **阻塞 / 解阻**：已解阻。ABI / installed package 风险本轮通过“vendor tokenizer source + 复用系统 `pcre2-8` + Memory owner 自管 build/install asset path”收口，不再需要单独的 blocker round。
 
 #### WP-MEM-GAP-006 生产侧 MaintenanceTicker 挂载（GAP-P1-B）
 
@@ -512,7 +516,7 @@ flowchart LR
 memory 子系统已达到 **可生产部署 v1** 水位：架构 / 详设目标 100% 落地、无虚假实现、业务链贯通、ADR 边界守门、可观测性 sink 直连、profile 兼容齐备。
 
 距离 **GA 生产级** 的真实缺口集中在两个象限：
-1. **质量层**：`GAP-P0-A` 与 `GAP-P0-B` 已于 2026-06-02 闭合，生产侧 LLM-backed Summarizer 与外部 Embedding service 均已进入 live composition；当前剩余关键质量缺口转为跨 session FactQuery、token 估算、ConflictResolver 向量辅助与后续 scoring / retention 治理。
+1. **质量层**：`GAP-P0-A` 与 `GAP-P0-B` 已于 2026-06-02 闭合，`GAP-P1-A` 已于 2026-06-03 把 token 估算收口到 `cl100k_base` 兼容实现；当前剩余关键质量缺口转为跨 session FactQuery、ConflictResolver 向量辅助与后续 scoring / retention 治理。
 2. **运营层**：并发 / 长跑 / TSAN 压力门（GAP-P0-C）已于 2026-06-02 通过 build-tree + TSAN 证据闭合；当前剩余运营焦点是 installed gate（GAP-P0-D）、生产 ticker（GAP-P1-B）与更高层 soak 采样（GAP-P3-E）。
 
 其余 P2 / P3 缺口（MEM-E02..E09）为设计文档已显式声明的演进项，不属于实现缺陷。GA 收敛优先级建议：**剩余 P0 两项 → P1 四项 → P2 链式 → P3 选择性**。
@@ -539,7 +543,7 @@ memory 子系统已达到 **可生产部署 v1** 水位：架构 / 详设目标 
 | V1 | WP-MEM-GAP-002 | 外部 Embedding Service 注入（生产装配，已完成 2026-06-02） |
 | V1 | WP-MEM-GAP-003 | 并发 / 长跑压力门 + TSAN（已完成 2026-06-02） |
 | V1 | WP-MEM-GAP-004 | Memory installed gate（qemu optional chaining） |
-| V1 | WP-MEM-GAP-005 | tiktoken token 估算 |
+| V1 | WP-MEM-GAP-005 | tiktoken token 估算（已完成 2026-06-03） |
 | V1 | WP-MEM-GAP-006 | 生产侧 MaintenanceTicker 挂载 |
 | V1 | WP-MEM-GAP-007 | external_evidence 投影 v1 端到端 |
 | V1 | WP-MEM-GAP-008 | ProductionLogging 字段断言补强 |

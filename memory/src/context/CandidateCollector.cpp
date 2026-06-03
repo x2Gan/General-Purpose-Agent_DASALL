@@ -8,8 +8,6 @@
 namespace dasall::memory {
 namespace {
 
-using util::estimate_text_tokens;
-
 void append_warning(std::vector<std::string>& warnings,
                     const std::string& warning) {
   if (std::find(warnings.begin(), warnings.end(), warning) == warnings.end()) {
@@ -17,24 +15,28 @@ void append_warning(std::vector<std::string>& warnings,
   }
 }
 
-void add_optional_string_tokens(const std::optional<std::string>& value,
+void add_optional_string_tokens(const util::ITokenEstimator& token_estimator,
+                                const std::optional<std::string>& value,
                                 int& total) {
   if (value.has_value()) {
-    total += estimate_text_tokens(*value);
+    total += token_estimator.estimate_text_tokens(*value);
   }
 }
 
-void add_string_vector_tokens(const std::vector<std::string>& values, int& total) {
+void add_string_vector_tokens(const util::ITokenEstimator& token_estimator,
+                              const std::vector<std::string>& values,
+                              int& total) {
   for (const auto& value : values) {
-    total += estimate_text_tokens(value);
+    total += token_estimator.estimate_text_tokens(value);
   }
 }
 
 void add_optional_string_vector_tokens(
+    const util::ITokenEstimator& token_estimator,
     const std::optional<std::vector<std::string>>& values,
     int& total) {
   if (values.has_value()) {
-    add_string_vector_tokens(*values, total);
+    add_string_vector_tokens(token_estimator, *values, total);
   }
 }
 
@@ -46,7 +48,8 @@ CandidateCollector::CandidateCollector(IWorkingMemoryBoard& working_memory_board
                                        IFactStore& fact_store,
                                        IExperienceStore& experience_store,
                                        const MemoryConfig& config,
-                                       VectorMemoryIndexAdapter* vector_index)
+                                       VectorMemoryIndexAdapter* vector_index,
+                                       std::shared_ptr<const util::ITokenEstimator> token_estimator)
     : working_memory_board_(working_memory_board),
       session_store_(session_store),
       summary_store_(summary_store),
@@ -54,7 +57,9 @@ CandidateCollector::CandidateCollector(IWorkingMemoryBoard& working_memory_board
       experience_store_(experience_store),
       context_config_(config.context),
       vector_config_(config.vector),
-      vector_index_(vector_index) {}
+      vector_index_(vector_index),
+      token_estimator_(token_estimator != nullptr ? token_estimator
+                                                  : util::create_token_estimator(config)) {}
 
 CandidateSet CandidateCollector::collect(const CandidateCollectRequest& request) {
   CandidateSet set;
@@ -171,70 +176,78 @@ std::vector<VectorHit> CandidateCollector::search_vector(
 }
 
 int CandidateCollector::estimate_tokens(const CandidateSet& set) const {
+  const auto& token_estimator = *token_estimator_;
   int total = 0;
 
   for (const auto& slot : set.working_snapshot.slots) {
-    total += estimate_text_tokens(slot.key);
-    total += estimate_text_tokens(slot.value);
-    total += estimate_text_tokens(slot.source);
+    total += token_estimator.estimate_text_tokens(slot.key);
+    total += token_estimator.estimate_text_tokens(slot.value);
+    total += token_estimator.estimate_text_tokens(slot.source);
   }
-  add_string_vector_tokens(set.working_snapshot.open_questions, total);
-  add_string_vector_tokens(set.working_snapshot.ephemeral_facts, total);
+  add_string_vector_tokens(token_estimator, set.working_snapshot.open_questions, total);
+  add_string_vector_tokens(token_estimator, set.working_snapshot.ephemeral_facts, total);
 
-  add_optional_string_tokens(set.session_bundle.session.session_id, total);
-  add_optional_string_tokens(set.session_bundle.session.user_id, total);
-  add_optional_string_tokens(set.session_bundle.session.metadata_digest, total);
-  add_optional_string_tokens(set.session_bundle.session.latest_summary_memory_ref, total);
-  add_optional_string_vector_tokens(set.session_bundle.session.turn_ids, total);
-  add_optional_string_vector_tokens(set.session_bundle.session.tags, total);
+  add_optional_string_tokens(token_estimator, set.session_bundle.session.session_id, total);
+  add_optional_string_tokens(token_estimator, set.session_bundle.session.user_id, total);
+  add_optional_string_tokens(token_estimator, set.session_bundle.session.metadata_digest, total);
+  add_optional_string_tokens(
+      token_estimator, set.session_bundle.session.latest_summary_memory_ref, total);
+  add_optional_string_vector_tokens(token_estimator, set.session_bundle.session.turn_ids, total);
+  add_optional_string_vector_tokens(token_estimator, set.session_bundle.session.tags, total);
 
   for (const auto& turn : set.session_bundle.recent_turns) {
-    add_optional_string_tokens(turn.turn_id, total);
-    add_optional_string_tokens(turn.user_input, total);
-    add_optional_string_tokens(turn.agent_response, total);
-    add_optional_string_tokens(turn.summary_memory_ref, total);
-    add_optional_string_vector_tokens(turn.tool_call_refs, total);
-    add_optional_string_vector_tokens(turn.observation_refs, total);
-    add_optional_string_vector_tokens(turn.tags, total);
+    add_optional_string_tokens(token_estimator, turn.turn_id, total);
+    add_optional_string_tokens(token_estimator, turn.user_input, total);
+    add_optional_string_tokens(token_estimator, turn.agent_response, total);
+    add_optional_string_tokens(token_estimator, turn.summary_memory_ref, total);
+    add_optional_string_vector_tokens(token_estimator, turn.tool_call_refs, total);
+    add_optional_string_vector_tokens(token_estimator, turn.observation_refs, total);
+    add_optional_string_vector_tokens(token_estimator, turn.tags, total);
   }
 
   if (set.latest_summary.has_value()) {
-    add_optional_string_tokens(set.latest_summary->summary_text, total);
-    add_optional_string_vector_tokens(set.latest_summary->source_turn_ids, total);
-    add_optional_string_vector_tokens(set.latest_summary->decisions_made, total);
-    add_optional_string_vector_tokens(set.latest_summary->confirmed_facts, total);
-    add_optional_string_vector_tokens(set.latest_summary->tool_outcomes, total);
-    add_optional_string_vector_tokens(set.latest_summary->tags, total);
+    add_optional_string_tokens(token_estimator, set.latest_summary->summary_text, total);
+    add_optional_string_vector_tokens(
+        token_estimator, set.latest_summary->source_turn_ids, total);
+    add_optional_string_vector_tokens(
+        token_estimator, set.latest_summary->decisions_made, total);
+    add_optional_string_vector_tokens(
+        token_estimator, set.latest_summary->confirmed_facts, total);
+    add_optional_string_vector_tokens(
+        token_estimator, set.latest_summary->tool_outcomes, total);
+    add_optional_string_vector_tokens(token_estimator, set.latest_summary->tags, total);
   }
 
   for (const auto& fact : set.relevant_facts) {
-    add_optional_string_tokens(fact.fact_id, total);
-    add_optional_string_tokens(fact.fact_text, total);
-    add_optional_string_tokens(fact.fact_type, total);
-    add_optional_string_tokens(fact.evidence_digest, total);
-    add_optional_string_vector_tokens(fact.source_turn_ids, total);
-    add_optional_string_vector_tokens(fact.source_observation_refs, total);
-    add_optional_string_vector_tokens(fact.tags, total);
+    add_optional_string_tokens(token_estimator, fact.fact_id, total);
+    add_optional_string_tokens(token_estimator, fact.fact_text, total);
+    add_optional_string_tokens(token_estimator, fact.fact_type, total);
+    add_optional_string_tokens(token_estimator, fact.evidence_digest, total);
+    add_optional_string_vector_tokens(token_estimator, fact.source_turn_ids, total);
+    add_optional_string_vector_tokens(
+        token_estimator, fact.source_observation_refs, total);
+    add_optional_string_vector_tokens(token_estimator, fact.tags, total);
   }
 
   for (const auto& experience : set.relevant_experiences) {
-    add_optional_string_tokens(experience.experience_id, total);
-    add_optional_string_tokens(experience.lesson_summary, total);
-    add_optional_string_tokens(experience.trigger_condition, total);
-    add_optional_string_tokens(experience.recommended_action, total);
-    add_optional_string_tokens(experience.risk_notes, total);
-    add_optional_string_vector_tokens(experience.source_fact_ids, total);
-    add_optional_string_vector_tokens(experience.source_turn_ids, total);
-    add_optional_string_vector_tokens(experience.applicable_domains, total);
-    add_optional_string_vector_tokens(experience.tags, total);
+    add_optional_string_tokens(token_estimator, experience.experience_id, total);
+    add_optional_string_tokens(token_estimator, experience.lesson_summary, total);
+    add_optional_string_tokens(token_estimator, experience.trigger_condition, total);
+    add_optional_string_tokens(token_estimator, experience.recommended_action, total);
+    add_optional_string_tokens(token_estimator, experience.risk_notes, total);
+    add_optional_string_vector_tokens(token_estimator, experience.source_fact_ids, total);
+    add_optional_string_vector_tokens(token_estimator, experience.source_turn_ids, total);
+    add_optional_string_vector_tokens(
+        token_estimator, experience.applicable_domains, total);
+    add_optional_string_vector_tokens(token_estimator, experience.tags, total);
   }
 
-  add_string_vector_tokens(set.external_evidence, total);
+  add_string_vector_tokens(token_estimator, set.external_evidence, total);
 
   for (const auto& hit : set.vector_hits) {
-    total += estimate_text_tokens(hit.doc_id);
-    total += estimate_text_tokens(hit.doc_type);
-    total += estimate_text_tokens(hit.text_snippet);
+    total += token_estimator.estimate_text_tokens(hit.doc_id);
+    total += token_estimator.estimate_text_tokens(hit.doc_type);
+    total += token_estimator.estimate_text_tokens(hit.text_snippet);
   }
 
   if (total <= 0) {

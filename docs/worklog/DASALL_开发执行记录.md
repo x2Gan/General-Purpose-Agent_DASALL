@@ -1,3 +1,43 @@
+## 记录 #879
+
+- 日期：2026-06-03
+- 阶段：memory / tiktoken token estimator closure
+- 任务：完成 WP-MEM-GAP-005“tiktoken token 估算（GAP-P1-A / MEM-E08）”
+- 状态：已完成（vendored tokenizer、shared estimator wiring、focused accuracy / budgeting / projection tests 与文档回写已闭合）
+
+### 执行前提
+
+1. [docs/deliverables/MEM-EVAL-2026-05-31-memory子系统落地评估与生产级缺口治理任务规划.md](../deliverables/MEM-EVAL-2026-05-31-memory子系统落地评估与生产级缺口治理任务规划.md) 已将 `WP-MEM-GAP-005` 固定为“tiktoken token 估算”，但当前树此前仍只有 `estimate_text_tokens` 启发式粗估，且 `BudgetAllocator`、`CandidateCollector`、`ContextOrchestrator` 与 `CompressionCoordinator` 各自直接调用该 helper，token 口径未被 factory 统一管理。
+2. 上游 `cpp-tiktoken` 默认假设 `tokenizers/` 位于可执行文件同级目录，且其 CMake 直接 `add_subdirectory(pcre2)`；若直接照搬，会把第三方资源路径与 install 规则扩散进 DASALL package 输出。
+3. 本轮先在本机确认系统已提供 `pcre2-8` 头与链接库，再决定只 vendor tokenizer source、自管 `cl100k_base.tiktoken` 资产路径，不额外引入整套 PCRE2 install 规则。
+
+### 改动
+
+1. 更新 [memory/CMakeLists.txt](../../memory/CMakeLists.txt)，引入 pin 到 `9323db528d52e48900c75ce197c3251085b18480` 的 vendored `cpp-tiktoken` source target，复用系统 `pcre2-8`，并把 `cl100k_base.tiktoken` 复制到 build/install `share/dasall/memory/tokenizers`。
+2. 更新 [memory/include/config/MemoryConfig.h](../../memory/include/config/MemoryConfig.h)、[memory/src/config/MemoryConfigProjector.cpp](../../memory/src/config/MemoryConfigProjector.cpp)、[memory/src/util/TokenEstimator.h](../../memory/src/util/TokenEstimator.h)、新增 [memory/src/util/TokenEstimator.cpp](../../memory/src/util/TokenEstimator.cpp)，引入 `token_estimator=tiktoken` 默认配置、`ITokenEstimator` 抽象、vendored `TiktokenTokenEstimator` 与 heuristic fallback。
+3. 更新 [memory/src/MemoryManagerFactory.cpp](../../memory/src/MemoryManagerFactory.cpp)、[memory/src/context/BudgetAllocator.cpp](../../memory/src/context/BudgetAllocator.cpp)、[memory/src/context/CandidateCollector.cpp](../../memory/src/context/CandidateCollector.cpp)、[memory/src/context/ContextOrchestrator.cpp](../../memory/src/context/ContextOrchestrator.cpp) 与 [memory/src/writeback/CompressionCoordinator.cpp](../../memory/src/writeback/CompressionCoordinator.cpp)：factory 现在只创建一次 shared estimator，并统一作用到 budget、candidate 汇总、trim、budget report 与 summary projection。
+4. 新增 [tests/unit/memory/TiktokenEstimatorAccuracyTest.cpp](../../tests/unit/memory/TiktokenEstimatorAccuracyTest.cpp)，扩展 [tests/unit/memory/BudgetAllocatorTest.cpp](../../tests/unit/memory/BudgetAllocatorTest.cpp)，并更新 [tests/unit/memory/CMakeLists.txt](../../tests/unit/memory/CMakeLists.txt)、[tests/unit/memory/MemoryInterfaceCompileTest.cpp](../../tests/unit/memory/MemoryInterfaceCompileTest.cpp)、[tests/integration/memory/MemoryProfileCompatibilityTest.cpp](../../tests/integration/memory/MemoryProfileCompatibilityTest.cpp)：`cl100k_base` 参考计数、双 backend 预算行为、配置默认值与 profile projection 现均有 focused 自动化证据。
+5. 新增 [docs/todos/memory/deliverables/WP-MEM-GAP-005-tiktoken-token-estimator-closeout.md](../todos/memory/deliverables/WP-MEM-GAP-005-tiktoken-token-estimator-closeout.md)，并回写 [docs/deliverables/MEM-EVAL-2026-05-31-memory子系统落地评估与生产级缺口治理任务规划.md](../deliverables/MEM-EVAL-2026-05-31-memory子系统落地评估与生产级缺口治理任务规划.md) 与 [docs/todos/DASALL_子系统查漏补缺专项记录.md](../todos/DASALL_子系统查漏补缺专项记录.md)，把 `GAP-P1-A / WP-MEM-GAP-005` 从规划态更新为已闭合状态。
+
+### 验证
+
+1. `Build_CMakeTools(buildTargets=["dasall_memory"])`
+   - 结果：通过；vendored tokenizer 与 Memory library 同轮编译成功。
+2. `Build_CMakeTools(buildTargets=["dasall_memory_tiktoken_estimator_accuracy_unit_test","dasall_memory_budget_allocator_unit_test","dasall_memory_interface_compile_unit_test","dasall_memory_profile_compatibility_integration_test"])`
+   - 结果：通过。
+3. `RunCtest_CMakeTools(tests=["TiktokenEstimatorAccuracyTest","BudgetAllocatorTest","MemoryInterfaceCompileTest","MemoryProfileCompatibilityTest"])`
+   - 结果：通过，`100% tests passed, 0 tests failed out of 4`。
+4. `Build_CMakeTools(buildTargets=["dasall_memory_candidate_collector_unit_test","dasall_memory_candidate_collector_vector_off_unit_test","dasall_memory_context_budget_unit_test","dasall_memory_context_orchestrator_unit_test","dasall_memory_compression_coordinator_unit_test","dasall_memory_compression_summarizer_unit_test"])`
+   - 结果：通过。
+5. `RunCtest_CMakeTools(tests=["CandidateCollectorTest","CandidateCollectorVectorOffTest","ContextOrchestratorBudgetTest","ContextOrchestratorTest","CompressionCoordinatorTest","CompressionCoordinatorSummarizerTest"])`
+   - 结果：通过，`100% tests passed, 0 tests failed out of 6`。
+
+### 结果
+
+1. `WP-MEM-GAP-005 / GAP-P1-A / MEM-E08` 已闭合；Memory 现以 `cl100k_base` 兼容 tokenizer 驱动 token budget 相关路径，不再停留在启发式粗估。
+2. token 估算语义现由 `MemoryManagerFactory` 统一创建并下沉到 budget / trim / summary / report 相关 owner，不再允许各自复制一份 heuristic 规则。
+3. Memory 当前剩余 P1 焦点转为 `WP-MEM-GAP-006 / -007 / -008`，以及更高层 installed gate / release 绿色记录；token 估算不再是本轮后的高优先级 blocker。
+
 ## 记录 #877
 
 - 日期：2026-06-02

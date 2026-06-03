@@ -1,5 +1,6 @@
 #pragma once
 
+#include <memory>
 #include <optional>
 #include <string>
 #include <vector>
@@ -9,6 +10,12 @@
 #include "memory/SummaryMemory.h"
 #include "memory/Turn.h"
 #include "writeback/SummaryProjection.h"
+
+namespace dasall::memory::util {
+
+class ITokenEstimator;
+
+}  // namespace dasall::memory::util
 
 namespace dasall::memory {
 
@@ -31,7 +38,8 @@ struct CompressionOutput {
 class CompressionCoordinator {
  public:
   explicit CompressionCoordinator(ISummaryStore& store,
-                                  ISummarizer* summarizer = nullptr);
+                                  ISummarizer* summarizer = nullptr,
+                                  std::shared_ptr<const util::ITokenEstimator> token_estimator = nullptr);
 
   [[nodiscard]] CompressionOutput compress(const CompressionInput& input);
 
@@ -56,6 +64,7 @@ class CompressionCoordinator {
 
   ISummaryStore& store_;
   ISummarizer* summarizer_ = nullptr;
+    std::shared_ptr<const util::ITokenEstimator> token_estimator_;
 };
 
 }  // namespace dasall::memory

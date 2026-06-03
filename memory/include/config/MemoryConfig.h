@@ -66,6 +66,16 @@ inline constexpr std::string_view to_string_view(VectorBackend value) {
   return "none";
 }
 
+enum class TokenEstimatorBackend { Tiktoken, Heuristic };
+
+inline constexpr std::string_view to_string_view(TokenEstimatorBackend value) {
+  switch (value) {
+    case TokenEstimatorBackend::Tiktoken:  return "tiktoken";
+    case TokenEstimatorBackend::Heuristic: return "heuristic";
+  }
+  return "tiktoken";
+}
+
 inline constexpr int encode_sqlite_version_number(int major,
                                                   int minor,
                                                   int patch) {
@@ -128,6 +138,7 @@ struct MemoryConfig {
   ExperienceConfig experience;
   VectorConfig vector;
   MaintenanceConfig maintenance;
+  TokenEstimatorBackend token_estimator = TokenEstimatorBackend::Tiktoken;
 };
 
 }  // namespace dasall::memory
