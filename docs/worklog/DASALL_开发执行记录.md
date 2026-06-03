@@ -34,7 +34,43 @@
 
 1. `WP-MEM-GAP-003 / GAP-P0-C` 已闭合；Memory 现同时具备 manager 级并发压力门、压缩长跑 soak 门与统一 TSAN green 入口。
 2. 本轮把 TSAN 噪声严格限定在 SQLite WAL 共享内存 vendor 路径；后续若 TSAN 栈进入 [memory/src](../../memory/src)，应直接重新打开 Memory 并发缺口，而不是复用本轮 suppression。
-3. Memory 当前剩余高优先级焦点转为 `WP-MEM-GAP-004 / GAP-P0-D` installed / qemu gate；并发 / 长跑 / TSAN 已不再阻塞 P0 收敛。
+3. Memory 当前剩余高优先级焦点转为 `WP-MEM-GAP-004 / GAP-P0-D` installed gate（qemu optional chaining）；并发 / 长跑 / TSAN 已不再阻塞 P0 收敛。
+
+## 记录 #878
+
+- 日期：2026-06-03
+- 阶段：memory / installed gate authoritative regression tightening
+- 任务：推进 WP-MEM-GAP-004“Memory installed gate（qemu optional chaining，GAP-P0-D）”真实内容
+- 状态：已执行（wrapper 可复用 raw artifacts 汇总、MemoryInstalledSmokeTest 升级为真实 wrapper regression、交付文档去除 qemu blocker 口径）
+
+### 执行前提
+
+1. [docs/deliverables/MEM-EVAL-2026-05-31-memory子系统落地评估与生产级缺口治理任务规划.md](../deliverables/MEM-EVAL-2026-05-31-memory子系统落地评估与生产级缺口治理任务规划.md) 仍把 `WP-MEM-GAP-004` 写成 `installed / qemu gate`，与 Memory 既有 boundary closeout、packaging README 和 release-runner contract 已冻结的 authoritative owner 不一致。
+2. 当前 [tests/integration/memory/MemoryInstalledSmokeTest.cpp](../../tests/integration/memory/MemoryInstalledSmokeTest.cpp) 只做字符串接线检查，没有真正执行 wrapper，也没有校验 `latest.json` schema；一旦汇总逻辑回退，CTest 不能及时发现。
+3. 本轮不能把 rootful installed smoke 或 qemu/autopkgtest 直接塞进 CTest。最小根因修法应是让 wrapper 支持复用既有 raw artifacts，再由集成测用 synthetic artifacts 真正执行汇总逻辑。
+
+### 改动
+
+1. 更新 [scripts/packaging/validate_memory_installed_or_qemu.sh](../../scripts/packaging/validate_memory_installed_or_qemu.sh)：新增 `--reuse-artifacts` 选项，在不触发 `pkg_smoke_install.sh` 的前提下复用现有 `run-first.json`、`run-second.json`、`memory-proof.json` 与 `memory-maintenance-proof.json`，继续产出 `summary.json`、`latest.json` 和 `latest` symlink；qemu 仍只保留为 optional chaining。
+2. 更新 [tests/integration/memory/MemoryInstalledSmokeTest.cpp](../../tests/integration/memory/MemoryInstalledSmokeTest.cpp)：从原先的纯字符串检查升级为真正执行 wrapper 的 synthetic-artifact regression，并对 `latest.json` 的 `schema_version`、`authoritative_owner`、`mode`、`checks.*`、`effective_profile_id`、`qemu.requested/status` 与 `latest` symlink 做断言。
+3. 回写 [docs/deliverables/MEM-EVAL-2026-05-31-memory子系统落地评估与生产级缺口治理任务规划.md](../deliverables/MEM-EVAL-2026-05-31-memory子系统落地评估与生产级缺口治理任务规划.md)、[scripts/packaging/README.md](../../scripts/packaging/README.md) 与 [docs/todos/DASALL_子系统查漏补缺专项记录.md](../todos/DASALL_子系统查漏补缺专项记录.md)：统一把 `WP-MEM-GAP-004 / GAP-P0-D` 重定义为 installed gate，明确 qemu 仅为 optional chaining / packaging-release hardening，不再回流成 Memory owner blocker。
+
+### 验证
+
+1. `Build_CMakeTools(buildTargets=["dasall_memory_installed_smoke_integration_test"])`
+   - 结果：通过。
+2. `RunCtest_CMakeTools(tests=["MemoryInstalledSmokeTest"])`
+   - 结果：通过；synthetic-artifact wrapper regression 与 README/CMake entrypoint 断言全绿。
+3. `Build_CMakeTools(buildTargets=["dasall-daemon_memory_maintenance_proof_runner_unit_test"])`
+   - 结果：通过。
+4. `RunCtest_CMakeTools(tests=["MemoryMaintenanceProofRunnerTest"])`
+   - 结果：通过；installed maintenance helper 相关 regression 未回退。
+
+### 结果
+
+1. `WP-MEM-GAP-004 / GAP-P0-D` 的当前 authoritative 内容已从“installed / qemu gate”收口为“installed gate（qemu optional chaining）”；qemu 不再作为 Memory owner blocker。
+2. Memory 现已具备一条可在 CTest 中真实执行的 wrapper regression；`latest.json` schema、二值 checks 与 `latest` symlink 回退时会直接被集成测拦截。
+3. 当前剩余收敛项已缩小为 broader installed package-smoke / release-runner 绿色记录，而不是 qemu 依赖本身。
 
 ## 记录 #876
 
@@ -71,7 +107,7 @@
 
 1. Memory 生产向量路径现在会优先使用 runtime_support 注入的外部 embedding adapter；当 provider / transport 不可用时，会回落 `SimpleLocalEmbeddingAdapter` 并发出 observability warning，不阻断主链。
 2. llm boundary guard 继续成立：concrete `LLMBackedEmbeddingAdapter` 没有进入 llm public surface，llm 仍只负责 transport / provider / secret 治理；runtime_support 才是持有真实 glue 并进行跨模块注入的 owner。
-3. `WP-MEM-GAP-002 / GAP-P0-B` 已闭合；Memory V1 剩余高优先级缺口转为并发 / 长跑压力门与 installed / qemu gate。
+3. `WP-MEM-GAP-002 / GAP-P0-B` 已闭合；Memory V1 剩余高优先级缺口转为并发 / 长跑压力门与 installed gate（qemu optional chaining）。
 
 ## 记录 #875
 
@@ -109,7 +145,7 @@
 
 1. Memory 生产压缩路径现在会优先使用 runtime_support 注入的 LLM-backed summarizer，`SummaryMemory.summary_text` 不再固定停留在模板关键词提取；同时 memory 继续只依赖 `ISummarizer` 抽象，没有越过 ADR-006。
 2. llm boundary guard 继续成立：concrete `LLMBackedSummarizer` 没有进入 llm public surface，llm 仍只负责 prompt/provider/manager 治理；runtime_support 才是持有 `llm_manager` 并进行跨模块胶水注入的 owner。
-3. `WP-MEM-GAP-001 / GAP-P0-A` 已闭合；Memory V1 剩余高优先级缺口转为外部 Embedding service、并发 / 长跑压力门与 installed / qemu gate。
+3. `WP-MEM-GAP-001 / GAP-P0-A` 已闭合；Memory V1 剩余高优先级缺口转为外部 Embedding service、并发 / 长跑压力门与 installed gate（qemu optional chaining）。
 
 ## 记录 #874
 

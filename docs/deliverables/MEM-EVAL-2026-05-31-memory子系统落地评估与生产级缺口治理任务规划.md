@@ -144,7 +144,7 @@
 | Production logging 链 | memory 事件 | infra.log / audit / metric / trace | MemoryObservability.emit → MemoryRuntimeDependencies.{logger/audit_logger/metrics_provider/tracer_provider} | [MemoryProductionLoggingIntegrationTest.cpp](../../tests/integration/memory/MemoryProductionLoggingIntegrationTest.cpp) / [MemoryObservabilityBridgeTest.cpp](../../tests/integration/memory/MemoryObservabilityBridgeTest.cpp) | ✅ 完整 |
 | Topology smoke | top-level | memory subsystem 入口 | MemoryIntegrationTopologySmokeTest | ✅ 完整 |
 | 生成质量链 | turn 文本 → SummaryMemory.summary_text | CompressionCoordinator.template fallback + `LLMBackedSummarizer`（阶段 2 已注入） | `LLMBackedSummarizerCompileTest` / `MemoryCompressionLLMSummarizerIntegrationTest` / `MemoryProductionLoggingIntegrationTest` | ✅ 已闭合（原 GAP-P0-A） |
-| 向量召回质量链 | turn/fact text → embedding → search_ann | `MemoryRuntimeDependencies.embedding_adapter_factory` + `MemoryManagerFactory` factory selection/fallback + `RuntimeLiveDependencyComposition` 注入 `LLMBackedEmbeddingAdapter` | `LLMBackedEmbeddingAdapterCompileTest` / `MemoryVectorRecallQualityTest` | ✅ 已闭合（原 GAP-P0-B；更高层 installed / qemu 证据另归 GAP-P0-D） |
+| 向量召回质量链 | turn/fact text → embedding → search_ann | `MemoryRuntimeDependencies.embedding_adapter_factory` + `MemoryManagerFactory` factory selection/fallback + `RuntimeLiveDependencyComposition` 注入 `LLMBackedEmbeddingAdapter` | `LLMBackedEmbeddingAdapterCompileTest` / `MemoryVectorRecallQualityTest` | ✅ 已闭合（原 GAP-P0-B；更高层 installed authoritative gate / optional qemu chaining 证据另归 GAP-P0-D） |
 | 跨 session FactQuery 链 | user/profile 维度 | Long-Term 共享事实 | **无 cross-session 接口** | 无 | ❌ 缺，GAP-P2-B |
 | Maintenance ticker 链 | 周期触发 | WAL gc / quarantine cleanup / vector rebuild | **生产侧未挂 ticker** | 无 | ❌ 缺，GAP-P1-B |
 
@@ -198,9 +198,9 @@
   - TSAN 说明：首轮 TSAN 报告停在 SQLite WAL shared-memory header 读取链（`walTryBeginRead` / `walIndexReadHdr`），与 SQLite 3.51.3 源码对该路径的 false-positive 注释一致；本轮仅以 `memory_tsan.supp` 窄 suppression 固定第三方噪声，不覆盖任何 `memory/src/*` 栈帧。
   - 验证证据：`MemoryConcurrencyStressTest`、`MemoryLongRunningSoakTest` build-tree 直跑通过；`bash scripts/ci/memory_tsan_stress.sh` 复跑结果为 `100% tests passed, 0 tests failed out of 2`。
 
-- **GAP-P0-D Memory installed / qemu gate**
-  - 现状：[MemoryMaintenanceProofRunner.cpp](../../apps/daemon/src/MemoryMaintenanceProofRunner.cpp) 已存在，但 memory 维度 installed-evidence 未集中归档；与 access / runtime 已有 gate 不对齐。
-  - 风险：installed package 下 memory 主链（init / open store / prepare_context / write_back / maintenance）的端到端二值证据缺失。
+- **GAP-P0-D Memory installed gate（qemu optional chaining）**
+  - 现状：`validate_memory_installed_or_qemu.sh`、`memory_installed_smoke` target 与 `MemoryInstalledSmokeTest` 已存在；Memory owner 的 authoritative 口径已固定为本机 installed evidence，qemu 只保留为脚本可选 chaining 与 packaging / release hardening。
+  - 风险：若 broader installed package-smoke readiness 回退，wrapper 将无法继续稳定产出 `~/.cache/dasall/memory/installed-evidence/latest.json`；该风险属于 installed gate 本身，而非 qemu 依赖。
 
 ### 6.2 P1（GA 强烈建议）
 
@@ -296,17 +296,18 @@
   - `bash scripts/ci/memory_tsan_stress.sh`：通过，`100% tests passed, 0 tests failed out of 2`。
 - **阻塞 / 解阻**：已解阻。本轮同回合补齐 `tsan` preset；随后把 SQLite WAL 共享内存假阳性收口到窄 suppression 文件，未改写 Memory owner 语义。
 
-#### WP-MEM-GAP-004 Memory installed / qemu gate（GAP-P0-D）
+#### WP-MEM-GAP-004 Memory installed gate（qemu optional chaining，GAP-P0-D）
 
 - **代码目标**
-  - 新增 `scripts/packaging/validate_memory_installed_or_qemu.sh`，参考 access / runtime 已有 gate。
-  - 在 installed profile 下启动 daemon → 通过 [MemoryMaintenanceProofRunner.cpp](../../apps/daemon/src/MemoryMaintenanceProofRunner.cpp) 跑 init / open / prepare_context / write_back / maintenance 端到端用例，落 evidence 到 `~/.cache/dasall/memory/installed-evidence/`。
+  - 固定 `scripts/packaging/validate_memory_installed_or_qemu.sh` 为 Memory owner 的 installed authoritative wrapper；可选 `-- <virt cmd>` 仅用于 qemu chaining，不再作为 Memory blocker。
+  - 在 installed profile 下启动 daemon → 通过 [MemoryMaintenanceProofRunner.cpp](../../apps/daemon/src/MemoryMaintenanceProofRunner.cpp) 与 package-smoke raw artifacts 汇总 init / open / prepare_context / write_back / maintenance 端到端证据，落 evidence 到 `~/.cache/dasall/memory/installed-evidence/`。
   - CMake 可选 target `memory_installed_smoke`。
 - **测试目标**
-  - 集成 `MemoryInstalledSmokeTest` 入口；evidence schema 落档到详设 §9.6 风格的 memory 章节。
+  - 集成 `MemoryInstalledSmokeTest` 真正执行 wrapper 的 `--reuse-artifacts` 汇总路径，并校验 `latest.json` schema 与 `latest` symlink。
+  - evidence schema 落档到详设 §9.6 风格的 memory 章节。
 - **验收命令**
   - `bash scripts/packaging/validate_memory_installed_or_qemu.sh && cat ~/.cache/dasall/memory/installed-evidence/latest.json`
-- **阻塞 / 解阻**：依赖打包 SSOT 与 RuntimeInstalledProofRunner（已具备）。
+- **阻塞 / 解阻**：打包 SSOT 与 RuntimeInstalledProofRunner 已具备；qemu 已降为 optional chaining，不再回流成 Memory owner blocker。剩余收敛项是 installed gate 的 CI / release-runner 绿色记录与 broader package-smoke readiness 稳定性。
 
 ### 7.2 P1 任务
 
@@ -459,7 +460,7 @@ flowchart LR
   B[WP-MEM-GAP-002 External Embedding] --> I[WP-MEM-GAP-009 ConflictResolver vector]
   B --> M[WP-MEM-GAP-013 desktop_full vss]
   C[WP-MEM-GAP-003 ConcurrencyStress + Soak]
-  D[WP-MEM-GAP-004 Installed/qemu gate] --> F[WP-MEM-GAP-006 MaintenanceTicker]
+  D[WP-MEM-GAP-004 Installed gate] --> F[WP-MEM-GAP-006 MaintenanceTicker]
   E[WP-MEM-GAP-005 tiktoken]
   F --> P18[WP-MEM-GAP-018 soak gate]
   G[WP-MEM-GAP-007 external_evidence v1]
@@ -486,7 +487,7 @@ flowchart LR
 
 | 阶段 | 通过条件 |
 |---|---|
-| **GA-MEM-Gate-P0** | WP-MEM-GAP-001..004 全部 Done；`ctest --test-dir build-ci -R "Memory"` 全绿；installed/qemu gate 在 CI 上有一次绿色记录；TSAN stress run 一次绿；LLM-backed Summarizer 与 External Embedding 在 production composition 中实例化成功并有日志证据 |
+| **GA-MEM-Gate-P0** | WP-MEM-GAP-001..004 全部 Done；`ctest --test-dir build-ci -R "Memory"` 全绿；installed gate 在 CI 或 release-runner local authoritative path 上有一次绿色记录；TSAN stress run 一次绿；LLM-backed Summarizer 与 External Embedding 在 production composition 中实例化成功并有日志证据 |
 | **GA-MEM-Gate-P1** | WP-MEM-GAP-005..008 全部 Done；MaintenanceTicker 在 daemon 内稳定运行 ≥24h；token 估算误差 ≤5%；ProductionLogging 字段断言完备；external_evidence v1 端到端贯通 |
 | **GA-MEM-Gate-P2** | WP-MEM-GAP-009..013 全部 Done；ConflictResolver precision/recall 优于 keyword-only baseline；cross-session FactQuery 上线；遗忘曲线与 composite scoring 验证；desktop_full 默认开启 sqlite-vss 灰度 |
 | **GA-MEM-Gate-P3** | WP-MEM-GAP-014..018 视项目演进按需推进；ProgrammaticMemory / contracts 提升 / soak gate 形成长期治理 |
@@ -537,7 +538,7 @@ memory 子系统已达到 **可生产部署 v1** 水位：架构 / 详设目标 
 | V1 | WP-MEM-GAP-001 | LLM-backed Summarizer 注入（生产装配，已完成 2026-06-02） |
 | V1 | WP-MEM-GAP-002 | 外部 Embedding Service 注入（生产装配，已完成 2026-06-02） |
 | V1 | WP-MEM-GAP-003 | 并发 / 长跑压力门 + TSAN（已完成 2026-06-02） |
-| V1 | WP-MEM-GAP-004 | Memory installed / qemu gate |
+| V1 | WP-MEM-GAP-004 | Memory installed gate（qemu optional chaining） |
 | V1 | WP-MEM-GAP-005 | tiktoken token 估算 |
 | V1 | WP-MEM-GAP-006 | 生产侧 MaintenanceTicker 挂载 |
 | V1 | WP-MEM-GAP-007 | external_evidence 投影 v1 端到端 |
