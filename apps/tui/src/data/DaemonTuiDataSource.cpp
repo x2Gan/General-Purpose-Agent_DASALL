@@ -5,47 +5,49 @@
 
 namespace dasall::tui::data {
 
-ipc::TuiIpcControllerOptions
-resolve_daemon_tui_controller_options_from_environment() {
-  ipc::TuiIpcControllerOptions options;
-  const char* const value = std::getenv(kTuiDaemonSocketOverrideEnv.data());
-  if (value != nullptr && value[0] != '\0') {
-    options.socket_path = value;
-  }
-  return options;
-}
+    ipc::TuiIpcControllerOptions resolve_daemon_tui_controller_options_from_environment() {
+        ipc::TuiIpcControllerOptions options;
+        const char* const value = std::getenv(kTuiDaemonSocketOverrideEnv.data());
+        if (value != nullptr && value[0] != '\0') {
+            options.socket_path = value;
+        }
+        return options;
+    }
 
-DaemonTuiDataSource::DaemonTuiDataSource() = default;
+    DaemonTuiDataSource::DaemonTuiDataSource() = default;
 
-DaemonTuiDataSource::DaemonTuiDataSource(ipc::TuiIpcControllerOptions options)
-    : controller_(std::move(options)) {}
+    DaemonTuiDataSource::DaemonTuiDataSource(ipc::TuiIpcControllerOptions options)
+        : controller_(std::move(options)) {}
 
-DaemonTuiDataSource::DaemonTuiDataSource(ipc::TuiIpcController controller)
-    : controller_(std::move(controller)) {}
+    DaemonTuiDataSource::DaemonTuiDataSource(ipc::TuiIpcController controller)
+        : controller_(std::move(controller)) {}
 
-TuiOpenSessionResult DaemonTuiDataSource::open_session(
-    const TuiOpenSessionRequest& request) {
-  return controller_.open_session(request);
-}
+    TuiOpenSessionResult DaemonTuiDataSource::open_session(const TuiOpenSessionRequest& request) {
+        return controller_.open_session(request);
+    }
 
-TuiSubmitTurnResult DaemonTuiDataSource::submit_turn(
-    const TuiSubmitTurnRequest& request) {
-  return controller_.submit_turn(request);
-}
+    /**
+     * @brief Submits a turn to the daemon TUI data source.
+     * 
+     * @param request The request containing the turn information.
+     * @return TuiSubmitTurnResult The result of the turn submission.
+     */
+    TuiSubmitTurnResult DaemonTuiDataSource::submit_turn(const TuiSubmitTurnRequest& request) {
+        return controller_.submit_turn(request);
+    }
 
-TuiPollEventsResult DaemonTuiDataSource::poll_events(
-    const TuiPollEventsRequest& request) {
-  return controller_.poll_events(request);
-}
+    TuiPollEventsResult DaemonTuiDataSource::poll_events(const TuiPollEventsRequest& request) {
+        return controller_.poll_events(request);
+    }
 
-TuiRouteCatalogResult DaemonTuiDataSource::route_catalog(
-    const TuiRouteCatalogRequest& request) {
-  return controller_.query_route_catalog(request);
-}
+    TuiRouteCatalogResult
+    DaemonTuiDataSource::route_catalog(const TuiRouteCatalogRequest& request) {
+        return controller_.query_route_catalog(request);
+    }
 
-TuiCloseSessionResult DaemonTuiDataSource::close_session(
-    const TuiCloseSessionRequest& request) {
-  return controller_.close_session(request);
-}
+    TuiCloseSessionResult
+    DaemonTuiDataSource::close_session(const TuiCloseSessionRequest& request) {
+        return controller_.close_session(request);
+    }
 
-}  // namespace dasall::tui::data
+} // namespace dasall::tui::data
