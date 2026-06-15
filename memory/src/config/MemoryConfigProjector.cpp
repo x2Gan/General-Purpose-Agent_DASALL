@@ -82,6 +82,7 @@ std::optional<MemoryConfig> project_memory_config(
   config.vector.enabled = vector_enabled;
   config.vector.backend_type = vector_enabled ? VectorBackend::SqliteVss : VectorBackend::None;
   config.vector.search_top_k = search_top_k;
+  config.conflict.embedding_similarity_threshold = 0.85;
     config.token_estimator = TokenEstimatorBackend::Tiktoken;
 
   config.maintenance.retention_turns = retention_turns;

@@ -233,8 +233,10 @@ std::unique_ptr<IMemoryManager> create_memory_manager(
     auto allocator = std::make_unique<BudgetAllocator>(config, token_estimator);
     auto compressor = std::make_unique<CompressionCoordinator>(
         *dependencies.store, dependencies.summarizer.get(), token_estimator);
-    auto conflict_resolver =
-      std::make_unique<MemoryConflictResolver>(*dependencies.store);
+    auto conflict_resolver = std::make_unique<MemoryConflictResolver>(
+      *dependencies.store,
+      config.conflict,
+      dependencies.embedding_adapter.get());
     dependencies.context_orchestrator = std::make_unique<ContextOrchestrator>(
         std::move(collector), std::move(allocator), std::move(compressor),
         config, dependencies.observability, token_estimator);

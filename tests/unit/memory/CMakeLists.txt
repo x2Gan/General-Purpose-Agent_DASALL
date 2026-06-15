@@ -118,6 +118,10 @@ add_executable(dasall_memory_conflict_resolver_unit_test
 	MemoryConflictResolverTest.cpp
 )
 
+add_executable(dasall_memory_conflict_resolver_with_embedding_unit_test
+	MemoryConflictResolverWithEmbeddingTest.cpp
+)
+
 add_executable(dasall_memory_conflict_resolver_degraded_unit_test
 	ConflictResolverDegradedTest.cpp
 )
@@ -340,6 +344,12 @@ target_link_libraries(dasall_memory_conflict_resolver_unit_test
 		dasall_test_support
 )
 
+target_link_libraries(dasall_memory_conflict_resolver_with_embedding_unit_test
+	PRIVATE
+		dasall_memory
+		dasall_test_support
+)
+
 target_link_libraries(dasall_memory_conflict_resolver_degraded_unit_test
 	PRIVATE
 		dasall_memory
@@ -506,6 +516,11 @@ target_include_directories(dasall_memory_conflict_resolver_unit_test
 		${CMAKE_SOURCE_DIR}/memory/src
 )
 
+target_include_directories(dasall_memory_conflict_resolver_with_embedding_unit_test
+	PRIVATE
+		${CMAKE_SOURCE_DIR}/memory/src
+)
+
 target_include_directories(dasall_memory_conflict_resolver_degraded_unit_test
 	PRIVATE
 		${CMAKE_SOURCE_DIR}/memory/src
@@ -632,6 +647,7 @@ dasall_apply_common_options(dasall_memory_context_orchestrator_unit_test)
 dasall_apply_common_options(dasall_memory_context_orchestrator_evidence_unit_test)
 dasall_apply_common_options(dasall_memory_context_orchestrator_degraded_unit_test)
 dasall_apply_common_options(dasall_memory_conflict_resolver_unit_test)
+dasall_apply_common_options(dasall_memory_conflict_resolver_with_embedding_unit_test)
 dasall_apply_common_options(dasall_memory_conflict_resolver_degraded_unit_test)
 dasall_apply_common_options(dasall_memory_fact_conflict_resolver_unit_test)
 dasall_apply_common_options(dasall_memory_writeback_core_unit_test)
@@ -730,6 +746,9 @@ set_tests_properties(ContextOrchestratorDegradedTest PROPERTIES LABELS "unit;mem
 add_test(NAME MemoryConflictResolverTest COMMAND dasall_memory_conflict_resolver_unit_test)
 set_tests_properties(MemoryConflictResolverTest PROPERTIES LABELS "unit;memory")
 
+add_test(NAME MemoryConflictResolverWithEmbeddingTest COMMAND dasall_memory_conflict_resolver_with_embedding_unit_test)
+set_tests_properties(MemoryConflictResolverWithEmbeddingTest PROPERTIES LABELS "unit;memory")
+
 add_test(NAME ConflictResolverDegradedTest COMMAND dasall_memory_conflict_resolver_degraded_unit_test)
 set_tests_properties(ConflictResolverDegradedTest PROPERTIES LABELS "unit;memory")
 
@@ -781,6 +800,7 @@ set(DASALL_MEMORY_UNIT_TEST_EXECUTABLE_TARGETS
 	dasall_memory_context_orchestrator_evidence_unit_test
 	dasall_memory_context_orchestrator_degraded_unit_test
 	dasall_memory_conflict_resolver_unit_test
+	dasall_memory_conflict_resolver_with_embedding_unit_test
 	dasall_memory_conflict_resolver_degraded_unit_test
 	dasall_memory_fact_conflict_resolver_unit_test
 	dasall_memory_writeback_core_unit_test

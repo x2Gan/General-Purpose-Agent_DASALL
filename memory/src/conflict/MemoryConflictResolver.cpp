@@ -3,12 +3,15 @@
 #include <algorithm>
 #include <array>
 #include <cctype>
+#include <cmath>
 #include <optional>
 #include <string>
 #include <string_view>
 #include <unordered_set>
 #include <utility>
 #include <vector>
+
+#include "vector/IEmbeddingAdapter.h"
 
 namespace dasall::memory {
 namespace {
@@ -188,6 +191,89 @@ constexpr std::array<std::pair<std::string_view, std::string_view>, 9>
              : 0;
 }
 
+void append_warning_once(std::vector<std::string>& warnings,
+                         std::string_view warning) {
+  const std::string warning_text{warning};
+  if (std::find(warnings.begin(), warnings.end(), warning_text) != warnings.end()) {
+    return;
+  }
+
+  warnings.push_back(warning_text);
+}
+
+[[nodiscard]] std::optional<double> cosine_similarity(
+    const std::vector<float>& lhs,
+    const std::vector<float>& rhs) {
+  if (lhs.empty() || rhs.empty() || lhs.size() != rhs.size()) {
+    return std::nullopt;
+  }
+
+  double dot_product = 0.0;
+  double lhs_norm_squared = 0.0;
+  double rhs_norm_squared = 0.0;
+  for (std::size_t index = 0; index < lhs.size(); ++index) {
+    dot_product += static_cast<double>(lhs[index]) * static_cast<double>(rhs[index]);
+    lhs_norm_squared += static_cast<double>(lhs[index]) * static_cast<double>(lhs[index]);
+    rhs_norm_squared += static_cast<double>(rhs[index]) * static_cast<double>(rhs[index]);
+  }
+
+  if (lhs_norm_squared <= 0.0 || rhs_norm_squared <= 0.0) {
+    return std::nullopt;
+  }
+
+  return dot_product /
+         (std::sqrt(lhs_norm_squared) * std::sqrt(rhs_norm_squared));
+}
+
+[[nodiscard]] bool is_embedding_assist_candidate(
+    const contracts::MemoryFact& existing,
+    const FactCandidate& candidate) {
+  if (!existing.fact_text.has_value() || !candidate.fact.fact_text.has_value()) {
+    return false;
+  }
+
+  if (existing.fact_type.has_value() && candidate.fact.fact_type.has_value() &&
+      existing.fact_type != candidate.fact.fact_type) {
+    return false;
+  }
+
+  const std::string existing_text = ascii_lower(*existing.fact_text);
+  const std::string candidate_text = ascii_lower(*candidate.fact.fact_text);
+  if (shared_anchor_count(existing_text, candidate_text) == 0) {
+    return false;
+  }
+
+  if (has_polarity_conflict(existing_text, candidate_text)) {
+    return false;
+  }
+
+  if (has_negation_marker(existing_text) != has_negation_marker(candidate_text)) {
+    return false;
+  }
+
+  const auto existing_number = extract_single_number(existing_text);
+  const auto candidate_number = extract_single_number(candidate_text);
+  if (existing_number.has_value() && candidate_number.has_value() &&
+      existing_number != candidate_number) {
+    return false;
+  }
+
+  return true;
+}
+
+[[nodiscard]] std::optional<double> compute_embedding_similarity(
+    const contracts::MemoryFact& existing,
+    const FactCandidate& candidate,
+    const IEmbeddingAdapter& embedding_adapter) {
+  if (!existing.fact_text.has_value() || !candidate.fact.fact_text.has_value()) {
+    return std::nullopt;
+  }
+
+  const auto existing_embedding = embedding_adapter.embed(*existing.fact_text);
+  const auto candidate_embedding = embedding_adapter.embed(*candidate.fact.fact_text);
+  return cosine_similarity(existing_embedding, candidate_embedding);
+}
+
 [[nodiscard]] std::string build_reason(ConflictAction action,
                                        int confidence_delta,
                                        bool semantic_conflict) {
@@ -210,7 +296,13 @@ constexpr std::array<std::pair<std::string_view, std::string_view>, 9>
 
 }  // namespace
 
-MemoryConflictResolver::MemoryConflictResolver(IFactStore& store) : store_(store) {}
+MemoryConflictResolver::MemoryConflictResolver(
+    IFactStore& store,
+    ConflictConfig config,
+    IEmbeddingAdapter* embedding_adapter)
+    : store_(store),
+      config_(std::move(config)),
+      embedding_adapter_(embedding_adapter) {}
 
 ConflictResolutionPlan MemoryConflictResolver::resolve(
     const FactCandidate& candidate,
@@ -243,8 +335,25 @@ ConflictResolutionPlan MemoryConflictResolver::resolve(
 
   for (const auto& existing : related_facts) {
     const bool semantic_conflict = is_semantically_conflicting(existing, candidate);
-    const auto action = semantic_conflict ? determine_action(existing, candidate)
-                                          : ConflictAction::Coexist;
+    auto action = semantic_conflict ? determine_action(existing, candidate)
+                                    : ConflictAction::Coexist;
+
+    if (!semantic_conflict && embedding_adapter_ != nullptr &&
+        is_embedding_assist_candidate(existing, candidate)) {
+      try {
+        const auto similarity = compute_embedding_similarity(
+            existing, candidate, *embedding_adapter_);
+        if (similarity.has_value() &&
+            *similarity >= config_.embedding_similarity_threshold &&
+            confidence_or_zero(candidate.fact) > confidence_or_zero(existing)) {
+          action = ConflictAction::Supersede;
+        }
+      } catch (...) {
+        append_warning_once(plan.warnings, "conflict_embedding_similarity_skipped");
+        plan.degraded = true;
+      }
+    }
+
     const int confidence_delta =
         confidence_or_zero(candidate.fact) - confidence_or_zero(existing);
 

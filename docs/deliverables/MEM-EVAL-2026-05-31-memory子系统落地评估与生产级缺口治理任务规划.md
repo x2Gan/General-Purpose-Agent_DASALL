@@ -41,9 +41,9 @@
 | 可观测性（log/metric/audit/trace） | [memory/src/observability/MemoryObservability.cpp](../../memory/src/observability/MemoryObservability.cpp) 482 行；`MemoryProductionLoggingIntegrationTest` / `MemoryObservabilityBridgeTest` 端到端覆盖 | **达成**（生产侧 sink 已直连，**比 runtime 子系统更完整**） |
 | 业务链贯通（Runtime ↔ Memory ↔ SQLite ↔ Vector ↔ Profile ↔ Observability） | unary、resume、recovery、context-assemble、writeback、maintenance、failure-injection、checkpoint-busy、profile-compat、production-logging 等 11 条集成测全部存在 | **可贯通** |
 | 真实落地 vs 桩 | 无空壳实现；`memory/src/MemoryBuildSkeleton.cpp` 仅 4 行历史 namespace 文件可清理；所有主要组件均含真实业务体（store 1493 / orchestrator 814 / writeback 693 / vector backend 713 / observability 482 / manager 482 / schema migrator 406 / row mappers 408 / conflict resolver 371 / compression coordinator 320 / budget allocator 313 / detached vector factory 280 / candidate collector 246 / working board 244） | **无虚假实现** |
-| 距离生产级 GA | 仍欠：installed gate 绿色记录、跨 session FactQuery、向量相似度辅助冲突检测、ProgrammaticMemory 持久化、composite scoring、遗忘曲线 | **未到生产级** |
+| 距离生产级 GA | 仍欠：installed gate 绿色记录、跨 session FactQuery、ProgrammaticMemory 持久化、composite scoring、遗忘曲线 | **未到生产级** |
 
-总体结论：memory 已完成**架构 / 接口 / 持久化 / 上下文装配 / 写回 / 维护 / 观测性**的真实落地，与 runtime 同处"骨架达成、深度需补"水位；区别于 runtime 缺口的"信号外送 / 跨版本 / 并发证据"，memory 当前剩余缺口集中在**质量层（embedding / 跨 session 召回 / 冲突精度）与运营层（长跑证据 / 演进契约）**。GA 前仍需继续收敛剩余 P0 项。
+总体结论：memory 已完成**架构 / 接口 / 持久化 / 上下文装配 / 写回 / 维护 / 观测性**的真实落地，与 runtime 同处"骨架达成、深度需补"水位；区别于 runtime 缺口的"信号外送 / 跨版本 / 并发证据"，memory 当前剩余缺口集中在**质量层（跨 session 召回 / 评分与遗忘策略）与运营层（长跑证据 / 演进契约）**。GA 前仍需继续收敛剩余 P0 项。
 
 ---
 
@@ -58,7 +58,7 @@
 | 五层记忆显式分层（§5.3.2 / §4.1） | Working/Short/Long-Semantic/Experience/Vector 全部独立组件 + 独立表 | 达成 |
 | Programmatic Memory（§4.1 / §6.5.1a） | **未落地持久化**，仅设计声明 asset ref/lease | 与设计一致（MEM-E06 后置） |
 | ContextPacket 11 槽位 + token 预算 + 压缩触发 | ContextOrchestrator.build_packet + BudgetAllocator + CompressionCoordinator | 达成 |
-| 冲突检测 + 置信度 + 来源引用（§5.3.4） | MemoryConflictResolver 真实规则引擎（kPolarityPairs / kNegationMarkers / kNoiseTokens / shared_anchor_count / has_polarity_conflict / extract_single_number） + ConflictAction 4 态 | 达成（向量辅助缺，GAP-P2-D） |
+| 冲突检测 + 置信度 + 来源引用（§5.3.4） | MemoryConflictResolver 真实规则引擎（kPolarityPairs / kNegationMarkers / kNoiseTokens / shared_anchor_count / has_polarity_conflict / extract_single_number） + 可选 embedding 余弦相似度辅助 + ConflictAction 4 态 | 达成（2026-06-15 已闭合 MEM-E09） |
 | 写回 SummaryMemory 含 decisions_made/confirmed_facts/tool_outcomes（§5.3.5） | CompressionCoordinator extract_decisions / extract_confirmed_facts / extract_tool_outcomes + runtime_support 注入的 `LLMBackedSummarizer`；`prompt_release_id_override=responder@2026.06.02` 输出结构化 summary payload | **达成**（2026-06-02 已接入生产侧 LLM-backed Summarizer；后续仅继续治理 prompt/provider 质量） |
 | Session/Turn/SummaryMemory/MemoryFact 关键对象（§5.3.6） | contracts 已冻结；memory 内 RowMappers 完整双向映射 | 达成 |
 | Vector backend 灰度策略（sqlite-vss / none / hnswlib opt-in） | VectorBackend 枚举 + DetachedVectorIndexFactory + UnavailableVectorMemoryIndexAdapter | 达成（默认关闭符合 §10.2 灰度） |
@@ -109,7 +109,7 @@
 | §6.12.2 token 估算 | 已通过 [memory/src/util/TokenEstimator.cpp](../../memory/src/util/TokenEstimator.cpp) `ITokenEstimator` + vendored `cl100k_base` 兼容 tokenizer 收口，`BudgetAllocator` / `CandidateCollector` / `ContextOrchestrator` / `CompressionCoordinator` 统一走 shared estimator | 结构性缺口已清零；后续只继续扩展更多 tokenizer/profile 演进键，不再停留在启发式粗估 | GAP-P1-A 已闭合（2026-06-03） |
 | §11.1 vector 失败拖垮主链路 | WritebackCoordinator 已把 vector 写入挪到 core transaction commit 后（best-effort）；**但 search_ann 失败的 fallback 路径在 CandidateCollector 内仅 best-effort 记录** | 与设计一致，已规避；唯一观察项：vector 重试与 retry budget 耦合度 | 无独立缺口 |
 | §6.23 maintenance 自动调度 | `MemoryMaintenanceWorker.start()` 的 internal worker 仍保留，但 [apps/daemon/src/MemoryMaintenanceTickerThread.cpp](../../apps/daemon/src/MemoryMaintenanceTickerThread.cpp) 已成为 production cadence owner；[RuntimeLiveDependencyComposition.cpp](../../apps/runtime_support/src/RuntimeLiveDependencyComposition.cpp) 显式关闭 `maintenance.auto_schedule` 避免双 ticker | 结构性缺口已清零；更高层 24h stable / soak 证据仍留在 GA gate | GAP-P1-B 已闭合（2026-06-03） |
-| §6.12.3 ConflictResolver | 关键词重叠 + 极性词 + 否定词；未引入向量相似度 | 跨语言 / 同义改写型冲突会误判为 Coexist | GAP-P2-A（MEM-E09） |
+| §6.12.3 ConflictResolver | 已通过 [memory/include/config/MemoryConfig.h](../../memory/include/config/MemoryConfig.h) `ConflictConfig.embedding_similarity_threshold`、[memory/src/conflict/MemoryConflictResolver.cpp](../../memory/src/conflict/MemoryConflictResolver.cpp) 可选 `IEmbeddingAdapter*` 与余弦相似度辅助收口跨语言 / 同义改写歧义路径 | 结构性缺口已清零；后续仅继续做 precision/recall 与更高层质量指标治理 | GAP-P2-A 已闭合（2026-06-15） |
 | §6.12.5 FactQuery 跨 session | 当前 store query 默认 session-scoped；**无跨 session / user-level 共享接口** | 多 session 下用户偏好无法持久化共享 | GAP-P2-B（MEM-E05） |
 | §4.1.1 / MemoryOS 对齐 遗忘曲线权重衰减 | retention 仅按 turn 数和 TTL；无衰减权重 | Long-Term 数据量增长后召回相关性下降 | GAP-P2-C（MEM-E02） |
 | §4.1.1 / CrewAI 对齐 composite scoring | CandidateCollector 评分仅 confidence + recency 阈值 | 候选评分维度单一，影响 BudgetAllocator 选择质量 | GAP-P2-D（MEM-E03） |
@@ -157,7 +157,7 @@
 | 系统管控 vs LLM 自决装配 | ContextOrchestrator + CandidateCollector + BudgetAllocator 系统侧装配 | MemGPT / Letta（LLM 自决 swap）；CrewAI / LangGraph（系统侧装配） | ✅ 与 CrewAI/LangGraph 同向，比 MemGPT 更可控 |
 | 五层记忆 | Working / Short / Long-Semantic / Experience / Vector 显式分层 | MemoryOS 三层；CrewAI 长短期 + 实体；MemGPT main+archival | ✅ 分层粒度合理，覆盖工业主流 |
 | Working Memory 黑板 | shared_mutex + TTL + LRU + snapshot/restore | MemGPT main context；LangGraph state | ✅ 对齐 |
-| Long-Term Semantic 冲突检测 | 规则引擎（极性词 / 否定词 / 数字 / 锚点 token） | MemoryOS / 知识图谱风格 | ✅ 真实落地，**比多数 OSS Agent 强**（向量辅助缺，GAP-P2-A） |
+| Long-Term Semantic 冲突检测 | 规则引擎（极性词 / 否定词 / 数字 / 锚点 token）+ embedding 余弦相似度辅助 | MemoryOS / 知识图谱风格 | ✅ 真实落地，**比多数 OSS Agent 强**（2026-06-15 已闭合 GAP-P2-A） |
 | 摘要质量 | 阶段 1 模板 fallback + 阶段 2 `LLMBackedSummarizer`（`responder@2026.06.02`） | MemGPT recursive summarization；MemoryOS dialog page | ✅ 生产装配已闭合；后续只剩 prompt/provider 质量指标治理 |
 | 向量召回 | sqlite-vss + runtime_support 注入外部 embedding service，缺 provider / transport 时回落本地 hash | OpenAI text-embedding-3 / bge / e5 | ✅ 生产装配已闭合；installed / qemu / soak 证据继续治理 |
 | 持久化 | SQLite WAL + 单 writer + reader pool + busy retry + PASSIVE checkpoint + sqlite-vss + schema_migrations | Akka Persistence / SQLite 官方推荐 | ✅ 对齐工业最佳实践 |
@@ -222,7 +222,7 @@
 
 ### 6.3 P2（演进项 / MEM-E 系列）
 
-- **GAP-P2-A ConflictResolver 向量相似度辅助（MEM-E09）**：依赖 GAP-P0-B。
+- **GAP-P2-A ConflictResolver 向量相似度辅助（MEM-E09）**（已闭合，2026-06-15）：[memory/include/config/MemoryConfig.h](../../memory/include/config/MemoryConfig.h)、[memory/src/config/MemoryConfigProjector.cpp](../../memory/src/config/MemoryConfigProjector.cpp)、[memory/src/conflict/MemoryConflictResolver.h](../../memory/src/conflict/MemoryConflictResolver.h)、[memory/src/conflict/MemoryConflictResolver.cpp](../../memory/src/conflict/MemoryConflictResolver.cpp) 已引入 `ConflictConfig.embedding_similarity_threshold`、可选 `IEmbeddingAdapter*` 与 embedding 余弦相似度辅助；[tests/unit/memory/MemoryConflictResolverWithEmbeddingTest.cpp](../../tests/unit/memory/MemoryConflictResolverWithEmbeddingTest.cpp) 已覆盖跨语言同义改写 high-similarity Supersede 与低相似度 Coexist 负例，且 `MemoryInterfaceCompileTest` / `MemoryProfileCompatibilityTest` 已锁定配置投影面。
 - **GAP-P2-B 跨 session FactQuery（MEM-E05）**：新增 user-level Fact 共享接口。
 - **GAP-P2-C 遗忘曲线 / 权重衰减（MEM-E02）**：retention 算法升级，引入 last_used_at / hit_count / decay_factor。
 - **GAP-P2-D CandidateCollector composite scoring（MEM-E03）**：confidence × recency × hit_rate × source_weight。
@@ -374,14 +374,18 @@
 
 #### WP-MEM-GAP-009 ConflictResolver 向量相似度辅助（GAP-P2-A / MEM-E09）
 
-- **代码目标**
-  - 在 `MemoryConflictResolver` 增加可选 `IEmbeddingAdapter*`；当关键词重叠 + 极性词得不到高置信度结论时，调用向量相似度辅助判定 Coexist vs Supersede。
-  - 阈值由 MemoryConfig.conflict 投影。
-- **测试目标**
-  - `MemoryConflictResolverWithEmbeddingTest`（覆盖跨语言同义改写场景）。
-- **验收命令**
-  - `ctest --test-dir build-ci -R "MemoryConflictResolverWithEmbedding" --output-on-failure`
-- **阻塞 / 解阻**：依赖 GAP-P0-B。
+- **状态**：已完成（2026-06-15）。
+- **代码结果**
+  - [memory/include/config/MemoryConfig.h](../../memory/include/config/MemoryConfig.h) 与 [memory/src/config/MemoryConfigProjector.cpp](../../memory/src/config/MemoryConfigProjector.cpp) 已新增 `ConflictConfig.embedding_similarity_threshold`，并把默认阈值 `0.85` 纳入统一 profile projection。
+  - [memory/src/conflict/MemoryConflictResolver.h](../../memory/src/conflict/MemoryConflictResolver.h) / [memory/src/conflict/MemoryConflictResolver.cpp](../../memory/src/conflict/MemoryConflictResolver.cpp) 已新增可选 `IEmbeddingAdapter*` 注入；当关键词锚点重叠但 polarity / negation / number 规则无法高置信度判定时，会计算 embedding 余弦相似度，超过阈值且新事实置信度更高时将 `Coexist` 收敛为 `Supersede`；embedding 失败则仅追加 `conflict_embedding_similarity_skipped` warning 并保持 fail-soft，不阻断写回主链路。
+  - [memory/src/MemoryManagerFactory.cpp](../../memory/src/MemoryManagerFactory.cpp) 已把 `config.conflict` 与 runtime-owned `embedding_adapter` 注入 `MemoryConflictResolver`，保持 owner 边界继续留在 memory / runtime_support 既有分层内。
+- **测试结果**
+  - 新增 [tests/unit/memory/MemoryConflictResolverWithEmbeddingTest.cpp](../../tests/unit/memory/MemoryConflictResolverWithEmbeddingTest.cpp)，覆盖跨语言同义改写 high-similarity `Supersede` 与低相似度 `Coexist` 负例。
+  - 更新 [tests/unit/memory/CMakeLists.txt](../../tests/unit/memory/CMakeLists.txt)、[tests/unit/memory/MemoryInterfaceCompileTest.cpp](../../tests/unit/memory/MemoryInterfaceCompileTest.cpp) 与 [tests/integration/memory/MemoryProfileCompatibilityTest.cpp](../../tests/integration/memory/MemoryProfileCompatibilityTest.cpp)，锁定新 target discoverability、`MemoryConfig.conflict` ABI 与 profile projection 默认值。
+- **验收证据**
+  - `Build_CMakeTools(buildTargets=["dasall_memory_conflict_resolver_with_embedding_unit_test","dasall_memory_interface_compile_unit_test","dasall_memory_profile_compatibility_integration_test"])`：通过。
+  - `RunCtest_CMakeTools(tests=["MemoryConflictResolverWithEmbeddingTest","MemoryInterfaceCompileTest","MemoryProfileCompatibilityTest"])`：通过，3/3。
+- **阻塞 / 解阻**：已解阻。前置 `GAP-P0-B` 已于 2026-06-02 闭合；本轮直接复用 runtime_support 注入的 embedding seam，不新增跨层依赖。
 
 #### WP-MEM-GAP-010 跨 session FactQuery（GAP-P2-B / MEM-E05）
 
@@ -491,7 +495,7 @@ flowchart LR
 执行建议：
 1. **剩余 P0**：WP-MEM-GAP-004 继续单独推进；WP-MEM-GAP-001 / -002 / -003 已于 2026-06-02 闭合。
 2. **第二批（P1）**：WP-MEM-GAP-005 / -006 / -007 / -008 已于 2026-06-03 全部闭合；P1 entry tasks 不再剩余未收口项。
-3. **第三批（P2 演进）**：WP-MEM-GAP-009 ← -002；WP-MEM-GAP-010 / -011 / -012 / -013（链式依赖）。
+3. **第三批（P2 演进）**：WP-MEM-GAP-009 已于 2026-06-15 闭合；剩余 WP-MEM-GAP-010 / -011 / -012 / -013（链式依赖）。
 4. **第四批（P3 清理与运营）**：WP-MEM-GAP-014 ← llm 资产；WP-MEM-GAP-015 / -016 / -017；WP-MEM-GAP-018 在 P0/P1 全部 Done 后执行。
 
 ---
@@ -556,7 +560,7 @@ memory 子系统已达到 **可生产部署 v1** 水位：架构 / 详设目标 
 | V1 | WP-MEM-GAP-006 | 生产侧 MaintenanceTicker 挂载（已完成 2026-06-03） |
 | V1 | WP-MEM-GAP-007 | external_evidence 投影 v1 端到端（已完成 2026-06-03） |
 | V1 | WP-MEM-GAP-008 | ProductionLogging 字段断言补强（已完成 2026-06-03） |
-| **V2** | **WP-MEM-GAP-009** | ConflictResolver 向量相似度辅助（MEM-E09） |
+| **V2** | **WP-MEM-GAP-009** | ConflictResolver 向量相似度辅助（MEM-E09，已完成 2026-06-15） |
 | **V2** | **WP-MEM-GAP-010** | 跨 session FactQuery（MEM-E05） |
 | **V2** | **WP-MEM-GAP-011** | 遗忘曲线 / 权重衰减（MEM-E02） |
 | **V2** | **WP-MEM-GAP-012** | Composite scoring（MEM-E03） |
@@ -648,7 +652,7 @@ flowchart TB
 
 执行建议：
 1. V1 GA 收敛后（P0 + P1 全绿、installed gate 上线、production composition 已注入 LLM Summarizer + Embedding）才启动 V2。
-2. **V2 第一波并行**：WP-MEM-GAP-019（分层摘要）+ WP-MEM-GAP-009（向量辅助冲突）+ WP-MEM-GAP-010（跨 session FactQuery）+ WP-MEM-GAP-011（遗忘曲线）—— 互相低耦合。
+2. **V2 第一波并行**：WP-MEM-GAP-019（分层摘要）+ WP-MEM-GAP-010（跨 session FactQuery）+ WP-MEM-GAP-011（遗忘曲线）—— `WP-MEM-GAP-009` 已于 2026-06-15 闭合，互相低耦合。
 3. **V2 第二波**：WP-MEM-GAP-012（composite scoring，依赖 -011） + WP-MEM-GAP-013（desktop_full 默认开向量）。
 4. **V2 第三波（质量量化）**：WP-MEM-GAP-020（质量 SLO）+ WP-MEM-GAP-021（反馈闭环）。这两项是 V2 验收门的核心证据来源。
 5. WP-MEM-GAP-018（soak gate 增强）与 V2 第三波同步，把质量 SLO 落到长跑证据中。

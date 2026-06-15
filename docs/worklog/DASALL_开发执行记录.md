@@ -1,3 +1,37 @@
+## 记录 #883
+
+- 日期：2026-06-15
+- 阶段：memory / conflict embedding closure
+- 任务：完成 WP-MEM-GAP-009“ConflictResolver 向量相似度辅助（GAP-P2-A / MEM-E09）”
+- 状态：已完成（resolver embedding assist、focused unit/integration gates 与文档回写已闭合）
+
+### 执行前提
+
+1. [docs/deliverables/MEM-EVAL-2026-05-31-memory子系统落地评估与生产级缺口治理任务规划.md](../deliverables/MEM-EVAL-2026-05-31-memory子系统落地评估与生产级缺口治理任务规划.md) 已将 `WP-MEM-GAP-009` 固定为“在 `MemoryConflictResolver` 增加可选 `IEmbeddingAdapter*` 与阈值投影”，而不是重写既有 polarity / negation / numeric 规则。
+2. 当前 [memory/src/conflict/MemoryConflictResolver.cpp](../../memory/src/conflict/MemoryConflictResolver.cpp) 仍只有 store-only 构造与纯关键词规则路径，确实会把跨语言 / 同义改写型事实停留在 `Coexist`，但前置 `GAP-P0-B` 已闭合，不存在新的 blocker task。
+3. 外部参考采用 Sentence Transformers 的 STS / multilingual 使用基线：embedding 句向量通常以 cosine similarity 衡量语义相似度，且多语言 embedding 可用于跨语言语义对齐；因此本轮把向量相似度收口为“规则路径不充分时的辅助信号”，而不是直接替代既有规则引擎。
+
+### 改动
+
+1. 更新 [memory/include/config/MemoryConfig.h](../../memory/include/config/MemoryConfig.h) 与 [memory/src/config/MemoryConfigProjector.cpp](../../memory/src/config/MemoryConfigProjector.cpp)，新增 `ConflictConfig.embedding_similarity_threshold` 并把默认值 `0.85` 纳入统一 profile projection。
+2. 更新 [memory/src/conflict/MemoryConflictResolver.h](../../memory/src/conflict/MemoryConflictResolver.h) 与 [memory/src/conflict/MemoryConflictResolver.cpp](../../memory/src/conflict/MemoryConflictResolver.cpp)，新增可选 `IEmbeddingAdapter*`、embedding 余弦相似度辅助与 `conflict_embedding_similarity_skipped` fail-soft warning；仅当关键词锚点重叠但 polarity / negation / numeric 规则无法高置信度判定时，才允许 embedding 把 `Coexist` 收敛到 `Supersede`。
+3. 更新 [memory/src/MemoryManagerFactory.cpp](../../memory/src/MemoryManagerFactory.cpp)，把 `config.conflict` 与 runtime-owned `embedding_adapter` 注入 `MemoryConflictResolver`，保持 runtime_support owner glue 不回退。
+4. 新增 [tests/unit/memory/MemoryConflictResolverWithEmbeddingTest.cpp](../../tests/unit/memory/MemoryConflictResolverWithEmbeddingTest.cpp)，并更新 [tests/unit/memory/CMakeLists.txt](../../tests/unit/memory/CMakeLists.txt)、[tests/unit/memory/MemoryInterfaceCompileTest.cpp](../../tests/unit/memory/MemoryInterfaceCompileTest.cpp)、[tests/integration/memory/MemoryProfileCompatibilityTest.cpp](../../tests/integration/memory/MemoryProfileCompatibilityTest.cpp)，锁定新 target discoverability、config ABI 与 profile projection。
+5. 更新 [docs/architecture/DASALL_memory子系统详细设计.md](../architecture/DASALL_memory子系统详细设计.md)、[docs/deliverables/MEM-EVAL-2026-05-31-memory子系统落地评估与生产级缺口治理任务规划.md](../deliverables/MEM-EVAL-2026-05-31-memory子系统落地评估与生产级缺口治理任务规划.md)、[docs/todos/DASALL_子系统查漏补缺专项记录.md](../todos/DASALL_子系统查漏补缺专项记录.md)，并新增 [docs/todos/memory/deliverables/WP-MEM-GAP-009-conflict-embedding-closeout.md](../todos/memory/deliverables/WP-MEM-GAP-009-conflict-embedding-closeout.md) 固定独立 closeout 口径。
+
+### 验证
+
+1. `Build_CMakeTools(buildTargets=["dasall_memory_conflict_resolver_with_embedding_unit_test","dasall_memory_interface_compile_unit_test","dasall_memory_profile_compatibility_integration_test"])`
+   - 结果：通过。
+2. `RunCtest_CMakeTools(tests=["MemoryConflictResolverWithEmbeddingTest","MemoryInterfaceCompileTest","MemoryProfileCompatibilityTest"])`
+   - 结果：通过，3/3。
+
+### 结果
+
+1. `WP-MEM-GAP-009 / GAP-P2-A / MEM-E09` 已闭合；`MemoryConflictResolver` 现可在规则路径不充分时，用 embedding 余弦相似度把跨语言 / 同义改写歧义收敛到 `Supersede`。
+2. embedding assist 的阈值、discoverability 与 fail-soft 语义都已由 focused compile/profile/unit tests 锁定，不会把 runtime_support 的 provider 细节反向耦合进 memory。
+3. Memory 当前剩余 V2 焦点收敛为 `WP-MEM-GAP-010 / -011 / -012 / -013` 与更高层质量 SLO / soak gate；冲突向量辅助不再是未闭合缺口。
+
 ## 记录 #882
 
 - 日期：2026-06-03

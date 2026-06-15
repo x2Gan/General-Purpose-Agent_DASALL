@@ -346,6 +346,8 @@ void test_memory_writeback_supporting_types_compile_and_preserve_partial_retry_s
           "MemoryConfig should expose the storage projection");
     static_assert(std::is_same_v<decltype(MemoryConfig{}.vector), dasall::memory::VectorConfig>,
           "MemoryConfig should expose the vector projection");
+    static_assert(std::is_same_v<decltype(MemoryConfig{}.conflict), dasall::memory::ConflictConfig>,
+         "MemoryConfig should expose the conflict projection");
     static_assert(std::is_same_v<decltype(MemoryConfig{}.token_estimator),
                             dasall::memory::TokenEstimatorBackend>,
          "MemoryConfig should expose the token estimator projection");
@@ -396,6 +398,9 @@ void test_memory_writeback_supporting_types_compile_and_preserve_partial_retry_s
          "memory vector config should expose sqlite-vss as the default backend type");
     assert_equal(5, config.vector.search_top_k,
          "memory vector config should default top-k search width to five");
+    assert_true(config.conflict.embedding_similarity_threshold > 0.84 &&
+        config.conflict.embedding_similarity_threshold < 0.86,
+        "memory conflict config should default embedding similarity threshold to 0.85");
     assert_equal(std::string("tiktoken"), std::string(to_string_view(config.token_estimator)),
          "memory token estimator should default to tiktoken for production-grade budgeting");
 

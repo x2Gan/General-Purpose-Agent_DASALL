@@ -1669,14 +1669,14 @@ private:
 
 5. **关键执行流**：
    1. 从 FactRepository 中查询同 session_id 下、validity 仍有效、且尚未被 supersede 的相关事实集合。
-   2. 对查询结果中的每条事实与候选事实做语义冲突检测（v1 阶段采用 fact_type 匹配 + fact_text 关键词重叠度 + 时间矛盾检测；后续可引入向量相似度）。
+  2. 对查询结果中的每条事实与候选事实做语义冲突检测：先采用 fact_type 匹配 + fact_text 关键词锚点重叠度 + polarity / negation / numeric 矛盾检测；若规则路径无法高置信度判定且 `IEmbeddingAdapter` 可用，则使用 embedding 余弦相似度阈值辅助判定 `Coexist` vs `Supersede`。
    3. 若无冲突 → `Accept`。
    4. 若有冲突且新事实 confidence_score > 旧事实 confidence_score → `Supersede`（记录 supersede_target_id）。
    5. 若有冲突且新事实 confidence_score ≤ 旧事实 confidence_score → `Reject`（记录原因）。
    6. 若冲突不可判定（不同 fact_type 或证据不重叠）→ `Coexist`。
    7. 生成 ConflictResolutionPlan 和所有 ConflictRecord，由 WritebackCoordinator 执行。
-6. **失败与回退语义**：FactRepository 查询失败时降级为 `Accept`（记录 `conflict_check_skipped` warning，允许新事实写入，避免阻塞写回主链路）。语义冲突检测为规则引擎，不涉及 I/O，不应失败。所有冲突记录均需可审计。
-7. **测试与验收出口**：推荐单测 `MemoryConflictResolverTest.cpp`（Supersede/Reject/Coexist/Accept 四种路径 + 置信度比较边界）、`ConflictResolverDegradedTest.cpp`（仓储查询失败降级）；验收命令 `ctest --test-dir build-ci -R "MemoryConflictResolver.*Test|ConflictResolver.*Test" --output-on-failure`。
+6. **失败与回退语义**：FactRepository 查询失败时降级为 `Accept`（记录 `conflict_check_skipped` warning，允许新事实写入，避免阻塞写回主链路）。若 embedding adapter 缺失、返回空向量、维度不匹配或 embedding 过程中抛错，则记录 `conflict_embedding_similarity_skipped` warning 并回退到纯规则路径；语义冲突检测本身不应阻断写回主链路。所有冲突记录均需可审计。
+7. **测试与验收出口**：推荐单测 `MemoryConflictResolverTest.cpp`（Supersede/Reject/Coexist/Accept 四种路径 + 置信度比较边界）、`MemoryConflictResolverWithEmbeddingTest.cpp`（跨语言 / 同义改写高相似度与低相似度负例）、`ConflictResolverDegradedTest.cpp`（仓储查询失败降级）；验收命令 `ctest --test-dir build-ci -R "MemoryConflictResolver.*Test|ConflictResolver.*Test" --output-on-failure`。
 
 #### 6.12.4 WorkingMemory 黑板组件
 
@@ -2354,4 +2354,4 @@ Smoke 覆盖：MemoryManagerSmokeTest 验证 init → prepare_context → write_
 | MEM-E06 | ProgrammaticMemory 独立持久化 | llm 资产治理稳定 + 明确跨模块 asset ref/lease 方案 | llm 子系统 PromptAssetRepository 冻结 | §6.5.1a |
 | MEM-E07 | ContextAssembleRequest/Result 提升为 shared contracts | runtime/memory 接口在多子系统消费后稳定 | MEM-B01 解除 | §12.1 未决问题 1 |
 | MEM-E08 | token 估算替换为 tiktoken 或等价 tokenizer 绑定 | Build 阶段需要精确 token 预算 | MEM-D002 BudgetAllocator 落地 | §6.12.2 CandidateCollector |
-| MEM-E09 | MemoryConflictResolver 引入向量相似度辅助冲突检测 | keyword overlap 冲突检测 precision 不足 | MEM-D008 VectorMemory + MEM-D007 ConflictResolver | §6.12.3 |
+| MEM-E09 | MemoryConflictResolver 引入向量相似度辅助冲突检测（已完成，2026-06-15） | 已通过可选 `IEmbeddingAdapter` + `ConflictConfig.embedding_similarity_threshold` 收口跨语言 / 同义改写歧义路径 | MEM-D008 VectorMemory + MEM-D007 ConflictResolver | §6.12.3 |

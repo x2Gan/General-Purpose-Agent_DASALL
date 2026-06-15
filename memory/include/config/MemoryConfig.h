@@ -118,6 +118,10 @@ struct VectorConfig {
   std::string sqlite_vss_vss0_path;
 };
 
+struct ConflictConfig {
+  double embedding_similarity_threshold = 0.85;
+};
+
 struct MaintenanceConfig {
   int retention_turns = 200;
   bool quarantine_enabled = true;
@@ -137,6 +141,7 @@ struct MemoryConfig {
   ContextConfig context;
   ExperienceConfig experience;
   VectorConfig vector;
+  ConflictConfig conflict;
   MaintenanceConfig maintenance;
   TokenEstimatorBackend token_estimator = TokenEstimatorBackend::Tiktoken;
 };

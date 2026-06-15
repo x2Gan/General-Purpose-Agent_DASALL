@@ -128,6 +128,15 @@ void test_memory_profile_projection_tracks_vector_maintenance_and_budget_differe
   assert_equal(std::string("tiktoken"),
                std::string(dasall::memory::to_string_view(edge_minimal.config.token_estimator)),
                "edge_minimal should project tiktoken token estimation");
+  assert_true(desktop.config.conflict.embedding_similarity_threshold > 0.84 &&
+                  desktop.config.conflict.embedding_similarity_threshold < 0.86,
+              "desktop_full should project the memory conflict embedding similarity threshold");
+  assert_true(edge_balanced.config.conflict.embedding_similarity_threshold > 0.84 &&
+                  edge_balanced.config.conflict.embedding_similarity_threshold < 0.86,
+              "edge_balanced should project the memory conflict embedding similarity threshold");
+  assert_true(edge_minimal.config.conflict.embedding_similarity_threshold > 0.84 &&
+                  edge_minimal.config.conflict.embedding_similarity_threshold < 0.86,
+              "edge_minimal should project the memory conflict embedding similarity threshold even when vector is disabled");
 
   assert_equal(18, desktop.config.context.recent_turn_limit,
                "desktop_full should project the broader history window from runtime policy");

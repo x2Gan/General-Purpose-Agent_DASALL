@@ -4,11 +4,14 @@
 #include <string>
 #include <vector>
 
+#include "config/MemoryConfig.h"
 #include "IFactStore.h"
 #include "writeback/MemoryWritebackRequest.h"
 #include "writeback/WritebackResult.h"
 
 namespace dasall::memory {
+
+class IEmbeddingAdapter;
 
 struct ConflictResolutionPlan {
   ConflictAction action = ConflictAction::Accept;
@@ -20,7 +23,10 @@ struct ConflictResolutionPlan {
 
 class MemoryConflictResolver {
  public:
-  explicit MemoryConflictResolver(IFactStore& store);
+    explicit MemoryConflictResolver(
+            IFactStore& store,
+            ConflictConfig config = {},
+            IEmbeddingAdapter* embedding_adapter = nullptr);
 
   [[nodiscard]] ConflictResolutionPlan resolve(
       const FactCandidate& candidate,
@@ -40,7 +46,9 @@ class MemoryConflictResolver {
       const contracts::MemoryFact& existing,
       const FactCandidate& candidate) const;
 
-  IFactStore& store_;
+    IFactStore& store_;
+    ConflictConfig config_;
+    IEmbeddingAdapter* embedding_adapter_ = nullptr;
 };
 
 }  // namespace dasall::memory
