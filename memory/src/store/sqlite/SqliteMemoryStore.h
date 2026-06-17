@@ -44,6 +44,9 @@ class SqliteMemoryStore final : public IMemoryStore {
   [[nodiscard]] FactQueryResult query_facts_by_user(
       const std::string& user_id,
       const FactQuery& query) const override;
+  [[nodiscard]] StoreResult touch_facts(
+      const std::vector<std::string>& fact_ids,
+      std::int64_t accessed_at) override;
   [[nodiscard]] StoreResult insert_fact(
       const contracts::MemoryFact& fact) override;
   [[nodiscard]] StoreResult supersede_fact(
@@ -52,6 +55,9 @@ class SqliteMemoryStore final : public IMemoryStore {
 
   [[nodiscard]] ExperienceQueryResult query_experiences(
       const ExperienceQuery& query) const override;
+  [[nodiscard]] StoreResult touch_experiences(
+      const std::vector<std::string>& experience_ids,
+      std::int64_t accessed_at) override;
   [[nodiscard]] StoreResult insert_experience(
       const contracts::ExperienceMemory& experience) override;
 

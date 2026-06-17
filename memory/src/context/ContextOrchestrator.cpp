@@ -370,21 +370,8 @@ std::string build_belief_state_summary(const CandidateSet& candidates) {
     return {};
   }
 
-  auto facts = candidates.relevant_facts;
-  std::sort(facts.begin(), facts.end(),
-            [](const contracts::MemoryFact& left,
-               const contracts::MemoryFact& right) {
-              const auto left_confidence = left.confidence_score.value_or(0U);
-              const auto right_confidence = right.confidence_score.value_or(0U);
-              if (left_confidence != right_confidence) {
-                return left_confidence > right_confidence;
-              }
-              return left.fact_id.value_or(std::string{}) <
-                     right.fact_id.value_or(std::string{});
-            });
-
   std::vector<std::string> parts;
-  for (const auto& fact : facts) {
+  for (const auto& fact : candidates.relevant_facts) {
     if (!fact.fact_text.has_value() || fact.fact_text->empty()) {
       continue;
     }

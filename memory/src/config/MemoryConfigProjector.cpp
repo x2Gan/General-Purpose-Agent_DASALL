@@ -87,6 +87,16 @@ std::optional<MemoryConfig> project_memory_config(
 
   config.maintenance.retention_turns = retention_turns;
   config.maintenance.quarantine_enabled = true;
+  config.maintenance.decay.enabled = true;
+  config.maintenance.decay.time_constant_ms =
+      clamp_value(static_cast<double>(maintenance_policy.retention_ms) * 40.0,
+                  1.0e6,
+                  1.0e8);
+  config.maintenance.decay.minimum_score = vector_enabled ? 0.08 : 0.05;
+  config.maintenance.decay.minimum_age_ms =
+      clamp_value<std::int64_t>(maintenance_policy.retention_ms,
+                                60000,
+                                1200000);
   config.maintenance.auto_schedule = maintenance_policy.enabled;
   config.maintenance.schedule_interval_ms = maintenance_policy.interval_ms;
 

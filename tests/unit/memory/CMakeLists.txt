@@ -46,6 +46,10 @@ add_executable(dasall_memory_schema_migration_v003_unit_test
 	SchemaMigrationV003Test.cpp
 )
 
+add_executable(dasall_memory_schema_migration_v004_unit_test
+	SchemaMigrationV004Test.cpp
+)
+
 add_executable(dasall_memory_sqlite_transaction_unit_test
 	SqliteTransactionTest.cpp
 )
@@ -146,6 +150,10 @@ add_executable(dasall_memory_maintenance_retention_unit_test
 	${CMAKE_CURRENT_SOURCE_DIR}/MemoryMaintenanceRetentionTest.cpp
 )
 
+add_executable(dasall_memory_retention_decay_unit_test
+	MemoryRetentionDecayTest.cpp
+)
+
 add_executable(dasall_memory_maintenance_checkpoint_unit_test
 	${CMAKE_CURRENT_SOURCE_DIR}/MemoryMaintenanceCheckpointTest.cpp
 )
@@ -223,6 +231,13 @@ target_link_libraries(dasall_memory_schema_migration_unit_test
 )
 
 target_link_libraries(dasall_memory_schema_migration_v003_unit_test
+	PRIVATE
+		dasall_memory
+		dasall_sqlite3
+		dasall_test_support
+)
+
+target_link_libraries(dasall_memory_schema_migration_v004_unit_test
 	PRIVATE
 		dasall_memory
 		dasall_sqlite3
@@ -387,6 +402,13 @@ target_link_libraries(dasall_memory_writeback_partial_unit_test
 )
 
 target_link_libraries(dasall_memory_maintenance_retention_unit_test
+	PRIVATE
+		dasall_memory
+		dasall_sqlite3
+		dasall_test_support
+)
+
+target_link_libraries(dasall_memory_retention_decay_unit_test
 	PRIVATE
 		dasall_memory
 		dasall_sqlite3
@@ -562,6 +584,16 @@ target_include_directories(dasall_memory_maintenance_retention_unit_test
 		${CMAKE_SOURCE_DIR}/memory/src
 )
 
+target_include_directories(dasall_memory_schema_migration_v004_unit_test
+	PRIVATE
+		${CMAKE_SOURCE_DIR}/memory/src
+)
+
+target_include_directories(dasall_memory_retention_decay_unit_test
+	PRIVATE
+		${CMAKE_SOURCE_DIR}/memory/src
+)
+
 target_include_directories(dasall_memory_maintenance_checkpoint_unit_test
 	PRIVATE
 		${CMAKE_SOURCE_DIR}/memory/src
@@ -573,6 +605,11 @@ target_compile_definitions(dasall_memory_schema_migration_unit_test
 )
 
 target_compile_definitions(dasall_memory_schema_migration_v003_unit_test
+	PRIVATE
+		DASALL_SQL_MEMORY_DIR="${CMAKE_SOURCE_DIR}/sql/memory"
+)
+
+target_compile_definitions(dasall_memory_schema_migration_v004_unit_test
 	PRIVATE
 		DASALL_SQL_MEMORY_DIR="${CMAKE_SOURCE_DIR}/sql/memory"
 )
@@ -628,6 +665,11 @@ target_compile_definitions(dasall_memory_maintenance_retention_unit_test
 		DASALL_SQL_MEMORY_DIR="${CMAKE_SOURCE_DIR}/sql/memory"
 )
 
+target_compile_definitions(dasall_memory_retention_decay_unit_test
+	PRIVATE
+		DASALL_SQL_MEMORY_DIR="${CMAKE_SOURCE_DIR}/sql/memory"
+)
+
 target_compile_definitions(dasall_memory_maintenance_checkpoint_unit_test
 	PRIVATE
 		DASALL_SQL_MEMORY_DIR="${CMAKE_SOURCE_DIR}/sql/memory"
@@ -650,6 +692,7 @@ dasall_apply_common_options(dasall_memory_working_memory_snapshot_unit_test)
 dasall_apply_common_options(dasall_memory_working_memory_board_concurrency_unit_test)
 dasall_apply_common_options(dasall_memory_schema_migration_unit_test)
 dasall_apply_common_options(dasall_memory_schema_migration_v003_unit_test)
+dasall_apply_common_options(dasall_memory_schema_migration_v004_unit_test)
 dasall_apply_common_options(dasall_memory_sqlite_transaction_unit_test)
 dasall_apply_common_options(dasall_memory_sqlite_store_unit_test)
 dasall_apply_common_options(dasall_memory_sqlite_version_gate_unit_test)
@@ -675,6 +718,7 @@ dasall_apply_common_options(dasall_memory_fact_conflict_resolver_unit_test)
 dasall_apply_common_options(dasall_memory_writeback_core_unit_test)
 dasall_apply_common_options(dasall_memory_writeback_partial_unit_test)
 dasall_apply_common_options(dasall_memory_maintenance_retention_unit_test)
+dasall_apply_common_options(dasall_memory_retention_decay_unit_test)
 dasall_apply_common_options(dasall_memory_maintenance_checkpoint_unit_test)
 dasall_apply_common_options(dasall_memory_boundary_guard_compliance_unit_test)
 
@@ -713,6 +757,9 @@ set_tests_properties(SchemaMigrationTest PROPERTIES LABELS "unit;memory")
 
 add_test(NAME SchemaMigrationV003Test COMMAND dasall_memory_schema_migration_v003_unit_test)
 set_tests_properties(SchemaMigrationV003Test PROPERTIES LABELS "unit;memory")
+
+add_test(NAME SchemaMigrationV004Test COMMAND dasall_memory_schema_migration_v004_unit_test)
+set_tests_properties(SchemaMigrationV004Test PROPERTIES LABELS "unit;memory")
 
 add_test(NAME SqliteTransactionTest COMMAND dasall_memory_sqlite_transaction_unit_test)
 set_tests_properties(SqliteTransactionTest PROPERTIES LABELS "unit;memory")
@@ -788,6 +835,9 @@ set_tests_properties(WritebackCoordinatorPartialTest PROPERTIES LABELS "unit;mem
 
 add_test(NAME MemoryMaintenanceRetentionTest COMMAND dasall_memory_maintenance_retention_unit_test)
 set_tests_properties(MemoryMaintenanceRetentionTest PROPERTIES LABELS "unit;memory")
+
+add_test(NAME MemoryRetentionDecayTest COMMAND dasall_memory_retention_decay_unit_test)
+set_tests_properties(MemoryRetentionDecayTest PROPERTIES LABELS "unit;memory")
 
 add_test(NAME MemoryMaintenanceCheckpointTest COMMAND dasall_memory_maintenance_checkpoint_unit_test)
 set_tests_properties(MemoryMaintenanceCheckpointTest PROPERTIES LABELS "unit;memory")

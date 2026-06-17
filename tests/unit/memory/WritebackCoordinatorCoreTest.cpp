@@ -180,6 +180,14 @@ class CommitFailingStore final : public dasall::memory::IMemoryStore {
     return {};
   }
 
+  [[nodiscard]] dasall::memory::StoreResult touch_facts(
+      const std::vector<std::string>& fact_ids,
+      std::int64_t accessed_at) override {
+    (void)fact_ids;
+    (void)accessed_at;
+    return dasall::memory::StoreResult::success();
+  }
+
   [[nodiscard]] dasall::memory::StoreResult insert_fact(
       const dasall::contracts::MemoryFact& fact) override {
     return dasall::memory::StoreResult::success(fact.fact_id);
@@ -195,6 +203,14 @@ class CommitFailingStore final : public dasall::memory::IMemoryStore {
       const dasall::memory::ExperienceQuery& query) const override {
     (void)query;
     return {};
+  }
+
+  [[nodiscard]] dasall::memory::StoreResult touch_experiences(
+      const std::vector<std::string>& experience_ids,
+      std::int64_t accessed_at) override {
+    (void)experience_ids;
+    (void)accessed_at;
+    return dasall::memory::StoreResult::success();
   }
 
   [[nodiscard]] dasall::memory::StoreResult insert_experience(

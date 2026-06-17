@@ -3,6 +3,7 @@
 #include <sqlite3.h>
 
 #include <algorithm>
+#include <cmath>
 #include <chrono>
 #include <cstdint>
 #include <optional>
@@ -196,6 +197,74 @@ void rollback_transaction(sqlite3* connection) {
   return std::nullopt;
 }
 
+[[nodiscard]] std::int64_t effective_last_accessed_at(
+    std::int64_t last_accessed_at,
+    std::int64_t created_at) {
+  if (last_accessed_at > 0) {
+    return last_accessed_at;
+  }
+  return created_at;
+}
+
+[[nodiscard]] std::int64_t effective_hit_count(std::int64_t hit_count) {
+  return std::max<std::int64_t>(1, hit_count);
+}
+
+[[nodiscard]] double compute_decay_weight(
+    const MaintenanceConfig::RetentionDecayConfig& decay_config,
+    std::int64_t now_millis,
+    std::int64_t last_accessed_at,
+    std::int64_t created_at,
+    std::int64_t hit_count) {
+  if (!decay_config.enabled) {
+    return 1.0;
+  }
+
+  const auto effective_accessed_at =
+      effective_last_accessed_at(last_accessed_at, created_at);
+  if (effective_accessed_at <= 0) {
+    return 1.0;
+  }
+
+  const auto idle_millis = std::max<std::int64_t>(0, now_millis - effective_accessed_at);
+  const auto time_constant_ms = std::max(1.0, decay_config.time_constant_ms);
+  const auto recency_decay =
+      std::exp(-static_cast<double>(idle_millis) / time_constant_ms);
+  const auto visit_factor =
+      1.0 + std::log1p(static_cast<double>(std::max<std::int64_t>(
+                0, effective_hit_count(hit_count) - 1)));
+  return visit_factor * recency_decay;
+}
+
+[[nodiscard]] bool should_purge_by_decay(
+    const MaintenanceConfig::RetentionDecayConfig& decay_config,
+    std::int64_t now_millis,
+    std::int64_t last_accessed_at,
+    std::int64_t created_at,
+    std::int64_t hit_count) {
+  if (!decay_config.enabled) {
+    return false;
+  }
+
+  const auto effective_accessed_at =
+      effective_last_accessed_at(last_accessed_at, created_at);
+  if (effective_accessed_at <= 0) {
+    return false;
+  }
+
+  const auto age_millis = std::max<std::int64_t>(0, now_millis - effective_accessed_at);
+  if (age_millis < std::max<std::int64_t>(0, decay_config.minimum_age_ms)) {
+    return false;
+  }
+
+  return compute_decay_weight(
+             decay_config,
+             now_millis,
+             last_accessed_at,
+             created_at,
+             hit_count) < std::max(0.0, decay_config.minimum_score);
+}
+
 [[nodiscard]] bool update_session_turn_index(
     sqlite3* connection,
     const std::string& session_id,
@@ -287,11 +356,12 @@ void rollback_transaction(sqlite3* connection) {
 [[nodiscard]] std::vector<std::string> collect_fact_ids_to_purge(
     sqlite3* connection,
     std::int64_t now_millis,
-    std::int64_t fact_ttl_ms) {
+    std::int64_t fact_ttl_ms,
+    const MaintenanceConfig::RetentionDecayConfig& decay_config) {
   std::vector<std::string> fact_ids;
   sqlite3_stmt* statement = nullptr;
   constexpr auto query =
-      "SELECT fact_id, created_at, validity_ref FROM facts WHERE superseded_by_fact_id IS NOT NULL";
+      "SELECT fact_id, created_at, validity_ref, last_accessed_at, hit_count, superseded_by_fact_id FROM facts";
   if (sqlite3_prepare_v2(connection, query, -1, &statement, nullptr) != SQLITE_OK) {
     return fact_ids;
   }
@@ -304,10 +374,16 @@ void rollback_transaction(sqlite3* connection) {
 
     const auto created_at = column_int64(statement, 1).value_or(0);
     const auto valid_until = extract_valid_until(column_text(statement, 2));
-    const bool expired_by_valid_until = valid_until.has_value() && *valid_until <= now_millis;
-    const bool expired_by_ttl = fact_ttl_ms > 0 && created_at > 0 &&
-                                created_at + fact_ttl_ms <= now_millis;
-    if (expired_by_valid_until || expired_by_ttl) {
+    const auto last_accessed_at = column_int64(statement, 3).value_or(0);
+    const auto hit_count = column_int64(statement, 4).value_or(0);
+    const bool superseded = column_text(statement, 5).has_value();
+    const bool expired_by_valid_until =
+      superseded && valid_until.has_value() && *valid_until <= now_millis;
+    const bool expired_by_ttl = superseded && fact_ttl_ms > 0 && created_at > 0 &&
+                  created_at + fact_ttl_ms <= now_millis;
+    const bool expired_by_decay = should_purge_by_decay(
+        decay_config, now_millis, last_accessed_at, created_at, hit_count);
+    if (expired_by_valid_until || expired_by_ttl || expired_by_decay) {
       fact_ids.push_back(*fact_id);
     }
   }
@@ -319,12 +395,13 @@ void rollback_transaction(sqlite3* connection) {
 [[nodiscard]] std::vector<std::string> collect_experience_ids_to_purge(
     sqlite3* connection,
     std::int64_t now_millis,
-    std::int64_t experience_ttl_ms) {
+    std::int64_t experience_ttl_ms,
+    const MaintenanceConfig::RetentionDecayConfig& decay_config) {
   std::vector<std::string> experience_ids;
   sqlite3_stmt* statement = nullptr;
   constexpr auto query =
-      "SELECT experience_id, created_at, expires_at FROM experiences "
-      "WHERE superseded_by_experience_id IS NOT NULL";
+      "SELECT experience_id, created_at, expires_at, last_accessed_at, hit_count "
+      " , superseded_by_experience_id FROM experiences";
   if (sqlite3_prepare_v2(connection, query, -1, &statement, nullptr) != SQLITE_OK) {
     return experience_ids;
   }
@@ -337,10 +414,15 @@ void rollback_transaction(sqlite3* connection) {
 
     const auto created_at = column_int64(statement, 1).value_or(0);
     const auto expires_at = column_int64(statement, 2);
-    const bool expired_by_record = expires_at.has_value() && *expires_at <= now_millis;
-    const bool expired_by_ttl = experience_ttl_ms > 0 && created_at > 0 &&
-                                created_at + experience_ttl_ms <= now_millis;
-    if (expired_by_record || expired_by_ttl) {
+    const auto last_accessed_at = column_int64(statement, 3).value_or(0);
+    const auto hit_count = column_int64(statement, 4).value_or(0);
+    const bool superseded = column_text(statement, 5).has_value();
+    const bool expired_by_record = superseded && expires_at.has_value() && *expires_at <= now_millis;
+    const bool expired_by_ttl = superseded && experience_ttl_ms > 0 && created_at > 0 &&
+                  created_at + experience_ttl_ms <= now_millis;
+    const bool expired_by_decay = should_purge_by_decay(
+        decay_config, now_millis, last_accessed_at, created_at, hit_count);
+    if (expired_by_record || expired_by_ttl || expired_by_decay) {
       experience_ids.push_back(*experience_id);
     }
   }
@@ -413,6 +495,79 @@ void rollback_transaction(sqlite3* connection) {
 
   append_warning_once(warnings, warning_key);
   return false;
+}
+
+[[nodiscard]] StoreResult touch_ids(sqlite3* connection,
+                                    const char* update_sql,
+                                    const std::vector<std::string>& ids,
+                                    std::int64_t accessed_at,
+                                    int retry_limit,
+                                    std::string failure_message) {
+  if (ids.empty()) {
+    return StoreResult::success();
+  }
+
+  for (int attempt = 0; attempt < retry_limit; ++attempt) {
+    if (!begin_transaction(connection)) {
+      if (attempt + 1 < retry_limit) {
+        continue;
+      }
+      return StoreResult::failure(
+          map_memory_error(MemoryError::StorageBusy).result_code,
+          std::move(failure_message));
+    }
+
+    sqlite3_stmt* statement = nullptr;
+    if (sqlite3_prepare_v2(connection, update_sql, -1, &statement, nullptr) != SQLITE_OK) {
+      rollback_transaction(connection);
+      return StoreResult::failure(
+          map_memory_error(MemoryError::StorageUnavailable).result_code,
+          std::move(failure_message));
+    }
+
+    bool failed = false;
+    bool retryable = false;
+    for (const auto& id : ids) {
+      sqlite3_reset(statement);
+      sqlite3_clear_bindings(statement);
+      sqlite3_bind_int64(statement, 1, accessed_at);
+      sqlite3_bind_text(statement, 2, id.c_str(), -1, SQLITE_TRANSIENT);
+      const int sqlite_status = sqlite3_step(statement);
+      if (sqlite_status != SQLITE_DONE) {
+        failed = true;
+        retryable = is_busy_code(sqlite_status);
+        break;
+      }
+    }
+
+    sqlite3_finalize(statement);
+    if (failed) {
+      rollback_transaction(connection);
+      if (retryable && attempt + 1 < retry_limit) {
+        continue;
+      }
+      return StoreResult::failure(
+          retryable ? map_memory_error(MemoryError::StorageBusy).result_code
+                    : map_memory_error(MemoryError::StorageUnavailable).result_code,
+          std::move(failure_message));
+    }
+
+    if (!commit_transaction(connection)) {
+      rollback_transaction(connection);
+      if (attempt + 1 < retry_limit) {
+        continue;
+      }
+      return StoreResult::failure(
+          map_memory_error(MemoryError::StorageBusy).result_code,
+          std::move(failure_message));
+    }
+
+    return StoreResult::success();
+  }
+
+  return StoreResult::failure(
+      map_memory_error(MemoryError::StorageBusy).result_code,
+      std::move(failure_message));
 }
 
 [[nodiscard]] int cleanup_quarantine_records(sqlite3* connection,
@@ -1007,7 +1162,8 @@ FactQueryResult SqliteMemoryStore::query_facts(const FactQuery& query) const {
 
   std::string sql =
       "SELECT fact_id, session_id, user_id, fact_text, source_turn_ids_json, confidence_score, "
-      "fact_type, validity_ref, evidence_digest, superseded_by_fact_id, created_at, tags_json "
+      "fact_type, validity_ref, evidence_digest, superseded_by_fact_id, created_at, tags_json, "
+      "last_accessed_at, hit_count "
       "FROM facts WHERE 1=1";
   int bind_index = 1;
   int session_idx = 0, user_idx = 0, type_idx = 0, conf_idx = 0;
@@ -1054,8 +1210,21 @@ FactQueryResult SqliteMemoryStore::query_facts(const FactQuery& query) const {
     sqlite3_bind_int64(statement, conf_idx, static_cast<std::int64_t>(*query.min_confidence));
   }
 
+  const auto now_millis = current_time_millis();
+  const auto decay_config = config_.has_value()
+                                ? config_->maintenance.decay
+                                : MaintenanceConfig::RetentionDecayConfig{};
   while (sqlite3_step(statement) == SQLITE_ROW) {
-    result.facts.push_back(map_row_to_fact(statement));
+    auto fact = map_row_to_fact(statement);
+    if (fact.fact_id.has_value() && !fact.fact_id->empty()) {
+      result.decay_weight_by_fact_id[*fact.fact_id] = compute_decay_weight(
+          decay_config,
+          now_millis,
+          column_int64(statement, 12).value_or(0),
+          fact.created_at.value_or(0),
+          column_int64(statement, 13).value_or(0));
+    }
+    result.facts.push_back(std::move(fact));
   }
 
   sqlite3_finalize(statement);
@@ -1076,6 +1245,25 @@ FactQueryResult SqliteMemoryStore::query_facts_by_user(
   return query_facts(user_query);
 }
 
+StoreResult SqliteMemoryStore::touch_facts(
+    const std::vector<std::string>& fact_ids,
+    std::int64_t accessed_at) {
+  if (writer_connection_ == nullptr) {
+    return StoreResult::failure(
+        contracts::ResultCode::RuntimeRetryExhausted,
+        std::string{"sqlite store is not open"});
+  }
+
+  const int retry_limit = std::max(1, config_->storage.writer_retry_count + 1);
+  return touch_ids(
+      writer_connection_,
+      "UPDATE facts SET last_accessed_at = ?1, hit_count = hit_count + 1 WHERE fact_id = ?2",
+      fact_ids,
+      accessed_at,
+      retry_limit,
+      std::string{"failed to touch fact access metadata"});
+}
+
 StoreResult SqliteMemoryStore::insert_fact(const contracts::MemoryFact& fact) {
   if (writer_connection_ == nullptr) {
     return StoreResult::failure(contracts::ResultCode::RuntimeRetryExhausted,
@@ -1091,8 +1279,9 @@ StoreResult SqliteMemoryStore::insert_fact(const contracts::MemoryFact& fact) {
   sqlite3_stmt* statement = nullptr;
   constexpr auto insert_sql =
       "INSERT INTO facts(fact_id, session_id, user_id, fact_text, source_turn_ids_json, "
-      "confidence_score, fact_type, validity_ref, evidence_digest, superseded_by_fact_id, created_at, tags_json) "
-      "VALUES(?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)";
+      "confidence_score, fact_type, validity_ref, evidence_digest, superseded_by_fact_id, created_at, tags_json, "
+      "last_accessed_at, hit_count) "
+      "VALUES(?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)";
   if (sqlite3_prepare_v2(writer_connection_, insert_sql, -1, &statement, nullptr) != SQLITE_OK) {
     return StoreResult::failure(contracts::ResultCode::RuntimeRetryExhausted,
                                 std::string{"failed to prepare fact insert"});
@@ -1114,6 +1303,9 @@ StoreResult SqliteMemoryStore::insert_fact(const contracts::MemoryFact& fact) {
   bind_optional_int64(statement, 11, fact.created_at);
   sqlite3_bind_text(statement, 12, encode_string_array(fact.tags).c_str(), -1,
                     SQLITE_TRANSIENT);
+  sqlite3_bind_int64(statement, 13,
+                     fact.created_at.value_or(current_time_millis()));
+  sqlite3_bind_int64(statement, 14, 1);
 
   const int step_status = sqlite3_step(statement);
   sqlite3_finalize(statement);
@@ -1168,7 +1360,8 @@ ExperienceQueryResult SqliteMemoryStore::query_experiences(
   std::string sql =
       "SELECT experience_id, session_id, user_id, lesson_summary, trigger_condition, "
       "recommended_action, source_turn_ids_json, effectiveness_score, applicable_domains_json, "
-      "risk_notes_json, expires_at, superseded_by_experience_id, created_at, tags_json "
+      "risk_notes_json, expires_at, superseded_by_experience_id, created_at, tags_json, "
+      "last_accessed_at, hit_count "
       "FROM experiences WHERE 1=1";
   int bind_index = 1;
   int session_idx = 0, user_idx = 0, expired_idx = 0;
@@ -1205,6 +1398,10 @@ ExperienceQueryResult SqliteMemoryStore::query_experiences(
     sqlite3_bind_int64(statement, expired_idx, current_time_millis());
   }
 
+  const auto now_millis = current_time_millis();
+  const auto decay_config = config_.has_value()
+                                ? config_->maintenance.decay
+                                : MaintenanceConfig::RetentionDecayConfig{};
   while (sqlite3_step(statement) == SQLITE_ROW) {
     const auto experience = map_row_to_experience(statement);
 
@@ -1217,12 +1414,41 @@ ExperienceQueryResult SqliteMemoryStore::query_experiences(
       continue;
     }
 
+    if (experience.experience_id.has_value() && !experience.experience_id->empty()) {
+      result.decay_weight_by_experience_id[*experience.experience_id] =
+          compute_decay_weight(
+              decay_config,
+              now_millis,
+              column_int64(statement, 14).value_or(0),
+              experience.created_at.value_or(0),
+              column_int64(statement, 15).value_or(0));
+    }
+
     result.experiences.push_back(experience);
   }
 
   sqlite3_finalize(statement);
   result.total_count = static_cast<int>(result.experiences.size());
   return result;
+}
+
+StoreResult SqliteMemoryStore::touch_experiences(
+    const std::vector<std::string>& experience_ids,
+    std::int64_t accessed_at) {
+  if (writer_connection_ == nullptr) {
+    return StoreResult::failure(
+        contracts::ResultCode::RuntimeRetryExhausted,
+        std::string{"sqlite store is not open"});
+  }
+
+  const int retry_limit = std::max(1, config_->storage.writer_retry_count + 1);
+  return touch_ids(
+      writer_connection_,
+      "UPDATE experiences SET last_accessed_at = ?1, hit_count = hit_count + 1 WHERE experience_id = ?2",
+      experience_ids,
+      accessed_at,
+      retry_limit,
+      std::string{"failed to touch experience access metadata"});
 }
 
 StoreResult SqliteMemoryStore::insert_experience(
@@ -1242,8 +1468,9 @@ StoreResult SqliteMemoryStore::insert_experience(
   constexpr auto insert_sql =
       "INSERT INTO experiences(experience_id, session_id, user_id, lesson_summary, trigger_condition, "
       "recommended_action, source_turn_ids_json, effectiveness_score, applicable_domains_json, "
-      "risk_notes_json, expires_at, superseded_by_experience_id, created_at, tags_json) "
-      "VALUES(?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)";
+      "risk_notes_json, expires_at, superseded_by_experience_id, created_at, tags_json, "
+      "last_accessed_at, hit_count) "
+      "VALUES(?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)";
   if (sqlite3_prepare_v2(writer_connection_, insert_sql, -1, &statement, nullptr) != SQLITE_OK) {
     return StoreResult::failure(contracts::ResultCode::RuntimeRetryExhausted,
                                 std::string{"failed to prepare experience insert"});
@@ -1269,6 +1496,9 @@ StoreResult SqliteMemoryStore::insert_experience(
   bind_optional_int64(statement, 13, experience.created_at);
   sqlite3_bind_text(statement, 14, encode_string_array(experience.tags).c_str(), -1,
                     SQLITE_TRANSIENT);
+  sqlite3_bind_int64(statement, 15,
+                     experience.created_at.value_or(current_time_millis()));
+  sqlite3_bind_int64(statement, 16, 1);
 
   const int step_status = sqlite3_step(statement);
   sqlite3_finalize(statement);
@@ -1431,7 +1661,10 @@ int SqliteMemoryStore::run_fact_retention(const MemoryConfig& config,
   }
 
   const auto fact_ids = collect_fact_ids_to_purge(
-      writer_connection_, current_time_millis(), config.maintenance.fact_ttl_ms);
+      writer_connection_,
+      current_time_millis(),
+      config.maintenance.fact_ttl_ms,
+      config.maintenance.decay);
   const int retry_limit = std::max(1, config.storage.writer_retry_count + 1);
   if (!delete_ids(writer_connection_, "DELETE FROM facts WHERE fact_id = ?1", fact_ids,
                   retry_limit, report.warnings, "fact_retention_failed")) {
@@ -1448,7 +1681,10 @@ int SqliteMemoryStore::run_experience_retention(const MemoryConfig& config,
   }
 
   const auto experience_ids = collect_experience_ids_to_purge(
-      writer_connection_, current_time_millis(), config.maintenance.experience_ttl_ms);
+      writer_connection_,
+      current_time_millis(),
+      config.maintenance.experience_ttl_ms,
+      config.maintenance.decay);
   const int retry_limit = std::max(1, config.storage.writer_retry_count + 1);
   if (!delete_ids(writer_connection_,
                   "DELETE FROM experiences WHERE experience_id = ?1",

@@ -73,6 +73,12 @@ class ThrowingFactQueryStore final : public dasall::memory::IMemoryStore {
     throw std::runtime_error("fact query unavailable");
   }
 
+  [[nodiscard]] dasall::memory::StoreResult touch_facts(
+      const std::vector<std::string>& fact_ids,
+      std::int64_t accessed_at) override {
+    return delegate_.touch_facts(fact_ids, accessed_at);
+  }
+
   [[nodiscard]] dasall::memory::StoreResult insert_fact(
       const dasall::contracts::MemoryFact& fact) override {
     return delegate_.insert_fact(fact);
@@ -87,6 +93,12 @@ class ThrowingFactQueryStore final : public dasall::memory::IMemoryStore {
   [[nodiscard]] dasall::memory::ExperienceQueryResult query_experiences(
       const dasall::memory::ExperienceQuery& query) const override {
     return delegate_.query_experiences(query);
+  }
+
+  [[nodiscard]] dasall::memory::StoreResult touch_experiences(
+      const std::vector<std::string>& experience_ids,
+      std::int64_t accessed_at) override {
+    return delegate_.touch_experiences(experience_ids, accessed_at);
   }
 
   [[nodiscard]] dasall::memory::StoreResult insert_experience(

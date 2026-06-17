@@ -1,6 +1,7 @@
 #include "context/CandidateCollector.h"
 
 #include <algorithm>
+#include <chrono>
 #include <string_view>
 
 #include "util/TokenEstimator.h"
@@ -38,6 +39,28 @@ void add_optional_string_vector_tokens(
   if (values.has_value()) {
     add_string_vector_tokens(token_estimator, *values, total);
   }
+}
+
+[[nodiscard]] std::int64_t current_time_millis() {
+  return std::chrono::duration_cast<std::chrono::milliseconds>(
+             std::chrono::system_clock::now().time_since_epoch())
+      .count();
+}
+
+template <typename MetadataMap>
+[[nodiscard]] double decay_weight_or_default(
+    const MetadataMap& metadata,
+    const std::optional<std::string>& id) {
+  if (!id.has_value() || id->empty()) {
+    return 1.0;
+  }
+
+  const auto it = metadata.find(*id);
+  if (it == metadata.end()) {
+    return 1.0;
+  }
+
+  return it->second;
 }
 
 }  // namespace
@@ -87,6 +110,7 @@ CandidateSet CandidateCollector::collect(const CandidateCollectRequest& request)
 
   try {
     set.relevant_facts = query_relevant_facts(request, set.session_bundle);
+    touch_fact_access(set.relevant_facts, set.warnings);
   } catch (...) {
     append_warning(set.warnings, "fact_query_unavailable");
   }
@@ -94,6 +118,7 @@ CandidateSet CandidateCollector::collect(const CandidateCollectRequest& request)
   try {
     set.relevant_experiences =
         query_relevant_experiences(request, set.session_bundle);
+    touch_experience_access(set.relevant_experiences, set.warnings);
   } catch (...) {
     append_warning(set.warnings, "experience_query_unavailable");
   }
@@ -125,22 +150,40 @@ std::vector<contracts::MemoryFact> CandidateCollector::query_relevant_facts(
     const CandidateCollectRequest& request,
     const SessionLoadBundle& session_bundle) const {
   FactQuery query;
+  FactQueryResult result;
   if (session_bundle.session.user_id.has_value() &&
       !session_bundle.session.user_id->empty()) {
     query.min_confidence = std::max(0, context_config_.fact_confidence_floor);
     query.exclude_superseded = true;
     query.limit = 50;
-    return fact_store_.query_facts_by_user(*session_bundle.session.user_id, query).facts;
+    result = fact_store_.query_facts_by_user(*session_bundle.session.user_id, query);
+  } else {
+    if (!request.session_id.empty()) {
+      query.session_id = request.session_id;
+    }
+
+    query.min_confidence = std::max(0, context_config_.fact_confidence_floor);
+    query.exclude_superseded = true;
+    query.limit = 50;
+    result = fact_store_.query_facts(query);
   }
 
-  if (!request.session_id.empty()) {
-    query.session_id = request.session_id;
-  }
-
-  query.min_confidence = std::max(0, context_config_.fact_confidence_floor);
-  query.exclude_superseded = true;
-  query.limit = 50;
-  return fact_store_.query_facts(query).facts;
+  auto facts = std::move(result.facts);
+  std::stable_sort(facts.begin(), facts.end(), [&result](const contracts::MemoryFact& left,
+                                                         const contracts::MemoryFact& right) {
+    const auto left_decay = decay_weight_or_default(result.decay_weight_by_fact_id, left.fact_id);
+    const auto right_decay = decay_weight_or_default(result.decay_weight_by_fact_id, right.fact_id);
+    const auto left_score = static_cast<double>(left.confidence_score.value_or(0U)) * left_decay;
+    const auto right_score = static_cast<double>(right.confidence_score.value_or(0U)) * right_decay;
+    if (left_score != right_score) {
+      return left_score > right_score;
+    }
+    if (left.confidence_score != right.confidence_score) {
+      return left.confidence_score.value_or(0U) > right.confidence_score.value_or(0U);
+    }
+    return left.fact_id.value_or(std::string{}) < right.fact_id.value_or(std::string{});
+  });
+  return facts;
 }
 
 std::vector<contracts::ExperienceMemory>
@@ -163,7 +206,73 @@ CandidateCollector::query_relevant_experiences(
 
   query.exclude_expired = true;
   query.limit = 20;
-  return experience_store_.query_experiences(query).experiences;
+  auto result = experience_store_.query_experiences(query);
+  auto experiences = std::move(result.experiences);
+  std::stable_sort(experiences.begin(), experiences.end(), [&result](
+                                                          const contracts::ExperienceMemory& left,
+                                                          const contracts::ExperienceMemory& right) {
+    const auto left_decay = decay_weight_or_default(
+        result.decay_weight_by_experience_id, left.experience_id);
+    const auto right_decay = decay_weight_or_default(
+        result.decay_weight_by_experience_id, right.experience_id);
+    const auto left_score =
+        static_cast<double>(left.effectiveness_score.value_or(0U)) * left_decay;
+    const auto right_score =
+        static_cast<double>(right.effectiveness_score.value_or(0U)) * right_decay;
+    if (left_score != right_score) {
+      return left_score > right_score;
+    }
+    if (left.effectiveness_score != right.effectiveness_score) {
+      return left.effectiveness_score.value_or(0U) >
+             right.effectiveness_score.value_or(0U);
+    }
+    return left.experience_id.value_or(std::string{}) <
+           right.experience_id.value_or(std::string{});
+  });
+  return experiences;
+}
+
+void CandidateCollector::touch_fact_access(
+    const std::vector<contracts::MemoryFact>& facts,
+    std::vector<std::string>& warnings) const {
+  std::vector<std::string> fact_ids;
+  fact_ids.reserve(facts.size());
+  for (const auto& fact : facts) {
+    if (fact.fact_id.has_value() && !fact.fact_id->empty()) {
+      fact_ids.push_back(*fact.fact_id);
+    }
+  }
+
+  if (fact_ids.empty()) {
+    return;
+  }
+
+  const auto touch_result = fact_store_.touch_facts(fact_ids, current_time_millis());
+  if (!touch_result.ok) {
+    append_warning(warnings, "fact_touch_unavailable");
+  }
+}
+
+void CandidateCollector::touch_experience_access(
+    const std::vector<contracts::ExperienceMemory>& experiences,
+    std::vector<std::string>& warnings) const {
+  std::vector<std::string> experience_ids;
+  experience_ids.reserve(experiences.size());
+  for (const auto& experience : experiences) {
+    if (experience.experience_id.has_value() && !experience.experience_id->empty()) {
+      experience_ids.push_back(*experience.experience_id);
+    }
+  }
+
+  if (experience_ids.empty()) {
+    return;
+  }
+
+  const auto touch_result =
+      experience_store_.touch_experiences(experience_ids, current_time_millis());
+  if (!touch_result.ok) {
+    append_warning(warnings, "experience_touch_unavailable");
+  }
 }
 
 std::vector<VectorHit> CandidateCollector::search_vector(

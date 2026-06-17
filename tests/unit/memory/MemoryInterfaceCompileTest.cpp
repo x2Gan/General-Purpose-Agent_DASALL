@@ -414,6 +414,16 @@ void test_memory_writeback_supporting_types_compile_and_preserve_partial_retry_s
         "memory maintenance config should default fact ttl to disabled cleanup");
     assert_true(config.maintenance.experience_ttl_ms == 0,
         "memory maintenance config should default experience ttl to disabled cleanup");
+     assert_true(config.maintenance.decay.enabled,
+          "memory maintenance config should default retention decay to enabled");
+     assert_true(config.maintenance.decay.time_constant_ms > 9.9e6 &&
+          config.maintenance.decay.time_constant_ms < 1.01e7,
+          "memory maintenance config should default retention decay time constant close to 1e7 ms");
+     assert_true(config.maintenance.decay.minimum_score > 0.04 &&
+          config.maintenance.decay.minimum_score < 0.06,
+          "memory maintenance config should default retention decay minimum score to 0.05");
+     assert_equal(std::int64_t{300000}, config.maintenance.decay.minimum_age_ms,
+           "memory maintenance config should default retention decay minimum age to five minutes");
     assert_true(!config.maintenance.auto_schedule,
         "memory maintenance config should default auto schedule to disabled");
     assert_equal(std::int64_t{60000}, config.maintenance.schedule_interval_ms,

@@ -1,7 +1,9 @@
 #pragma once
 
+#include <cstdint>
 #include <optional>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 #include "memory/MemoryFact.h"
@@ -20,6 +22,7 @@ struct FactQuery {
 
 struct FactQueryResult {
   std::vector<contracts::MemoryFact> facts;
+  std::unordered_map<std::string, double> decay_weight_by_fact_id;
   int total_count = 0;
 };
 
@@ -31,6 +34,9 @@ class IFactStore {
   [[nodiscard]] virtual FactQueryResult query_facts_by_user(
     const std::string& user_id,
     const FactQuery& query) const = 0;
+  [[nodiscard]] virtual StoreResult touch_facts(
+      const std::vector<std::string>& fact_ids,
+      std::int64_t accessed_at) = 0;
   [[nodiscard]] virtual StoreResult insert_fact(
       const contracts::MemoryFact& fact) = 0;
   [[nodiscard]] virtual StoreResult supersede_fact(

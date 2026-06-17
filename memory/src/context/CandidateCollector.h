@@ -1,6 +1,7 @@
 #pragma once
 
 #include <memory>
+#include <cstdint>
 #include <optional>
 #include <string>
 #include <vector>
@@ -65,6 +66,11 @@ class CandidateCollector {
   [[nodiscard]] std::vector<contracts::ExperienceMemory> query_relevant_experiences(
       const CandidateCollectRequest& request,
       const SessionLoadBundle& session_bundle) const;
+    void touch_fact_access(const std::vector<contracts::MemoryFact>& facts,
+               std::vector<std::string>& warnings) const;
+    void touch_experience_access(
+      const std::vector<contracts::ExperienceMemory>& experiences,
+      std::vector<std::string>& warnings) const;
   [[nodiscard]] std::vector<VectorHit> search_vector(
       const CandidateCollectRequest& request) const;
   [[nodiscard]] int estimate_tokens(const CandidateSet& set) const;

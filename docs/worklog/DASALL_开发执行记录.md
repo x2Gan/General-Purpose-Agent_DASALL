@@ -1,3 +1,46 @@
+## 记录 #885
+
+- 日期：2026-06-17
+- 阶段：memory / retention decay closure
+- 任务：完成 WP-MEM-GAP-011“遗忘曲线 / 权重衰减（GAP-P2-C / MEM-E02）”
+- 状态：已完成（V004 schema、decay ranking/touch、cold purge 与 focused unit gates 已闭合）
+
+### 执行前提
+
+1. [docs/deliverables/MEM-EVAL-2026-05-31-memory子系统落地评估与生产级缺口治理任务规划.md](../deliverables/MEM-EVAL-2026-05-31-memory子系统落地评估与生产级缺口治理任务规划.md) 已将 `WP-MEM-GAP-011` 固定为“V004 schema 增加 `last_accessed_at` / `hit_count`、maintenance 增加 exponential decay、CandidateCollector 评分增加 decay 权重”，且文档链路明确 `WP-MEM-GAP-012` 以后续依赖形式挂在 011 之后，不构成前置 blocker。
+2. 本地代码复核表明 shared contracts blocker 不成立：[contracts/include/memory/MemoryFact.h](../../contracts/include/memory/MemoryFact.h) 与 [contracts/include/memory/ExperienceMemory.h](../../contracts/include/memory/ExperienceMemory.h) 冻结面只承载稳定业务语义，不适合混入 retrieval bookkeeping；因此本轮把 `last_accessed_at` / `hit_count` 严格限定为 Memory store 内部 schema 与 module-local query metadata。
+3. 外部参考采用 MemoryOS：其 MTM→LPM 更新使用 heat-based replacement，热度由访问次数、交互长度与 `Rrecency = exp(-Δt/μ)` 组成，检索后会更新访问计数与最近访问时间；这直接支撑本轮使用 `hit_count + last_accessed_at + exponential decay` 形成最小遗忘曲线闭环，而不是把 012 的完整 composite scoring 提前混入。
+
+### 改动
+
+1. 新增 [sql/memory/V004__retention_decay_metadata.sql](../../sql/memory/V004__retention_decay_metadata.sql)，为 `facts` / `experiences` 增加 `last_accessed_at` 与 `hit_count`，并在 upgrade 时从 `created_at` 回填访问时间、将命中数初始化为 1；同步更新 [tests/unit/memory/SchemaMigrationTest.cpp](../../tests/unit/memory/SchemaMigrationTest.cpp) 的 bundled migration 基线到 V004。
+2. 更新 [memory/include/config/MemoryConfig.h](../../memory/include/config/MemoryConfig.h) 与 [memory/src/config/MemoryConfigProjector.cpp](../../memory/src/config/MemoryConfigProjector.cpp)，新增 module-local `maintenance.decay` 配置面并从既有 `memory.maintenance.*` policy 给出默认 `time_constant_ms`、`minimum_score`、`minimum_age_ms` 投影，不扩 profile schema。
+3. 更新 [memory/include/IFactStore.h](../../memory/include/IFactStore.h)、[memory/include/IExperienceStore.h](../../memory/include/IExperienceStore.h)、[memory/src/store/sqlite/SqliteMemoryStore.h](../../memory/src/store/sqlite/SqliteMemoryStore.h) 与 [memory/src/store/sqlite/SqliteMemoryStore.cpp](../../memory/src/store/sqlite/SqliteMemoryStore.cpp)，新增 retrieval decay metadata、`touch_facts(...)` / `touch_experiences(...)` seam，并在 SQLite 查询中按 `last_accessed_at` / `hit_count` 计算 decay weight；同时 maintenance 现可对“足够老且足够冷”的 fact / experience 做 decay purge，而既有 TTL / superseded 语义保持不回退。
+4. 更新 [memory/src/context/CandidateCollector.h](../../memory/src/context/CandidateCollector.h) / [memory/src/context/CandidateCollector.cpp](../../memory/src/context/CandidateCollector.cpp)，让 fact / experience 检索按 `confidence/effectiveness × decay_weight` 重排，并在 collect 后 best-effort 回写 access touch；同步更新 [memory/src/context/ContextOrchestrator.cpp](../../memory/src/context/ContextOrchestrator.cpp)，移除对 `belief_state_summary` 的二次 confidence-only 重排，确保下游不洗掉 decay 排序。
+5. 更新 [tests/mocks/include/FakeMemoryStore.h](../../tests/mocks/include/FakeMemoryStore.h)、[tests/unit/memory/CandidateCollectorTest.cpp](../../tests/unit/memory/CandidateCollectorTest.cpp)、[tests/unit/memory/WritebackCoordinatorCoreTest.cpp](../../tests/unit/memory/WritebackCoordinatorCoreTest.cpp)、[tests/unit/memory/WritebackCoordinatorPartialTest.cpp](../../tests/unit/memory/WritebackCoordinatorPartialTest.cpp)、[tests/unit/memory/ConflictResolverDegradedTest.cpp](../../tests/unit/memory/ConflictResolverDegradedTest.cpp) 与 [tests/unit/memory/MemoryInterfaceCompileTest.cpp](../../tests/unit/memory/MemoryInterfaceCompileTest.cpp)，让 compile surface 与测试替身适配新 seam 并锁定默认值。
+6. 新增 [tests/unit/memory/SchemaMigrationV004Test.cpp](../../tests/unit/memory/SchemaMigrationV004Test.cpp) 与 [tests/unit/memory/MemoryRetentionDecayTest.cpp](../../tests/unit/memory/MemoryRetentionDecayTest.cpp)，并更新 [tests/unit/memory/CMakeLists.txt](../../tests/unit/memory/CMakeLists.txt) 完成 discoverability wiring；同时新增 [docs/todos/memory/deliverables/WP-MEM-GAP-011-retention-decay-closeout.md](../todos/memory/deliverables/WP-MEM-GAP-011-retention-decay-closeout.md) 固定独立 closeout 口径。
+
+### 验证
+
+1. `Build_CMakeTools(buildTargets=["dasall_memory_interface_compile_unit_test"])`
+   - 结果：通过。
+2. `RunCtest_CMakeTools(tests=["MemoryInterfaceCompileTest"])`
+   - 结果：通过，1/1。
+3. `Build_CMakeTools(buildTargets=["dasall_memory_candidate_collector_unit_test","dasall_memory_interface_compile_unit_test"])`
+   - 结果：通过。
+4. `RunCtest_CMakeTools(tests=["CandidateCollectorTest","MemoryInterfaceCompileTest"])`
+   - 结果：通过，2/2。
+5. `Build_CMakeTools(buildTargets=["dasall_memory_schema_migration_v004_unit_test","dasall_memory_retention_decay_unit_test"])`
+   - 结果：通过。
+6. `RunCtest_CMakeTools(tests=["SchemaMigrationV004Test","MemoryRetentionDecayTest"])`
+   - 结果：通过，2/2。
+
+### 结果
+
+1. `WP-MEM-GAP-011 / GAP-P2-C / MEM-E02` 已闭合；Memory 现可对 fact / experience 记录维护访问热度元数据、在 retrieval 排序时应用指数衰减权重，并在 maintenance 中清理足够老且足够冷的记录。
+2. 本轮没有扩 shared contracts，也没有提前把 012 的完整 multi-factor scoring 混入；后续 `WP-MEM-GAP-012` 只需在已经闭合的 decay seam 上增加 composite scoring 维度。
+3. Memory 当前剩余 V2 焦点收敛为 `WP-MEM-GAP-012 / -013` 与更高层质量 SLO / soak gate；遗忘曲线 / 权重衰减不再是未闭合缺口。
+
 ## 记录 #884
 
 - 日期：2026-06-17

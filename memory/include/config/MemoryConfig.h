@@ -123,6 +123,13 @@ struct ConflictConfig {
 };
 
 struct MaintenanceConfig {
+  struct RetentionDecayConfig {
+    bool enabled = true;
+    double time_constant_ms = 1.0e7;
+    double minimum_score = 0.05;
+    std::int64_t minimum_age_ms = 300000;
+  };
+
   int retention_turns = 200;
   bool quarantine_enabled = true;
   /// Zero means no TTL (never expire).
@@ -131,6 +138,7 @@ struct MaintenanceConfig {
   std::int64_t fact_ttl_ms = 0;
   /// Zero means no TTL (experiences never expire by age alone).
   std::int64_t experience_ttl_ms = 0;
+  RetentionDecayConfig decay;
   bool auto_schedule = false;
   /// L2: Unified to int64_t for consistency with other *_ms fields.
   std::int64_t schedule_interval_ms = 60000;

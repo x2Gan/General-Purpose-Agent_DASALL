@@ -1,6 +1,8 @@
 #pragma once
 
+#include <chrono>
 #include <algorithm>
+#include <cmath>
 #include <cstdint>
 #include <memory>
 #include <optional>
@@ -19,6 +21,7 @@ class FakeMemoryStore final : public memory::IMemoryStore {
 
   [[nodiscard]] std::optional<contracts::ResultCode> open(
       const memory::MemoryConfig& config) override {
+    config_ = config;
     last_open_backend_ = config.storage.backend;
     is_open_ = true;
     return std::nullopt;
@@ -141,6 +144,7 @@ class FakeMemoryStore final : public memory::IMemoryStore {
   [[nodiscard]] memory::FactQueryResult query_facts(
       const memory::FactQuery& query) const override {
     memory::FactQueryResult result;
+    const auto now_millis = current_time_millis();
 
     for (const auto& [fact_id, fact] : facts_by_id_) {
       (void)fact_id;
@@ -168,6 +172,12 @@ class FakeMemoryStore final : public memory::IMemoryStore {
         continue;
       }
 
+      result.decay_weight_by_fact_id[fact_id] = compute_decay_weight(
+          config_.maintenance.decay,
+          now_millis,
+          access_metadata_for_fact(fact_id).last_accessed_at,
+          fact.created_at.value_or(0),
+          access_metadata_for_fact(fact_id).hit_count);
       result.facts.push_back(fact);
       if (query.limit > 0 && static_cast<int>(result.facts.size()) >= query.limit) {
         break;
@@ -187,6 +197,22 @@ class FakeMemoryStore final : public memory::IMemoryStore {
     return query_facts(user_query);
   }
 
+  [[nodiscard]] memory::StoreResult touch_facts(
+      const std::vector<std::string>& fact_ids,
+      std::int64_t accessed_at) override {
+    for (const auto& fact_id : fact_ids) {
+      if (!facts_by_id_.contains(fact_id)) {
+        continue;
+      }
+
+      auto& metadata = fact_access_by_id_[fact_id];
+      metadata.last_accessed_at = accessed_at;
+      metadata.hit_count = std::max<std::int64_t>(1, metadata.hit_count) + 1;
+    }
+
+    return memory::StoreResult::success();
+  }
+
   [[nodiscard]] memory::StoreResult insert_fact(
       const contracts::MemoryFact& fact) override {
     const auto fact_id = required_id(fact.fact_id);
@@ -197,6 +223,10 @@ class FakeMemoryStore final : public memory::IMemoryStore {
     }
 
     facts_by_id_[*fact_id] = fact;
+  fact_access_by_id_[*fact_id] = AccessMetadata{
+    .last_accessed_at = fact.created_at.value_or(0),
+    .hit_count = 1,
+  };
     return memory::StoreResult::success(*fact_id);
   }
 
@@ -216,6 +246,7 @@ class FakeMemoryStore final : public memory::IMemoryStore {
   [[nodiscard]] memory::ExperienceQueryResult query_experiences(
       const memory::ExperienceQuery& query) const override {
     memory::ExperienceQueryResult result;
+    const auto now_millis = current_time_millis();
 
     for (const auto& [experience_id, experience] : experiences_by_id_) {
       (void)experience_id;
@@ -242,6 +273,12 @@ class FakeMemoryStore final : public memory::IMemoryStore {
         continue;
       }
 
+      result.decay_weight_by_experience_id[experience_id] = compute_decay_weight(
+          config_.maintenance.decay,
+          now_millis,
+          access_metadata_for_experience(experience_id).last_accessed_at,
+          experience.created_at.value_or(0),
+          access_metadata_for_experience(experience_id).hit_count);
       result.experiences.push_back(experience);
       if (query.limit > 0 && static_cast<int>(result.experiences.size()) >= query.limit) {
         break;
@@ -250,6 +287,22 @@ class FakeMemoryStore final : public memory::IMemoryStore {
 
     result.total_count = static_cast<int>(result.experiences.size());
     return result;
+  }
+
+  [[nodiscard]] memory::StoreResult touch_experiences(
+      const std::vector<std::string>& experience_ids,
+      std::int64_t accessed_at) override {
+    for (const auto& experience_id : experience_ids) {
+      if (!experiences_by_id_.contains(experience_id)) {
+        continue;
+      }
+
+      auto& metadata = experience_access_by_id_[experience_id];
+      metadata.last_accessed_at = accessed_at;
+      metadata.hit_count = std::max<std::int64_t>(1, metadata.hit_count) + 1;
+    }
+
+    return memory::StoreResult::success();
   }
 
   [[nodiscard]] memory::StoreResult insert_experience(
@@ -262,6 +315,10 @@ class FakeMemoryStore final : public memory::IMemoryStore {
     }
 
     experiences_by_id_[*experience_id] = experience;
+  experience_access_by_id_[*experience_id] = AccessMetadata{
+    .last_accessed_at = experience.created_at.value_or(0),
+    .hit_count = 1,
+  };
     return memory::StoreResult::success(*experience_id);
   }
 
@@ -368,6 +425,69 @@ class FakeMemoryStore final : public memory::IMemoryStore {
     std::string reason;
   };
 
+  struct AccessMetadata {
+    std::int64_t last_accessed_at = 0;
+    std::int64_t hit_count = 1;
+  };
+
+  [[nodiscard]] static std::int64_t current_time_millis() {
+    return std::chrono::duration_cast<std::chrono::milliseconds>(
+               std::chrono::system_clock::now().time_since_epoch())
+        .count();
+  }
+
+  [[nodiscard]] static std::int64_t effective_last_accessed_at(
+      std::int64_t last_accessed_at,
+      std::int64_t created_at) {
+    if (last_accessed_at > 0) {
+      return last_accessed_at;
+    }
+    return created_at;
+  }
+
+  [[nodiscard]] static double compute_decay_weight(
+      const memory::MaintenanceConfig::RetentionDecayConfig& decay_config,
+      std::int64_t now_millis,
+      std::int64_t last_accessed_at,
+      std::int64_t created_at,
+      std::int64_t hit_count) {
+    if (!decay_config.enabled) {
+      return 1.0;
+    }
+
+    const auto effective_accessed_at =
+        effective_last_accessed_at(last_accessed_at, created_at);
+    if (effective_accessed_at <= 0) {
+      return 1.0;
+    }
+
+    const auto idle_millis = std::max<std::int64_t>(0, now_millis - effective_accessed_at);
+    const auto time_constant_ms = std::max(1.0, decay_config.time_constant_ms);
+    const auto recency_decay =
+        std::exp(-static_cast<double>(idle_millis) / time_constant_ms);
+    const auto visit_factor =
+        1.0 + std::log1p(static_cast<double>(std::max<std::int64_t>(0, hit_count - 1)));
+    return visit_factor * recency_decay;
+  }
+
+  [[nodiscard]] AccessMetadata access_metadata_for_fact(
+      const std::string& fact_id) const {
+    const auto metadata_it = fact_access_by_id_.find(fact_id);
+    if (metadata_it != fact_access_by_id_.end()) {
+      return metadata_it->second;
+    }
+    return {};
+  }
+
+  [[nodiscard]] AccessMetadata access_metadata_for_experience(
+      const std::string& experience_id) const {
+    const auto metadata_it = experience_access_by_id_.find(experience_id);
+    if (metadata_it != experience_access_by_id_.end()) {
+      return metadata_it->second;
+    }
+    return {};
+  }
+
   [[nodiscard]] static std::optional<std::string> required_id(
       const std::optional<std::string>& value) {
     if (!value.has_value() || value->empty()) {
@@ -429,11 +549,14 @@ class FakeMemoryStore final : public memory::IMemoryStore {
   bool is_open_ = false;
   bool active_transaction_ = false;
   memory::StorageBackend last_open_backend_{};
+  memory::MemoryConfig config_{};
   std::unordered_map<std::string, contracts::Session> sessions_;
   std::unordered_map<std::string, std::vector<contracts::Turn>> turns_by_session_;
   std::unordered_map<std::string, contracts::SummaryMemory> summaries_by_session_;
   std::unordered_map<std::string, contracts::MemoryFact> facts_by_id_;
+  std::unordered_map<std::string, AccessMetadata> fact_access_by_id_;
   std::unordered_map<std::string, contracts::ExperienceMemory> experiences_by_id_;
+  std::unordered_map<std::string, AccessMetadata> experience_access_by_id_;
   std::vector<QuarantineRecord> quarantine_records_;
 };
 
