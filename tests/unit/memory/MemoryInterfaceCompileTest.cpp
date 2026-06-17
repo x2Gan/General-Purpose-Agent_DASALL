@@ -719,6 +719,8 @@ void test_memory_store_interfaces_and_fake_cover_transactions_and_query_supporti
        const SessionLoadRequest&) const;
   using QueryFactsSignature = dasall::memory::FactQueryResult (IFactStore::*)(
        const FactQuery&) const;
+  using QueryFactsByUserSignature = dasall::memory::FactQueryResult (IFactStore::*)(
+       const std::string&, const FactQuery&) const;
   using QueryExperiencesSignature = dasall::memory::ExperienceQueryResult (IExperienceStore::*)(
        const ExperienceQuery&) const;
   using CommitSignature = std::optional<dasall::contracts::ResultCode> (IStoreTransaction::*)();
@@ -739,6 +741,8 @@ void test_memory_store_interfaces_and_fake_cover_transactions_and_query_supporti
                     "ISessionStore::load_session_bundle should consume the module-local session load request");
   static_assert(std::is_same_v<decltype(&IFactStore::query_facts), QueryFactsSignature>,
                     "IFactStore::query_facts should consume the module-local fact query surface");
+     static_assert(std::is_same_v<decltype(&IFactStore::query_facts_by_user), QueryFactsByUserSignature>,
+                                                  "IFactStore::query_facts_by_user should preserve the explicit user-scoped fact query surface");
   static_assert(std::is_same_v<decltype(&IExperienceStore::query_experiences), QueryExperiencesSignature>,
                     "IExperienceStore::query_experiences should consume the module-local experience query surface");
   static_assert(std::is_same_v<decltype(&IStoreTransaction::commit), CommitSignature>,
@@ -844,6 +848,9 @@ void test_memory_store_interfaces_and_fake_cover_transactions_and_query_supporti
      const auto fact_result = store.query_facts(fact_query);
      assert_equal(1, static_cast<int>(fact_result.facts.size()),
                                     "fake memory store should answer fact queries through the frozen query surface");
+     const auto user_fact_result = store.query_facts_by_user("user-001", fact_query);
+     assert_equal(1, static_cast<int>(user_fact_result.facts.size()),
+                                    "fake memory store should answer user-scoped fact queries through the explicit seam");
 
      dasall::contracts::ExperienceMemory experience;
      experience.experience_id = "experience-001";

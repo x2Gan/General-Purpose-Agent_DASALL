@@ -283,6 +283,52 @@ void test_sqlite_memory_store_persists_fact_experience_and_maintenance_paths() {
   assert_equal(2, all_facts.total_count,
                "query_facts should surface superseded rows when exclude_superseded is false");
 
+    dasall::contracts::Session sibling_session;
+    sibling_session.session_id = "session-015-sibling";
+    sibling_session.turn_ids = std::vector<std::string>{};
+    sibling_session.user_id = "user-015";
+    sibling_session.created_at = now_millis - 850;
+    assert_true(store->create_session(sibling_session).ok,
+          "sqlite store should create a sibling session for the same user");
+
+    dasall::contracts::Turn sibling_turn;
+    sibling_turn.turn_id = "turn-015-002";
+    sibling_turn.session_id = "session-015-sibling";
+    sibling_turn.user_input = "share the preference across sessions";
+    sibling_turn.created_at = now_millis - 750;
+    assert_true(store->append_turn(sibling_turn).ok,
+          "sqlite store should append a turn for the sibling session");
+
+    dasall::contracts::MemoryFact sibling_fact;
+    sibling_fact.fact_id = "fact-015-003";
+    sibling_fact.session_id = "session-015-sibling";
+    sibling_fact.fact_text = "同一用户的偏好应该可跨 session 共享。";
+    sibling_fact.source_turn_ids = std::vector<std::string>{"turn-015-002"};
+    sibling_fact.confidence_score = 91;
+    sibling_fact.created_at = now_millis - 650;
+    sibling_fact.fact_type = "preference";
+    assert_true(store->insert_fact(sibling_fact).ok,
+          "sqlite store should insert a sibling-session fact for user-scoped lookup coverage");
+
+    const auto user_scoped_facts = store->query_facts_by_user(
+      "user-015",
+      dasall::memory::FactQuery{
+        .session_id = std::nullopt,
+        .user_id = std::nullopt,
+        .fact_type = std::optional<std::string>{"preference"},
+        .min_confidence = 80,
+        .exclude_superseded = true,
+        .limit = 10,
+      });
+    assert_equal(2, user_scoped_facts.total_count,
+           "query_facts_by_user should surface surviving preference facts across sibling sessions");
+    assert_true(user_scoped_facts.facts.front().fact_id ==
+            std::optional<std::string>{"fact-015-003"},
+          "user-scoped fact lookup should order sibling-session facts by created_at descending");
+    assert_true(user_scoped_facts.facts.back().fact_id ==
+            std::optional<std::string>{"fact-015-001"},
+          "user-scoped fact lookup should retain the original session fact in the same result set");
+
   dasall::contracts::ExperienceMemory durable_experience;
   durable_experience.experience_id = "exp-015-001";
   durable_experience.session_id = "session-015";

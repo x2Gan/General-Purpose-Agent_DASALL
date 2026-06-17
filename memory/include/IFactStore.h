@@ -28,6 +28,9 @@ class IFactStore {
   virtual ~IFactStore() = default;
 
   [[nodiscard]] virtual FactQueryResult query_facts(const FactQuery& query) const = 0;
+  [[nodiscard]] virtual FactQueryResult query_facts_by_user(
+    const std::string& user_id,
+    const FactQuery& query) const = 0;
   [[nodiscard]] virtual StoreResult insert_fact(
       const contracts::MemoryFact& fact) = 0;
   [[nodiscard]] virtual StoreResult supersede_fact(

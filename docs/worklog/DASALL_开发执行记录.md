@@ -1,3 +1,42 @@
+## 记录 #884
+
+- 日期：2026-06-17
+- 阶段：memory / cross-session fact query closure
+- 任务：完成 WP-MEM-GAP-010“跨 session FactQuery（GAP-P2-B / MEM-E05）”
+- 状态：已完成（user-scoped fact seam、V003 索引、focused unit/integration gates 与文档回写已闭合）
+
+### 执行前提
+
+1. [docs/deliverables/MEM-EVAL-2026-05-31-memory子系统落地评估与生产级缺口治理任务规划.md](../deliverables/MEM-EVAL-2026-05-31-memory子系统落地评估与生产级缺口治理任务规划.md) 已将 `WP-MEM-GAP-010` 固定为“在 `IFactStore` 增加 `query_facts_by_user(...)`、SchemaMigrator V003 增加 `idx_facts_user_id`、CandidateCollector 在 ContextOrchestrator 装配时消费 user-level facts”。
+2. 本地代码复核表明原规划中的 contracts blocker 不成立：[contracts/include/memory/Session.h](../../contracts/include/memory/Session.h) 与 [sql/memory/V001__initial_schema.sql](../../sql/memory/V001__initial_schema.sql) 在本轮前已具备 `user_id` 字段，真实缺口只在 Memory 内部仍把 fact 查询锁死在 `session_id + user_id` 组合过滤上。
+3. 外部参考采用 SQLite Query Planner / `CREATE INDEX` 文档：没有索引时等值过滤会退化为 full table scan，而为过滤列建立 index 后 query planner 才能走 indexed lookup；因此本轮新增 `facts.user_id` 索引属于结构性补齐，而不是性能预优化越界。
+
+### 改动
+
+1. 更新 [memory/include/IFactStore.h](../../memory/include/IFactStore.h)、[memory/src/store/sqlite/SqliteMemoryStore.h](../../memory/src/store/sqlite/SqliteMemoryStore.h) 与 [memory/src/store/sqlite/SqliteMemoryStore.cpp](../../memory/src/store/sqlite/SqliteMemoryStore.cpp)，新增显式 `query_facts_by_user(const std::string& user_id, const FactQuery& query)` seam，并在 SQLite store 内用“清空 `session_id`、强制设置 `user_id`”的方式复用既有查询路径。
+2. 新增 [sql/memory/V003__fact_user_lookup_index.sql](../../sql/memory/V003__fact_user_lookup_index.sql)，创建 `idx_facts_user_id`；同步更新 [tests/unit/memory/SchemaMigrationTest.cpp](../../tests/unit/memory/SchemaMigrationTest.cpp) 的 bundled migration version 基线，并新增 [tests/unit/memory/SchemaMigrationV003Test.cpp](../../tests/unit/memory/SchemaMigrationV003Test.cpp) 覆盖 fresh DB 与 V002→V003 upgrade 两条路径。
+3. 更新 [memory/src/context/CandidateCollector.cpp](../../memory/src/context/CandidateCollector.cpp)，当 session bundle 带有 `user_id` 时优先走 `query_facts_by_user(...)`，让 `ContextOrchestrator` 在当前 session 装配 `belief_state_summary` 时能够召回 sibling-session 的历史偏好，而不再被 `session_id` 过滤掉。
+4. 更新 [tests/mocks/include/FakeMemoryStore.h](../../tests/mocks/include/FakeMemoryStore.h)、[tests/unit/memory/CandidateCollectorTest.cpp](../../tests/unit/memory/CandidateCollectorTest.cpp)、[tests/unit/memory/WritebackCoordinatorCoreTest.cpp](../../tests/unit/memory/WritebackCoordinatorCoreTest.cpp)、[tests/unit/memory/WritebackCoordinatorPartialTest.cpp](../../tests/unit/memory/WritebackCoordinatorPartialTest.cpp)、[tests/unit/memory/ConflictResolverDegradedTest.cpp](../../tests/unit/memory/ConflictResolverDegradedTest.cpp) 与 [tests/unit/memory/MemoryInterfaceCompileTest.cpp](../../tests/unit/memory/MemoryInterfaceCompileTest.cpp)，保持 compile surface 与测试替身随接口扩展同步收口。
+5. 更新 [tests/unit/memory/SqliteMemoryStoreTest.cpp](../../tests/unit/memory/SqliteMemoryStoreTest.cpp)，新增 sibling-session user-scoped lookup 覆盖；新增 [tests/integration/memory/MemoryCrossSessionFactQueryTest.cpp](../../tests/integration/memory/MemoryCrossSessionFactQueryTest.cpp) 并更新 [tests/unit/memory/CMakeLists.txt](../../tests/unit/memory/CMakeLists.txt) 与 [tests/integration/memory/CMakeLists.txt](../../tests/integration/memory/CMakeLists.txt) 完成 discoverability wiring。
+6. 更新 [docs/deliverables/MEM-EVAL-2026-05-31-memory子系统落地评估与生产级缺口治理任务规划.md](../deliverables/MEM-EVAL-2026-05-31-memory子系统落地评估与生产级缺口治理任务规划.md)、[docs/todos/DASALL_子系统查漏补缺专项记录.md](../todos/DASALL_子系统查漏补缺专项记录.md)，并新增 [docs/todos/memory/deliverables/WP-MEM-GAP-010-cross-session-fact-query-closeout.md](../todos/memory/deliverables/WP-MEM-GAP-010-cross-session-fact-query-closeout.md) 固定独立 closeout 口径。
+
+### 验证
+
+1. `Build_CMakeTools(buildTargets=["dasall_memory_interface_compile_unit_test","dasall_memory_candidate_collector_unit_test","dasall_memory_sqlite_store_unit_test","dasall_memory_writeback_core_unit_test","dasall_memory_writeback_partial_unit_test","dasall_memory_conflict_resolver_degraded_unit_test"])`
+   - 结果：通过。
+2. `RunCtest_CMakeTools(tests=["MemoryInterfaceCompileTest","CandidateCollectorTest","SqliteMemoryStoreTest","WritebackCoordinatorCoreTest","WritebackCoordinatorPartialTest","ConflictResolverDegradedTest"])`
+   - 结果：通过，6/6。
+3. `Build_CMakeTools(buildTargets=["dasall_memory_schema_migration_unit_test","dasall_memory_schema_migration_v003_unit_test","dasall_memory_sqlite_store_unit_test","dasall_memory_cross_session_fact_query_integration_test"])`
+   - 结果：通过。
+4. `RunCtest_CMakeTools(tests=["SchemaMigrationTest","SchemaMigrationV003Test","SqliteMemoryStoreTest","MemoryCrossSessionFactQueryTest"])`
+   - 结果：通过，4/4。
+
+### 结果
+
+1. `WP-MEM-GAP-010 / GAP-P2-B / MEM-E05` 已闭合；Memory 现可在当前 session 未再次声明偏好的情况下，仍从同一 `user_id` 的历史 session 中召回 user-level facts 并投影到 `belief_state_summary`。
+2. contracts blocker 被本地证据证伪：本轮不需要新增 shared contracts 字段，缺口根因就是 Memory 内部把 `session_id` 和 `user_id` 叠加到了同一查询上。
+3. Memory 当前剩余 V2 焦点收敛为 `WP-MEM-GAP-011 / -012 / -013` 与更高层质量 SLO / soak gate；cross-session FactQuery 不再是未闭合缺口。
+
 ## 记录 #883
 
 - 日期：2026-06-15

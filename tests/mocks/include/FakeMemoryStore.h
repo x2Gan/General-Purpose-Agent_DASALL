@@ -178,6 +178,15 @@ class FakeMemoryStore final : public memory::IMemoryStore {
     return result;
   }
 
+  [[nodiscard]] memory::FactQueryResult query_facts_by_user(
+      const std::string& user_id,
+      const memory::FactQuery& query) const override {
+    memory::FactQuery user_query = query;
+    user_query.session_id.reset();
+    user_query.user_id = user_id;
+    return query_facts(user_query);
+  }
+
   [[nodiscard]] memory::StoreResult insert_fact(
       const contracts::MemoryFact& fact) override {
     const auto fact_id = required_id(fact.fact_id);

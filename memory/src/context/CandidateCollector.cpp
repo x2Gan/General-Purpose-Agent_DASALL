@@ -125,13 +125,16 @@ std::vector<contracts::MemoryFact> CandidateCollector::query_relevant_facts(
     const CandidateCollectRequest& request,
     const SessionLoadBundle& session_bundle) const {
   FactQuery query;
-  if (!request.session_id.empty()) {
-    query.session_id = request.session_id;
-  }
-
   if (session_bundle.session.user_id.has_value() &&
       !session_bundle.session.user_id->empty()) {
-    query.user_id = session_bundle.session.user_id;
+    query.min_confidence = std::max(0, context_config_.fact_confidence_floor);
+    query.exclude_superseded = true;
+    query.limit = 50;
+    return fact_store_.query_facts_by_user(*session_bundle.session.user_id, query).facts;
+  }
+
+  if (!request.session_id.empty()) {
+    query.session_id = request.session_id;
   }
 
   query.min_confidence = std::max(0, context_config_.fact_confidence_floor);

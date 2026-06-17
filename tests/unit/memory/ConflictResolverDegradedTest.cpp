@@ -65,6 +65,14 @@ class ThrowingFactQueryStore final : public dasall::memory::IMemoryStore {
     throw std::runtime_error("fact query unavailable");
   }
 
+  [[nodiscard]] dasall::memory::FactQueryResult query_facts_by_user(
+      const std::string& user_id,
+      const dasall::memory::FactQuery& query) const override {
+    (void)user_id;
+    (void)query;
+    throw std::runtime_error("fact query unavailable");
+  }
+
   [[nodiscard]] dasall::memory::StoreResult insert_fact(
       const dasall::contracts::MemoryFact& fact) override {
     return delegate_.insert_fact(fact);

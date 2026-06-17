@@ -172,6 +172,14 @@ class CommitFailingStore final : public dasall::memory::IMemoryStore {
     return {};
   }
 
+  [[nodiscard]] dasall::memory::FactQueryResult query_facts_by_user(
+      const std::string& user_id,
+      const dasall::memory::FactQuery& query) const override {
+    (void)user_id;
+    (void)query;
+    return {};
+  }
+
   [[nodiscard]] dasall::memory::StoreResult insert_fact(
       const dasall::contracts::MemoryFact& fact) override {
     return dasall::memory::StoreResult::success(fact.fact_id);

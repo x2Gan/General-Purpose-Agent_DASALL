@@ -112,27 +112,29 @@ void test_sqlite_schema_migrator_applies_v001_and_reports_up_to_date_status() {
               "V001 schema should create the summaries table");
   assert_true(table_exists(connection.get(), "facts"),
               "V001 schema should create the facts table");
+  assert_true(table_exists(connection.get(), "schema_migrations"),
+              "schema migrator should keep the migration ledger table available");
   assert_true(table_exists(connection.get(), "experiences"),
               "V001 schema should create the experiences table");
   assert_true(table_exists(connection.get(), "memory_vector_documents"),
               "V002 schema should create the vector sidecar table");
   assert_true(table_exists(connection.get(), "quarantined_records"),
               "V001 schema should create the quarantine table");
-  assert_equal(2, query_count(connection.get(), "SELECT COUNT(*) FROM schema_migrations"),
-               "fresh database should record both bundled migrations after V002");
+  assert_equal(3, query_count(connection.get(), "SELECT COUNT(*) FROM schema_migrations"),
+               "fresh database should record all bundled migrations after V003");
 
   const auto migration_status = migrator.status(connection.get());
-  assert_equal(2, migration_status.current_version,
-               "migration status should report the applied V002 version");
-  assert_equal(2, migration_status.target_version,
-               "migration status should report V002 as the current target version");
+  assert_equal(3, migration_status.current_version,
+               "migration status should report the applied V003 version");
+  assert_equal(3, migration_status.target_version,
+               "migration status should report V003 as the current target version");
   assert_true(migration_status.up_to_date,
-              "migration status should report the database as up-to-date after V002");
+              "migration status should report the database as up-to-date after V003");
 
   const auto second_result = migrator.migrate(connection.get());
   assert_true(!second_result.has_value(),
               "schema migrator should be a no-op when the database is already up-to-date");
-  assert_equal(2, query_count(connection.get(), "SELECT COUNT(*) FROM schema_migrations"),
+  assert_equal(3, query_count(connection.get(), "SELECT COUNT(*) FROM schema_migrations"),
                "re-running migrate should not duplicate applied migration rows");
 }
 

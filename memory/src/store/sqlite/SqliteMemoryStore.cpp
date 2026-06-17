@@ -1063,6 +1063,19 @@ FactQueryResult SqliteMemoryStore::query_facts(const FactQuery& query) const {
   return result;
 }
 
+FactQueryResult SqliteMemoryStore::query_facts_by_user(
+    const std::string& user_id,
+    const FactQuery& query) const {
+  if (user_id.empty()) {
+    return {};
+  }
+
+  FactQuery user_query = query;
+  user_query.session_id.reset();
+  user_query.user_id = user_id;
+  return query_facts(user_query);
+}
+
 StoreResult SqliteMemoryStore::insert_fact(const contracts::MemoryFact& fact) {
   if (writer_connection_ == nullptr) {
     return StoreResult::failure(contracts::ResultCode::RuntimeRetryExhausted,

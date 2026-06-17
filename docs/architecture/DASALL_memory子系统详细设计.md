@@ -679,6 +679,9 @@ public:
 
   // ─── Fact 操作 ───
   virtual FactQueryResult query_facts(const FactQuery& query) = 0;
+    virtual FactQueryResult query_facts_by_user(
+      const std::string& user_id,
+      const FactQuery& query) = 0;
   virtual StoreResult insert_fact(
       const dasall::contracts::MemoryFact& fact) = 0;
   virtual StoreResult supersede_fact(
@@ -1408,7 +1411,7 @@ private:
    1. 从 WorkingMemoryBoard 加载当前 session 的 snapshot。
    2. 从 SessionTimelineRepository 加载 session 元信息 + 最近 N 条 Turn（N 由 `token_budget_hint` 推算，默认 recent_turn_window=10）。
    3. 从 SummaryRepository 加载最新 SummaryMemory（若存在）。
-   4. 从 FactRepository 按 session_id + validity + confidence 阈值查询相关 MemoryFact。
+  4. 从 FactRepository 查询相关 MemoryFact：若当前 session 已绑定 `user_id`，优先走 `query_facts_by_user(user_id, ...)` 召回同一用户的 sibling-session facts；否则回退到按 `session_id + validity + confidence` 的 session-scoped 查询。
    5. 从 ExperienceRepository 按 stage + applicable_domains 查询相关 ExperienceMemory。
    6. 若 VectorMemoryIndexAdapter 非空且 enabled，执行语义搜索获取 top-k VectorHit。
    7. 透传 `external_evidence`。
@@ -1777,8 +1780,8 @@ struct StoreResult {
 };
 
 struct FactQuery {
-  std::optional<std::string> session_id; // nullopt = 跨 session 查询（如用户偏好）
-  std::optional<std::string> user_id;    // 跨 session 时按 user_id 隔离
+  std::optional<std::string> session_id; // session-scoped 查询时使用；user-scoped 查询由显式 query_facts_by_user(...) seam 承载
+  std::optional<std::string> user_id;    // 仍可作为底层过滤字段；跨 session user-level lookup 优先走显式 user query seam
   std::optional<std::string> fact_type;
   std::optional<int> min_confidence = 0;
   bool exclude_superseded = true;
@@ -1832,6 +1835,9 @@ public:
 
   // Fact 操作
   FactQueryResult query_facts(const FactQuery& query) override;
+    FactQueryResult query_facts_by_user(
+      const std::string& user_id,
+      const FactQuery& query) override;
   StoreResult insert_fact(const MemoryFact& fact);
   StoreResult supersede_fact(
       const std::string& old_fact_id,
@@ -2350,7 +2356,7 @@ Smoke 覆盖：MemoryManagerSmokeTest 验证 init → prepare_context → write_
 | MEM-E02 | 引入遗忘曲线权重衰减（参考 MemoryOS） | Long-Term Memory 数据量增长到需要主动遗忘 | MEM-D007 Fact/Experience 仓储稳定 | §4.1.1 MemoryOS 对照 |
 | MEM-E03 | CandidateCollector composite scoring（参考 CrewAI） | 候选评分需要超越简单 confidence 阈值 | MEM-D002 ContextOrchestrator 落地 | §4.1.1 CrewAI 对照 |
 | MEM-E04 | IEmbeddingAdapter 外部 embedding service 注入 | VectorMemory 需要高质量语义搜索 | MEM-D008 VectorMemory 基线 | §6.3.2 |
-| MEM-E05 | 跨 session 事实共享（user-level FactQuery） | 多 session 场景需要持久化用户偏好 | MEM-D007 Fact 仓储稳定 | §6.12.5 FactQuery |
+| MEM-E05 | 跨 session 事实共享（user-level FactQuery，已完成 2026-06-17） | 已通过显式 `query_facts_by_user(...)` seam、`idx_facts_user_id` 与 `ContextOrchestrator` user-level facts 装配闭合多 session 用户偏好召回 | MEM-D007 Fact 仓储稳定 | §6.12.5 FactQuery |
 | MEM-E06 | ProgrammaticMemory 独立持久化 | llm 资产治理稳定 + 明确跨模块 asset ref/lease 方案 | llm 子系统 PromptAssetRepository 冻结 | §6.5.1a |
 | MEM-E07 | ContextAssembleRequest/Result 提升为 shared contracts | runtime/memory 接口在多子系统消费后稳定 | MEM-B01 解除 | §12.1 未决问题 1 |
 | MEM-E08 | token 估算替换为 tiktoken 或等价 tokenizer 绑定 | Build 阶段需要精确 token 预算 | MEM-D002 BudgetAllocator 落地 | §6.12.2 CandidateCollector |

@@ -41,6 +41,9 @@ class SqliteMemoryStore final : public IMemoryStore {
       const std::string& session_id) const override;
 
   [[nodiscard]] FactQueryResult query_facts(const FactQuery& query) const override;
+  [[nodiscard]] FactQueryResult query_facts_by_user(
+      const std::string& user_id,
+      const FactQuery& query) const override;
   [[nodiscard]] StoreResult insert_fact(
       const contracts::MemoryFact& fact) override;
   [[nodiscard]] StoreResult supersede_fact(
