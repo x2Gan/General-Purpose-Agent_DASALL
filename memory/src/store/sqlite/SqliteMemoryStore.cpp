@@ -210,12 +210,11 @@ void rollback_transaction(sqlite3* connection) {
   return std::max<std::int64_t>(1, hit_count);
 }
 
-[[nodiscard]] double compute_decay_weight(
+[[nodiscard]] double compute_recency_score(
     const MaintenanceConfig::RetentionDecayConfig& decay_config,
     std::int64_t now_millis,
     std::int64_t last_accessed_at,
-    std::int64_t created_at,
-    std::int64_t hit_count) {
+    std::int64_t created_at) {
   if (!decay_config.enabled) {
     return 1.0;
   }
@@ -228,8 +227,37 @@ void rollback_transaction(sqlite3* connection) {
 
   const auto idle_millis = std::max<std::int64_t>(0, now_millis - effective_accessed_at);
   const auto time_constant_ms = std::max(1.0, decay_config.time_constant_ms);
-  const auto recency_decay =
-      std::exp(-static_cast<double>(idle_millis) / time_constant_ms);
+  return std::exp(-static_cast<double>(idle_millis) / time_constant_ms);
+}
+
+[[nodiscard]] double compute_hit_rate_score(std::int64_t hit_count) {
+  constexpr double kSaturationHitCount = 8.0;
+  const auto numerator =
+      std::log1p(static_cast<double>(std::max<std::int64_t>(
+          0, effective_hit_count(hit_count) - 1)));
+  const auto denominator = std::log1p(kSaturationHitCount - 1.0);
+  if (denominator <= 0.0) {
+    return 0.0;
+  }
+
+  return std::clamp(numerator / denominator, 0.0, 1.0);
+}
+
+[[nodiscard]] double compute_decay_weight(
+    const MaintenanceConfig::RetentionDecayConfig& decay_config,
+    std::int64_t now_millis,
+    std::int64_t last_accessed_at,
+    std::int64_t created_at,
+    std::int64_t hit_count) {
+  if (!decay_config.enabled) {
+    return 1.0;
+  }
+
+  const auto recency_decay = compute_recency_score(
+      decay_config,
+      now_millis,
+      last_accessed_at,
+      created_at);
   const auto visit_factor =
       1.0 + std::log1p(static_cast<double>(std::max<std::int64_t>(
                 0, effective_hit_count(hit_count) - 1)));
@@ -1217,6 +1245,13 @@ FactQueryResult SqliteMemoryStore::query_facts(const FactQuery& query) const {
   while (sqlite3_step(statement) == SQLITE_ROW) {
     auto fact = map_row_to_fact(statement);
     if (fact.fact_id.has_value() && !fact.fact_id->empty()) {
+      result.recency_score_by_fact_id[*fact.fact_id] = compute_recency_score(
+          decay_config,
+          now_millis,
+          column_int64(statement, 12).value_or(0),
+          fact.created_at.value_or(0));
+      result.hit_rate_score_by_fact_id[*fact.fact_id] = compute_hit_rate_score(
+          column_int64(statement, 13).value_or(0));
       result.decay_weight_by_fact_id[*fact.fact_id] = compute_decay_weight(
           decay_config,
           now_millis,
@@ -1415,6 +1450,14 @@ ExperienceQueryResult SqliteMemoryStore::query_experiences(
     }
 
     if (experience.experience_id.has_value() && !experience.experience_id->empty()) {
+      result.recency_score_by_experience_id[*experience.experience_id] =
+          compute_recency_score(
+              decay_config,
+              now_millis,
+              column_int64(statement, 14).value_or(0),
+              experience.created_at.value_or(0));
+      result.hit_rate_score_by_experience_id[*experience.experience_id] =
+          compute_hit_rate_score(column_int64(statement, 15).value_or(0));
       result.decay_weight_by_experience_id[*experience.experience_id] =
           compute_decay_weight(
               decay_config,

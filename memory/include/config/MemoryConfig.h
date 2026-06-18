@@ -99,11 +99,20 @@ struct StorageConfig {
 };
 
 struct ContextConfig {
+  struct ScoringConfig {
+    bool composite_enabled = true;
+    double confidence_weight = 0.45;
+    double recency_weight = 0.25;
+    double hit_rate_weight = 0.20;
+    double source_weight = 0.10;
+  };
+
   int recent_turn_limit = 8;
   int compression_trigger_turns = 12;
   int max_summary_candidates = 3;
   int fact_confidence_floor = 80;
   double compression_trigger_ratio = 0.85;
+  ScoringConfig scoring;
 };
 
 struct ExperienceConfig {

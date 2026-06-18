@@ -1,3 +1,43 @@
+## 记录 #886
+
+- 日期：2026-06-18
+- 阶段：memory / composite scoring closure
+- 任务：完成 WP-MEM-GAP-012“Composite scoring（GAP-P2-D / MEM-E03）”
+- 状态：已完成（context scoring config、collector multi-factor ranking、budget drift guard 与 focused unit gates 已闭合）
+
+### 执行前提
+
+1. [docs/deliverables/MEM-EVAL-2026-05-31-memory子系统落地评估与生产级缺口治理任务规划.md](../deliverables/MEM-EVAL-2026-05-31-memory子系统落地评估与生产级缺口治理任务规划.md) 已将 `WP-MEM-GAP-012` 固定为“`score = w1·confidence + w2·recency + w3·hit_rate + w4·source_weight`，权重由 `MemoryConfig.context.scoring` 投影，保留 confidence-only fallback”。
+2. 本地代码复核表明 blocker 不成立：[memory/src/context/CandidateCollector.cpp](../../memory/src/context/CandidateCollector.cpp) 已在 011 之后具备稳定的 decay seam，[memory/include/IFactStore.h](../../memory/include/IFactStore.h) / [memory/include/IExperienceStore.h](../../memory/include/IExperienceStore.h) 只需补 raw scoring signal，不需要扩 shared contracts 或新增 schema migration。
+3. 外部参考采用 CrewAI Memory 文档：其 recall 使用 composite scoring 混合 recency、similarity 与 importance，并允许按场景调节权重；这直接支撑本轮把 DASALL 的 multi-factor scoring 收口为 `confidence + recency + hit_rate + source_weight` 的配置驱动组合评分，而不是把评分硬编码进 store。
+
+### 改动
+
+1. 更新 [memory/include/config/MemoryConfig.h](../../memory/include/config/MemoryConfig.h) 与 [memory/src/config/MemoryConfigProjector.cpp](../../memory/src/config/MemoryConfigProjector.cpp)，新增 `ContextConfig::ScoringConfig` 与 profile 默认投影；同步更新 [tests/unit/memory/MemoryInterfaceCompileTest.cpp](../../tests/unit/memory/MemoryInterfaceCompileTest.cpp) 与 [tests/integration/memory/MemoryProfileCompatibilityTest.cpp](../../tests/integration/memory/MemoryProfileCompatibilityTest.cpp) 锁定新配置面。
+2. 更新 [memory/include/IFactStore.h](../../memory/include/IFactStore.h)、[memory/include/IExperienceStore.h](../../memory/include/IExperienceStore.h)、[memory/src/store/sqlite/SqliteMemoryStore.cpp](../../memory/src/store/sqlite/SqliteMemoryStore.cpp) 与 [tests/mocks/include/FakeMemoryStore.h](../../tests/mocks/include/FakeMemoryStore.h)，在 query result 中新增 `recency_score_by_*` / `hit_rate_score_by_*` raw signal，并保留既有 `decay_weight_by_*` 语义。
+3. 更新 [memory/src/context/CandidateCollector.cpp](../../memory/src/context/CandidateCollector.cpp)，新增 `composite_score_or_fallback(...)`、`fact_source_weight(...)`、`experience_source_weight(...)`，让 fact / experience 排序切换到配置驱动的组合评分，并在 `composite_enabled=false` 时回退到 confidence-only 排序。
+4. 新增 [tests/unit/memory/CandidateCollectorCompositeScoringTest.cpp](../../tests/unit/memory/CandidateCollectorCompositeScoringTest.cpp) 与 [tests/unit/memory/BudgetAllocatorScoringDriftTest.cpp](../../tests/unit/memory/BudgetAllocatorScoringDriftTest.cpp)，并更新 [tests/unit/memory/CMakeLists.txt](../../tests/unit/memory/CMakeLists.txt) 完成 discoverability wiring，分别锁定排序行为与预算防漂移语义。
+5. 更新 [docs/deliverables/MEM-EVAL-2026-05-31-memory子系统落地评估与生产级缺口治理任务规划.md](../deliverables/MEM-EVAL-2026-05-31-memory子系统落地评估与生产级缺口治理任务规划.md)、[docs/todos/DASALL_子系统查漏补缺专项记录.md](../todos/DASALL_子系统查漏补缺专项记录.md)，并新增 [docs/todos/memory/deliverables/WP-MEM-GAP-012-composite-scoring-closeout.md](../todos/memory/deliverables/WP-MEM-GAP-012-composite-scoring-closeout.md) 固定独立 closeout 口径。
+
+### 验证
+
+1. `Build_CMakeTools(buildTargets=["dasall_memory_interface_compile_unit_test","dasall_memory_profile_compatibility_integration_test"])`
+   - 结果：通过。
+2. `RunCtest_CMakeTools(tests=["MemoryInterfaceCompileTest","MemoryProfileCompatibilityTest"])`
+   - 结果：通过，2/2。
+3. `Build_CMakeTools(buildTargets=["dasall_memory_candidate_collector_composite_scoring_unit_test","dasall_memory_budget_allocator_scoring_drift_unit_test"])`
+   - 结果：通过。
+4. `RunCtest_CMakeTools(tests=["CandidateCollectorCompositeScoringTest","BudgetAllocatorScoringDriftTest"])`
+   - 结果：通过，2/2。
+5. `RunCtest_CMakeTools(tests=["MemoryInterfaceCompileTest","MemoryProfileCompatibilityTest","CandidateCollectorTest","CandidateCollectorVectorOffTest","BudgetAllocatorTest","MemoryRetentionDecayTest","SqliteMemoryStoreTest"])`
+   - 结果：通过，7/7。
+
+### 结果
+
+1. `WP-MEM-GAP-012 / GAP-P2-D / MEM-E03` 已闭合；Memory 现已具备可配置的 multi-factor candidate scoring，能稳定让近期高频且证据更完整的候选压过单一高置信旧候选。
+2. 本轮没有扩 shared contracts，也没有把评分策略下沉为 store 预混合分数；011 提供的热度元数据与 touch seam 被保留为 raw signal，并由 collector 统一组合。
+3. Memory 当前剩余 V2 焦点从 `WP-MEM-GAP-012 / -013` 收敛为 `WP-MEM-GAP-013` 与更高层质量 SLO / soak gate；composite scoring 不再是未闭合缺口。
+
 ## 记录 #885
 
 - 日期：2026-06-17

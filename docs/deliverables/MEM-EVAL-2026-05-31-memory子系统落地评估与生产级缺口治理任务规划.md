@@ -41,9 +41,9 @@
 | 可观测性（log/metric/audit/trace） | [memory/src/observability/MemoryObservability.cpp](../../memory/src/observability/MemoryObservability.cpp) 482 行；`MemoryProductionLoggingIntegrationTest` / `MemoryObservabilityBridgeTest` 端到端覆盖 | **达成**（生产侧 sink 已直连，**比 runtime 子系统更完整**） |
 | 业务链贯通（Runtime ↔ Memory ↔ SQLite ↔ Vector ↔ Profile ↔ Observability） | unary、resume、recovery、context-assemble、writeback、maintenance、failure-injection、checkpoint-busy、profile-compat、production-logging 等 11 条集成测全部存在 | **可贯通** |
 | 真实落地 vs 桩 | 无空壳实现；`memory/src/MemoryBuildSkeleton.cpp` 仅 4 行历史 namespace 文件可清理；所有主要组件均含真实业务体（store 1493 / orchestrator 814 / writeback 693 / vector backend 713 / observability 482 / manager 482 / schema migrator 406 / row mappers 408 / conflict resolver 371 / compression coordinator 320 / budget allocator 313 / detached vector factory 280 / candidate collector 246 / working board 244） | **无虚假实现** |
-| 距离生产级 GA | 仍欠：installed gate 绿色记录、ProgrammaticMemory 持久化、composite scoring、遗忘曲线 | **未到生产级** |
+| 距离生产级 GA | 仍欠：installed gate 绿色记录、ProgrammaticMemory 持久化、desktop_full 默认开向量灰度 | **未到生产级** |
 
-总体结论：memory 已完成**架构 / 接口 / 持久化 / 上下文装配 / 写回 / 维护 / 观测性**的真实落地，与 runtime 同处"骨架达成、深度需补"水位；区别于 runtime 缺口的"信号外送 / 跨版本 / 并发证据"，memory 当前剩余缺口集中在**质量层（评分与遗忘策略）与运营层（长跑证据 / 演进契约）**。GA 前仍需继续收敛剩余 P0 项。
+总体结论：memory 已完成**架构 / 接口 / 持久化 / 上下文装配 / 写回 / 维护 / 观测性**的真实落地，与 runtime 同处"骨架达成、深度需补"水位；区别于 runtime 缺口的"信号外送 / 跨版本 / 并发证据"，memory 当前剩余缺口集中在**质量层（默认向量灰度与更高层质量 SLO）与运营层（installed / soak 证据）**。GA 前仍需继续收敛剩余 P0 项。
 
 ---
 
@@ -112,7 +112,7 @@
 | §6.12.3 ConflictResolver | 已通过 [memory/include/config/MemoryConfig.h](../../memory/include/config/MemoryConfig.h) `ConflictConfig.embedding_similarity_threshold`、[memory/src/conflict/MemoryConflictResolver.cpp](../../memory/src/conflict/MemoryConflictResolver.cpp) 可选 `IEmbeddingAdapter*` 与余弦相似度辅助收口跨语言 / 同义改写歧义路径 | 结构性缺口已清零；后续仅继续做 precision/recall 与更高层质量指标治理 | GAP-P2-A 已闭合（2026-06-15） |
 | §6.12.5 FactQuery 跨 session | 已通过 [memory/include/IFactStore.h](../../memory/include/IFactStore.h) `query_facts_by_user(...)`、[memory/src/store/sqlite/SqliteMemoryStore.cpp](../../memory/src/store/sqlite/SqliteMemoryStore.cpp) user-scoped query、[sql/memory/V003__fact_user_lookup_index.sql](../../sql/memory/V003__fact_user_lookup_index.sql) 与 [memory/src/context/CandidateCollector.cpp](../../memory/src/context/CandidateCollector.cpp) user-level facts 装配闭合 | 结构性缺口已清零；后续只继续治理 `< 50ms` latency / profile 基线与更高层 scoring | GAP-P2-B 已闭合（2026-06-17） |
 | §4.1.1 / MemoryOS 对齐 遗忘曲线权重衰减 | 已通过 `last_accessed_at` / `hit_count`、指数衰减权重、access touch 与 decay purge 收口 fact / experience 热度治理 | 结构性缺口已清零；后续只继续在 012 上扩展多因子 scoring | GAP-P2-C 已闭合（2026-06-17） |
-| §4.1.1 / CrewAI 对齐 composite scoring | CandidateCollector 评分仅 confidence + recency 阈值 | 候选评分维度单一，影响 BudgetAllocator 选择质量 | GAP-P2-D（MEM-E03） |
+| §4.1.1 / CrewAI 对齐 composite scoring | 已通过 [memory/include/config/MemoryConfig.h](../../memory/include/config/MemoryConfig.h) `ContextConfig::ScoringConfig`、[memory/src/config/MemoryConfigProjector.cpp](../../memory/src/config/MemoryConfigProjector.cpp) 权重投影、[memory/src/context/CandidateCollector.cpp](../../memory/src/context/CandidateCollector.cpp) `confidence + recency + hit_rate + source_weight` 组合评分与 confidence-only fallback 收口 | 结构性缺口已清零；后续只继续治理 desktop_full 默认开向量与更高层 recall / quality 指标 | GAP-P2-D 已闭合（2026-06-18） |
 | §6.5.1a ProgrammaticMemory | 完全空白，仅 asset ref 字段冻结 | 设计已声明 MEM-E06 后置，依赖 llm 资产治理 | GAP-P3-A（MEM-E06） |
 | §6.6 接口数量 | `IFactStore` / `IExperienceStore` / `ISessionStore` / `ISummaryStore` / `IMaintenanceStore` / `ITransactionalStore` 6 个 mini-interface 全部由 `SqliteMemoryStore` 单类实现 | 与 §6.6 决策"逻辑职责保留 + 实现统一"一致，但接口数量略冗余 | GAP-P3-B（设计冗余清理） |
 | 长跑 / 并发 / soak 证据 | 已通过 [tests/unit/memory/MemoryConcurrencyStressTest.cpp](../../tests/unit/memory/MemoryConcurrencyStressTest.cpp) 1k+ 轮 manager 并发压力、[tests/integration/memory/MemoryLongRunningSoakTest.cpp](../../tests/integration/memory/MemoryLongRunningSoakTest.cpp) 压缩长跑 soak，以及 [scripts/ci/memory_tsan_stress.sh](../../scripts/ci/memory_tsan_stress.sh) / [.github/workflows/ci.yml](../../.github/workflows/ci.yml) 的 `memory_tsan_stress` 复跑 | 结构性缺口已清零；后续只保留 installed / qemu 与更高层 release-soak 采样 | GAP-P0-C 已闭合（2026-06-02） |
@@ -167,7 +167,7 @@
 | 跨 profile 裁剪 | desktop_full / edge_balanced / edge_minimal | k8s feature gates | ✅ 对齐 |
 | 跨 session 事实共享 | `query_facts_by_user(...)` + `idx_facts_user_id` + `MemoryCrossSessionFactQueryTest` 已闭合 user-level 共享事实主链 | MemoryOS user profile / Letta core memory | ✅ 已闭合（2026-06-17） |
 | 遗忘曲线 / 衰减权重 | `last_accessed_at` + `hit_count` + exponential decay + touch/update + cold purge 已闭合 | MemoryOS heat 衰减 / Ebbinghaus | ✅ 已闭合（GAP-P2-C） |
-| Composite scoring | 仅 confidence × recency 阈值 | CrewAI multi-factor scoring | ⚠️ 需补（GAP-P2-D） |
+| Composite scoring | `MemoryConfig.context.scoring` + `CandidateCollector` 已闭合 `confidence + recency + hit_rate + source_weight` 组合评分，并保留 confidence-only fallback | CrewAI multi-factor scoring | ✅ 已闭合（GAP-P2-D，2026-06-18） |
 
 **冗余 / 不合适的设计**：
 - 6 个 mini-store interface 全部由 `SqliteMemoryStore` 单实现，与 §6.6 决策一致但**接口数量冗余**（GAP-P3-B）。
@@ -224,8 +224,8 @@
 
 - **GAP-P2-A ConflictResolver 向量相似度辅助（MEM-E09）**（已闭合，2026-06-15）：[memory/include/config/MemoryConfig.h](../../memory/include/config/MemoryConfig.h)、[memory/src/config/MemoryConfigProjector.cpp](../../memory/src/config/MemoryConfigProjector.cpp)、[memory/src/conflict/MemoryConflictResolver.h](../../memory/src/conflict/MemoryConflictResolver.h)、[memory/src/conflict/MemoryConflictResolver.cpp](../../memory/src/conflict/MemoryConflictResolver.cpp) 已引入 `ConflictConfig.embedding_similarity_threshold`、可选 `IEmbeddingAdapter*` 与 embedding 余弦相似度辅助；[tests/unit/memory/MemoryConflictResolverWithEmbeddingTest.cpp](../../tests/unit/memory/MemoryConflictResolverWithEmbeddingTest.cpp) 已覆盖跨语言同义改写 high-similarity Supersede 与低相似度 Coexist 负例，且 `MemoryInterfaceCompileTest` / `MemoryProfileCompatibilityTest` 已锁定配置投影面。
 - **GAP-P2-B 跨 session FactQuery（MEM-E05）**（已闭合，2026-06-17）：[memory/include/IFactStore.h](../../memory/include/IFactStore.h)、[memory/src/store/sqlite/SqliteMemoryStore.cpp](../../memory/src/store/sqlite/SqliteMemoryStore.cpp)、[sql/memory/V003__fact_user_lookup_index.sql](../../sql/memory/V003__fact_user_lookup_index.sql) 与 [memory/src/context/CandidateCollector.cpp](../../memory/src/context/CandidateCollector.cpp) 已新增 user-scoped fact query seam、SQLite user_id 索引与 ContextOrchestrator 消费路径；[tests/integration/memory/MemoryCrossSessionFactQueryTest.cpp](../../tests/integration/memory/MemoryCrossSessionFactQueryTest.cpp) 与 [tests/unit/memory/SchemaMigrationV003Test.cpp](../../tests/unit/memory/SchemaMigrationV003Test.cpp) 已闭合行为与迁移证据。
-- **GAP-P2-C 遗忘曲线 / 权重衰减（MEM-E02）**：retention 算法升级，引入 last_used_at / hit_count / decay_factor。
-- **GAP-P2-D CandidateCollector composite scoring（MEM-E03）**：confidence × recency × hit_rate × source_weight。
+- **GAP-P2-C 遗忘曲线 / 权重衰减（MEM-E02）**（已闭合，2026-06-17）：retention 算法已完成 `last_accessed_at` / `hit_count` / exponential decay / access touch / cold purge 闭环。
+- **GAP-P2-D CandidateCollector composite scoring（MEM-E03）**（已闭合，2026-06-18）：[memory/include/config/MemoryConfig.h](../../memory/include/config/MemoryConfig.h)、[memory/src/config/MemoryConfigProjector.cpp](../../memory/src/config/MemoryConfigProjector.cpp)、[memory/include/IFactStore.h](../../memory/include/IFactStore.h)、[memory/include/IExperienceStore.h](../../memory/include/IExperienceStore.h)、[memory/src/store/sqlite/SqliteMemoryStore.cpp](../../memory/src/store/sqlite/SqliteMemoryStore.cpp) 与 [memory/src/context/CandidateCollector.cpp](../../memory/src/context/CandidateCollector.cpp) 已引入 `ContextConfig::ScoringConfig`、raw recency / hit-rate signal 与 `confidence + recency + hit_rate + source_weight` 组合评分；[tests/unit/memory/CandidateCollectorCompositeScoringTest.cpp](../../tests/unit/memory/CandidateCollectorCompositeScoringTest.cpp) 与 [tests/unit/memory/BudgetAllocatorScoringDriftTest.cpp](../../tests/unit/memory/BudgetAllocatorScoringDriftTest.cpp) 已闭合排序与预算防漂移证据。
 - **GAP-P2-E desktop_full 默认开启 sqlite-vss 灰度切换**：依赖 GAP-P0-B + GAP-P0-C 提供生产证据。
 
 ### 6.4 P3（运营 / 清理 / 演进）
@@ -424,14 +424,21 @@
 
 #### WP-MEM-GAP-012 Composite scoring（GAP-P2-D / MEM-E03）
 
-- **代码目标**
-  - 在 [memory/src/context/CandidateCollector.cpp](../../memory/src/context/CandidateCollector.cpp) 增加 `CompositeScoreFunction`：`score = w1·confidence + w2·recency + w3·hit_rate + w4·source_weight`。
-  - 权重由 MemoryConfig.context.scoring 投影；保留 confidence-only 单路径作为 fallback。
-- **测试目标**
-  - `CandidateCollectorCompositeScoringTest`、`BudgetAllocatorScoringDriftTest`。
-- **验收命令**
-  - `ctest --test-dir build-ci -R "CandidateCollectorCompositeScoring|BudgetAllocatorScoringDrift" --output-on-failure`
-- **阻塞 / 解阻**：建议在 GAP-P2-C 完成后联动落地。
+- **状态**：已完成（2026-06-18）。
+- **代码结果**
+  - [memory/include/config/MemoryConfig.h](../../memory/include/config/MemoryConfig.h) 与 [memory/src/config/MemoryConfigProjector.cpp](../../memory/src/config/MemoryConfigProjector.cpp) 已新增 `ContextConfig::ScoringConfig`，提供 `confidence_weight`、`recency_weight`、`hit_rate_weight`、`source_weight` 四个权重与 `composite_enabled` fallback 开关；默认 profile 继续走 composite path。
+  - [memory/include/IFactStore.h](../../memory/include/IFactStore.h)、[memory/include/IExperienceStore.h](../../memory/include/IExperienceStore.h)、[memory/src/store/sqlite/SqliteMemoryStore.cpp](../../memory/src/store/sqlite/SqliteMemoryStore.cpp) 与 [tests/mocks/include/FakeMemoryStore.h](../../tests/mocks/include/FakeMemoryStore.h) 已在 query result 中新增 `recency_score_by_*` / `hit_rate_score_by_*` raw signal，保留 011 闭合的 decay seam 不回退。
+  - [memory/src/context/CandidateCollector.cpp](../../memory/src/context/CandidateCollector.cpp) 现已用 `confidence + recency + hit_rate + source_weight` 组合评分对 fact / experience 排序，并按 provenance completeness 计算 `source_weight`；当 `composite_enabled=false` 或权重失效时回退到 confidence-only 排序。
+  - [tests/unit/memory/CMakeLists.txt](../../tests/unit/memory/CMakeLists.txt) 已新增 `dasall_memory_candidate_collector_composite_scoring_unit_test` 与 `dasall_memory_budget_allocator_scoring_drift_unit_test` discoverability wiring。
+- **测试结果**
+  - 新增 [tests/unit/memory/CandidateCollectorCompositeScoringTest.cpp](../../tests/unit/memory/CandidateCollectorCompositeScoringTest.cpp)，验证 composite scoring 会让近期高频且来源完整的候选压过单一高置信旧候选，并验证关闭 composite 后可回退到 confidence-only 排序。
+  - 新增 [tests/unit/memory/BudgetAllocatorScoringDriftTest.cpp](../../tests/unit/memory/BudgetAllocatorScoringDriftTest.cpp)，验证候选顺序变化不会改变 `BudgetAllocator` 的 slot budget / trim actions。
+  - 紧邻回归 [tests/unit/memory/CandidateCollectorTest.cpp](../../tests/unit/memory/CandidateCollectorTest.cpp)、[tests/unit/memory/CandidateCollectorVectorOffTest.cpp](../../tests/unit/memory/CandidateCollectorVectorOffTest.cpp)、[tests/unit/memory/BudgetAllocatorTest.cpp](../../tests/unit/memory/BudgetAllocatorTest.cpp)、[tests/unit/memory/MemoryRetentionDecayTest.cpp](../../tests/unit/memory/MemoryRetentionDecayTest.cpp)、[tests/unit/memory/SqliteMemoryStoreTest.cpp](../../tests/unit/memory/SqliteMemoryStoreTest.cpp)、[tests/unit/memory/MemoryInterfaceCompileTest.cpp](../../tests/unit/memory/MemoryInterfaceCompileTest.cpp) 与 [tests/integration/memory/MemoryProfileCompatibilityTest.cpp](../../tests/integration/memory/MemoryProfileCompatibilityTest.cpp) 均保持绿色。
+- **验收证据**
+  - `Build_CMakeTools(buildTargets=["dasall_memory_candidate_collector_composite_scoring_unit_test","dasall_memory_budget_allocator_scoring_drift_unit_test"])`：通过。
+  - `RunCtest_CMakeTools(tests=["CandidateCollectorCompositeScoringTest","BudgetAllocatorScoringDriftTest"])`：通过，2/2。
+  - `RunCtest_CMakeTools(tests=["MemoryInterfaceCompileTest","MemoryProfileCompatibilityTest","CandidateCollectorTest","CandidateCollectorVectorOffTest","BudgetAllocatorTest","MemoryRetentionDecayTest","SqliteMemoryStoreTest"])`：通过，7/7。
+- **阻塞 / 解阻**：已解阻。`WP-MEM-GAP-011` 已在上一轮闭合 decay metadata / touch seam /排序基线，本轮直接在同一 scoring seam 上扩维，不需要额外 blocker round。
 
 #### WP-MEM-GAP-013 desktop_full 默认开启 sqlite-vss 灰度（GAP-P2-E）
 
@@ -506,7 +513,7 @@ flowchart LR
 执行建议：
 1. **剩余 P0**：WP-MEM-GAP-004 继续单独推进；WP-MEM-GAP-001 / -002 / -003 已于 2026-06-02 闭合。
 2. **第二批（P1）**：WP-MEM-GAP-005 / -006 / -007 / -008 已于 2026-06-03 全部闭合；P1 entry tasks 不再剩余未收口项。
-3. **第三批（P2 演进）**：WP-MEM-GAP-009 已于 2026-06-15 闭合，WP-MEM-GAP-010 与 WP-MEM-GAP-011 已于 2026-06-17 闭合；剩余 WP-MEM-GAP-012 / -013（链式依赖）。
+3. **第三批（P2 演进）**：WP-MEM-GAP-009 已于 2026-06-15 闭合，WP-MEM-GAP-010 与 WP-MEM-GAP-011 已于 2026-06-17 闭合，WP-MEM-GAP-012 已于 2026-06-18 闭合；剩余 WP-MEM-GAP-013。
 4. **第四批（P3 清理与运营）**：WP-MEM-GAP-014 ← llm 资产；WP-MEM-GAP-015 / -016 / -017；WP-MEM-GAP-018 在 P0/P1 全部 Done 后执行。
 
 ---
@@ -540,7 +547,7 @@ flowchart LR
 memory 子系统已达到 **可生产部署 v1** 水位：架构 / 详设目标 100% 落地、无虚假实现、业务链贯通、ADR 边界守门、可观测性 sink 直连、profile 兼容齐备。
 
 距离 **GA 生产级** 的真实缺口集中在两个象限：
-1. **质量层**：`GAP-P0-A` 与 `GAP-P0-B` 已于 2026-06-02 闭合，`GAP-P1-A` 已于 2026-06-03 把 token 估算收口到 `cl100k_base` 兼容实现，`GAP-P2-A` 已于 2026-06-15 闭合，`GAP-P2-B` 与 `GAP-P2-C` 已于 2026-06-17 闭合；当前剩余关键质量缺口收敛为后续 composite scoring / desktop_full 默认开向量治理。
+1. **质量层**：`GAP-P0-A` 与 `GAP-P0-B` 已于 2026-06-02 闭合，`GAP-P1-A` 已于 2026-06-03 把 token 估算收口到 `cl100k_base` 兼容实现，`GAP-P2-A` 已于 2026-06-15 闭合，`GAP-P2-B` 与 `GAP-P2-C` 已于 2026-06-17 闭合，`GAP-P2-D` 已于 2026-06-18 闭合；当前剩余关键质量缺口收敛为 desktop_full 默认开向量治理与更高层质量 SLO。
 2. **运营层**：并发 / 长跑 / TSAN 压力门（GAP-P0-C）已于 2026-06-02 通过 build-tree + TSAN 证据闭合；`GAP-P1-B` 已于 2026-06-03 完成 daemon-owned MaintenanceTicker 挂载；当前剩余运营焦点收敛为 installed gate（GAP-P0-D）的更高层绿色记录与 soak 采样（GAP-P3-E）。
 
 其余 P2 / P3 缺口（MEM-E02..E09）为设计文档已显式声明的演进项，不属于实现缺陷。GA 收敛优先级建议：**剩余 P0 一项 → P1 两项 → P2 链式 → P3 选择性**。
@@ -574,7 +581,7 @@ memory 子系统已达到 **可生产部署 v1** 水位：架构 / 详设目标 
 | **V2** | **WP-MEM-GAP-009** | ConflictResolver 向量相似度辅助（MEM-E09，已完成 2026-06-15） |
 | **V2** | **WP-MEM-GAP-010** | 跨 session FactQuery（MEM-E05，已完成 2026-06-17） |
 | **V2** | **WP-MEM-GAP-011** | 遗忘曲线 / 权重衰减（MEM-E02，已完成 2026-06-17） |
-| **V2** | **WP-MEM-GAP-012** | Composite scoring（MEM-E03） |
+| **V2** | **WP-MEM-GAP-012** | Composite scoring（MEM-E03，已完成 2026-06-18） |
 | **V2** | **WP-MEM-GAP-013** | desktop_full 默认开启 sqlite-vss 灰度 |
 | **V2** | **WP-MEM-GAP-019** | 分层递归摘要（MemGPT / MemoryOS dialog→topic→user pages） |
 | **V2** | **WP-MEM-GAP-020** | Memory 质量 SLO 与 recall@k / summary-faithfulness 指标 |
@@ -664,6 +671,6 @@ flowchart TB
 执行建议：
 1. V1 GA 收敛后（P0 + P1 全绿、installed gate 上线、production composition 已注入 LLM Summarizer + Embedding）才启动 V2。
 2. **V2 第一波并行**：WP-MEM-GAP-019（分层摘要）+ WP-MEM-GAP-011（遗忘曲线）—— `WP-MEM-GAP-009` 已于 2026-06-15 闭合，`WP-MEM-GAP-010` 已于 2026-06-17 闭合，剩余项仍保持低耦合。
-3. **V2 第二波**：WP-MEM-GAP-012（composite scoring，依赖 -011） + WP-MEM-GAP-013（desktop_full 默认开向量）。
+3. **V2 第二波**：`WP-MEM-GAP-012` 已于 2026-06-18 闭合；当前该波次仅剩 `WP-MEM-GAP-013`（desktop_full 默认开向量）。
 4. **V2 第三波（质量量化）**：WP-MEM-GAP-020（质量 SLO）+ WP-MEM-GAP-021（反馈闭环）。这两项是 V2 验收门的核心证据来源。
 5. WP-MEM-GAP-018（soak gate 增强）与 V2 第三波同步，把质量 SLO 落到长跑证据中。

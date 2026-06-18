@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cstdint>
 #include <string_view>
 
 #include "util/TokenEstimator.h"
@@ -48,19 +49,101 @@ void add_optional_string_vector_tokens(
 }
 
 template <typename MetadataMap>
-[[nodiscard]] double decay_weight_or_default(
+[[nodiscard]] double bounded_score_or_default(
     const MetadataMap& metadata,
-    const std::optional<std::string>& id) {
+    const std::optional<std::string>& id,
+    double default_value) {
   if (!id.has_value() || id->empty()) {
-    return 1.0;
+    return default_value;
   }
 
   const auto it = metadata.find(*id);
   if (it == metadata.end()) {
-    return 1.0;
+    return default_value;
   }
 
-  return it->second;
+  return std::clamp(it->second, 0.0, 1.0);
+}
+
+[[nodiscard]] double normalize_percent_score(
+    const std::optional<std::uint32_t>& score) {
+  if (!score.has_value()) {
+    return 0.0;
+  }
+
+  return std::clamp(static_cast<double>(*score) / 100.0, 0.0, 1.0);
+}
+
+[[nodiscard]] double fact_source_weight(const contracts::MemoryFact& fact) {
+  double weight = 0.10;
+  if (fact.source_turn_ids.has_value() && !fact.source_turn_ids->empty()) {
+    weight += 0.30;
+  }
+  if (fact.source_observation_refs.has_value() &&
+      !fact.source_observation_refs->empty()) {
+    weight += 0.35;
+  }
+  if (fact.evidence_digest.has_value() && !fact.evidence_digest->empty()) {
+    weight += 0.15;
+  }
+  if (fact.fact_type.has_value() && !fact.fact_type->empty()) {
+    weight += 0.05;
+  }
+  if (fact.tags.has_value() && !fact.tags->empty()) {
+    weight += 0.05;
+  }
+  return std::clamp(weight, 0.0, 1.0);
+}
+
+[[nodiscard]] double experience_source_weight(
+    const contracts::ExperienceMemory& experience) {
+  double weight = 0.10;
+  if (experience.source_fact_ids.has_value() &&
+      !experience.source_fact_ids->empty()) {
+    weight += 0.35;
+  }
+  if (experience.source_turn_ids.has_value() &&
+      !experience.source_turn_ids->empty()) {
+    weight += 0.25;
+  }
+  if (experience.applicable_domains.has_value() &&
+      !experience.applicable_domains->empty()) {
+    weight += 0.15;
+  }
+  if (experience.risk_notes.has_value() && !experience.risk_notes->empty()) {
+    weight += 0.10;
+  }
+  if (experience.tags.has_value() && !experience.tags->empty()) {
+    weight += 0.05;
+  }
+  return std::clamp(weight, 0.0, 1.0);
+}
+
+[[nodiscard]] double composite_score_or_fallback(
+    const ContextConfig::ScoringConfig& scoring,
+    double confidence,
+    double recency,
+    double hit_rate,
+    double source_weight) {
+  if (!scoring.composite_enabled) {
+    return confidence;
+  }
+
+  const auto confidence_weight = std::max(0.0, scoring.confidence_weight);
+  const auto recency_weight = std::max(0.0, scoring.recency_weight);
+  const auto hit_rate_weight = std::max(0.0, scoring.hit_rate_weight);
+  const auto provenance_weight = std::max(0.0, scoring.source_weight);
+  const auto total_weight =
+      confidence_weight + recency_weight + hit_rate_weight + provenance_weight;
+  if (total_weight <= 0.0) {
+    return confidence;
+  }
+
+  return ((confidence_weight * confidence) +
+          (recency_weight * recency) +
+          (hit_rate_weight * hit_rate) +
+          (provenance_weight * source_weight)) /
+         total_weight;
 }
 
 }  // namespace
@@ -169,12 +252,21 @@ std::vector<contracts::MemoryFact> CandidateCollector::query_relevant_facts(
   }
 
   auto facts = std::move(result.facts);
-  std::stable_sort(facts.begin(), facts.end(), [&result](const contracts::MemoryFact& left,
-                                                         const contracts::MemoryFact& right) {
-    const auto left_decay = decay_weight_or_default(result.decay_weight_by_fact_id, left.fact_id);
-    const auto right_decay = decay_weight_or_default(result.decay_weight_by_fact_id, right.fact_id);
-    const auto left_score = static_cast<double>(left.confidence_score.value_or(0U)) * left_decay;
-    const auto right_score = static_cast<double>(right.confidence_score.value_or(0U)) * right_decay;
+  std::stable_sort(facts.begin(), facts.end(), [this, &result](
+                                                           const contracts::MemoryFact& left,
+                                                           const contracts::MemoryFact& right) {
+    const auto left_score = composite_score_or_fallback(
+        context_config_.scoring,
+        normalize_percent_score(left.confidence_score),
+        bounded_score_or_default(result.recency_score_by_fact_id, left.fact_id, 1.0),
+        bounded_score_or_default(result.hit_rate_score_by_fact_id, left.fact_id, 0.0),
+        fact_source_weight(left));
+    const auto right_score = composite_score_or_fallback(
+        context_config_.scoring,
+        normalize_percent_score(right.confidence_score),
+        bounded_score_or_default(result.recency_score_by_fact_id, right.fact_id, 1.0),
+        bounded_score_or_default(result.hit_rate_score_by_fact_id, right.fact_id, 0.0),
+        fact_source_weight(right));
     if (left_score != right_score) {
       return left_score > right_score;
     }
@@ -207,18 +299,26 @@ CandidateCollector::query_relevant_experiences(
   query.exclude_expired = true;
   query.limit = 20;
   auto result = experience_store_.query_experiences(query);
-  auto experiences = std::move(result.experiences);
-  std::stable_sort(experiences.begin(), experiences.end(), [&result](
-                                                          const contracts::ExperienceMemory& left,
-                                                          const contracts::ExperienceMemory& right) {
-    const auto left_decay = decay_weight_or_default(
-        result.decay_weight_by_experience_id, left.experience_id);
-    const auto right_decay = decay_weight_or_default(
-        result.decay_weight_by_experience_id, right.experience_id);
-    const auto left_score =
-        static_cast<double>(left.effectiveness_score.value_or(0U)) * left_decay;
-    const auto right_score =
-        static_cast<double>(right.effectiveness_score.value_or(0U)) * right_decay;
+    auto experiences = std::move(result.experiences);
+    std::stable_sort(experiences.begin(), experiences.end(), [this, &result](
+                                const contracts::ExperienceMemory& left,
+                                const contracts::ExperienceMemory& right) {
+    const auto left_score = composite_score_or_fallback(
+      context_config_.scoring,
+      normalize_percent_score(left.effectiveness_score),
+      bounded_score_or_default(
+        result.recency_score_by_experience_id, left.experience_id, 1.0),
+      bounded_score_or_default(
+        result.hit_rate_score_by_experience_id, left.experience_id, 0.0),
+      experience_source_weight(left));
+    const auto right_score = composite_score_or_fallback(
+      context_config_.scoring,
+      normalize_percent_score(right.effectiveness_score),
+      bounded_score_or_default(
+        result.recency_score_by_experience_id, right.experience_id, 1.0),
+      bounded_score_or_default(
+        result.hit_rate_score_by_experience_id, right.experience_id, 0.0),
+      experience_source_weight(right));
     if (left_score != right_score) {
       return left_score > right_score;
     }

@@ -107,6 +107,7 @@ void test_memory_module_is_no_longer_placeholder_only() {
 
 void test_memory_context_supporting_types_compile_and_expose_expected_defaults() {
   using dasall::memory::ContextAssemblyResult;
+     using dasall::memory::ContextConfig;
   using dasall::memory::MemoryContextRequest;
   using dasall::tests::support::assert_equal;
   using dasall::tests::support::assert_true;
@@ -170,6 +171,18 @@ void test_memory_context_supporting_types_compile_and_expose_expected_defaults()
               "fresh context assembly results should start without warnings");
   assert_true(!result.degraded,
               "fresh context assembly results should not report degraded execution");
+
+     const ContextConfig::ScoringConfig scoring_defaults{};
+     assert_true(scoring_defaults.composite_enabled,
+                                   "context scoring should default to the composite path once retention decay is available");
+     assert_true(scoring_defaults.confidence_weight > 0.0,
+                                   "context scoring should expose a positive confidence weight");
+     assert_true(scoring_defaults.recency_weight > 0.0,
+                                   "context scoring should expose a positive recency weight");
+     assert_true(scoring_defaults.hit_rate_weight > 0.0,
+                                   "context scoring should expose a positive hit-rate weight");
+     assert_true(scoring_defaults.source_weight >= 0.0,
+                                   "context scoring should expose a non-negative source weight");
 }
 
 void test_store_result_compiles_as_an_independent_public_surface() {

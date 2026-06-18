@@ -172,12 +172,20 @@ class FakeMemoryStore final : public memory::IMemoryStore {
         continue;
       }
 
+      const auto access_metadata = access_metadata_for_fact(fact_id);
+      result.recency_score_by_fact_id[fact_id] = compute_recency_score(
+          config_.maintenance.decay,
+          now_millis,
+          access_metadata.last_accessed_at,
+          fact.created_at.value_or(0));
+      result.hit_rate_score_by_fact_id[fact_id] =
+          compute_hit_rate_score(access_metadata.hit_count);
       result.decay_weight_by_fact_id[fact_id] = compute_decay_weight(
           config_.maintenance.decay,
           now_millis,
-          access_metadata_for_fact(fact_id).last_accessed_at,
+          access_metadata.last_accessed_at,
           fact.created_at.value_or(0),
-          access_metadata_for_fact(fact_id).hit_count);
+          access_metadata.hit_count);
       result.facts.push_back(fact);
       if (query.limit > 0 && static_cast<int>(result.facts.size()) >= query.limit) {
         break;
@@ -273,12 +281,20 @@ class FakeMemoryStore final : public memory::IMemoryStore {
         continue;
       }
 
+      const auto access_metadata = access_metadata_for_experience(experience_id);
+      result.recency_score_by_experience_id[experience_id] = compute_recency_score(
+          config_.maintenance.decay,
+          now_millis,
+          access_metadata.last_accessed_at,
+          experience.created_at.value_or(0));
+      result.hit_rate_score_by_experience_id[experience_id] =
+          compute_hit_rate_score(access_metadata.hit_count);
       result.decay_weight_by_experience_id[experience_id] = compute_decay_weight(
           config_.maintenance.decay,
           now_millis,
-          access_metadata_for_experience(experience_id).last_accessed_at,
+          access_metadata.last_accessed_at,
           experience.created_at.value_or(0),
-          access_metadata_for_experience(experience_id).hit_count);
+          access_metadata.hit_count);
       result.experiences.push_back(experience);
       if (query.limit > 0 && static_cast<int>(result.experiences.size()) >= query.limit) {
         break;
@@ -455,6 +471,25 @@ class FakeMemoryStore final : public memory::IMemoryStore {
       return 1.0;
     }
 
+    const auto recency_decay = compute_recency_score(
+        decay_config,
+        now_millis,
+        last_accessed_at,
+        created_at);
+    const auto visit_factor =
+        1.0 + std::log1p(static_cast<double>(std::max<std::int64_t>(0, hit_count - 1)));
+    return visit_factor * recency_decay;
+  }
+
+  [[nodiscard]] static double compute_recency_score(
+      const memory::MaintenanceConfig::RetentionDecayConfig& decay_config,
+      std::int64_t now_millis,
+      std::int64_t last_accessed_at,
+      std::int64_t created_at) {
+    if (!decay_config.enabled) {
+      return 1.0;
+    }
+
     const auto effective_accessed_at =
         effective_last_accessed_at(last_accessed_at, created_at);
     if (effective_accessed_at <= 0) {
@@ -463,11 +498,20 @@ class FakeMemoryStore final : public memory::IMemoryStore {
 
     const auto idle_millis = std::max<std::int64_t>(0, now_millis - effective_accessed_at);
     const auto time_constant_ms = std::max(1.0, decay_config.time_constant_ms);
-    const auto recency_decay =
-        std::exp(-static_cast<double>(idle_millis) / time_constant_ms);
-    const auto visit_factor =
-        1.0 + std::log1p(static_cast<double>(std::max<std::int64_t>(0, hit_count - 1)));
-    return visit_factor * recency_decay;
+    return std::exp(-static_cast<double>(idle_millis) / time_constant_ms);
+  }
+
+  [[nodiscard]] static double compute_hit_rate_score(std::int64_t hit_count) {
+    constexpr double kSaturationHitCount = 8.0;
+    const auto effective_hit_count = std::max<std::int64_t>(1, hit_count);
+    const auto numerator =
+        std::log1p(static_cast<double>(std::max<std::int64_t>(0, effective_hit_count - 1)));
+    const auto denominator = std::log1p(kSaturationHitCount - 1.0);
+    if (denominator <= 0.0) {
+      return 0.0;
+    }
+
+    return std::clamp(numerator / denominator, 0.0, 1.0);
   }
 
   [[nodiscard]] AccessMetadata access_metadata_for_fact(

@@ -74,12 +74,20 @@ add_executable(dasall_memory_candidate_collector_unit_test
 	CandidateCollectorTest.cpp
 )
 
+add_executable(dasall_memory_candidate_collector_composite_scoring_unit_test
+	CandidateCollectorCompositeScoringTest.cpp
+)
+
 add_executable(dasall_memory_candidate_collector_vector_off_unit_test
 	CandidateCollectorVectorOffTest.cpp
 )
 
 add_executable(dasall_memory_budget_allocator_unit_test
 	BudgetAllocatorTest.cpp
+)
+
+add_executable(dasall_memory_budget_allocator_scoring_drift_unit_test
+	BudgetAllocatorScoringDriftTest.cpp
 )
 
 add_executable(dasall_memory_tiktoken_estimator_accuracy_unit_test
@@ -285,6 +293,12 @@ target_link_libraries(dasall_memory_candidate_collector_unit_test
 		dasall_test_support
 )
 
+target_link_libraries(dasall_memory_candidate_collector_composite_scoring_unit_test
+	PRIVATE
+		dasall_memory
+		dasall_test_support
+)
+
 target_link_libraries(dasall_memory_candidate_collector_vector_off_unit_test
 	PRIVATE
 		dasall_memory
@@ -292,6 +306,12 @@ target_link_libraries(dasall_memory_candidate_collector_vector_off_unit_test
 )
 
 target_link_libraries(dasall_memory_budget_allocator_unit_test
+	PRIVATE
+		dasall_memory
+		dasall_test_support
+)
+
+target_link_libraries(dasall_memory_budget_allocator_scoring_drift_unit_test
 	PRIVATE
 		dasall_memory
 		dasall_test_support
@@ -487,12 +507,22 @@ target_include_directories(dasall_memory_candidate_collector_unit_test
 		${CMAKE_SOURCE_DIR}/memory/src
 )
 
+target_include_directories(dasall_memory_candidate_collector_composite_scoring_unit_test
+	PRIVATE
+		${CMAKE_SOURCE_DIR}/memory/src
+)
+
 target_include_directories(dasall_memory_candidate_collector_vector_off_unit_test
 	PRIVATE
 		${CMAKE_SOURCE_DIR}/memory/src
 )
 
 target_include_directories(dasall_memory_budget_allocator_unit_test
+	PRIVATE
+		${CMAKE_SOURCE_DIR}/memory/src
+)
+
+target_include_directories(dasall_memory_budget_allocator_scoring_drift_unit_test
 	PRIVATE
 		${CMAKE_SOURCE_DIR}/memory/src
 )
@@ -779,11 +809,17 @@ set_tests_properties(MemoryConcurrencyStressTest PROPERTIES LABELS "unit;memory;
 add_test(NAME CandidateCollectorTest COMMAND dasall_memory_candidate_collector_unit_test)
 set_tests_properties(CandidateCollectorTest PROPERTIES LABELS "unit;memory")
 
+add_test(NAME CandidateCollectorCompositeScoringTest COMMAND dasall_memory_candidate_collector_composite_scoring_unit_test)
+set_tests_properties(CandidateCollectorCompositeScoringTest PROPERTIES LABELS "unit;memory")
+
 add_test(NAME CandidateCollectorVectorOffTest COMMAND dasall_memory_candidate_collector_vector_off_unit_test)
 set_tests_properties(CandidateCollectorVectorOffTest PROPERTIES LABELS "unit;memory")
 
 add_test(NAME BudgetAllocatorTest COMMAND dasall_memory_budget_allocator_unit_test)
 set_tests_properties(BudgetAllocatorTest PROPERTIES LABELS "unit;memory")
+
+add_test(NAME BudgetAllocatorScoringDriftTest COMMAND dasall_memory_budget_allocator_scoring_drift_unit_test)
+set_tests_properties(BudgetAllocatorScoringDriftTest PROPERTIES LABELS "unit;memory")
 
 add_test(NAME TiktokenEstimatorAccuracyTest COMMAND dasall_memory_tiktoken_estimator_accuracy_unit_test)
 set_tests_properties(TiktokenEstimatorAccuracyTest PROPERTIES LABELS "unit;memory")

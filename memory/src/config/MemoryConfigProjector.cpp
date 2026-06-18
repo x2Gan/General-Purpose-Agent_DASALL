@@ -75,6 +75,11 @@ std::optional<MemoryConfig> project_memory_config(
   config.context.fact_confidence_floor =
       manifest.enables_module("memory_experience") ? 80 : 90;
   config.context.compression_trigger_ratio = compression_trigger_ratio;
+  config.context.scoring.composite_enabled = true;
+  config.context.scoring.confidence_weight = vector_enabled ? 0.40 : 0.45;
+  config.context.scoring.recency_weight = vector_enabled ? 0.25 : 0.30;
+  config.context.scoring.hit_rate_weight = 0.20;
+  config.context.scoring.source_weight = vector_enabled ? 0.15 : 0.05;
 
   config.experience.effectiveness_floor =
       manifest.enables_module("memory_experience") ? 60 : 100;

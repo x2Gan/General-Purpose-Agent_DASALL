@@ -156,6 +156,21 @@ void test_memory_profile_projection_tracks_vector_maintenance_and_budget_differe
                "edge_balanced should keep a tighter summary candidate fan-in");
   assert_equal(1, edge_minimal.config.context.max_summary_candidates,
                "edge_minimal should fall back to a single summary candidate");
+  assert_true(desktop.config.context.scoring.composite_enabled,
+              "desktop_full should keep composite context scoring enabled");
+  assert_true(edge_balanced.config.context.scoring.composite_enabled,
+              "edge_balanced should keep composite context scoring enabled");
+  assert_true(edge_minimal.config.context.scoring.composite_enabled,
+              "edge_minimal should keep composite context scoring enabled even when vector is disabled");
+  assert_true(desktop.config.context.scoring.confidence_weight > 0.0,
+              "desktop_full should project a positive confidence scoring weight");
+  assert_true(desktop.config.context.scoring.recency_weight > 0.0,
+              "desktop_full should project a positive recency scoring weight");
+  assert_true(desktop.config.context.scoring.hit_rate_weight > 0.0,
+              "desktop_full should project a positive hit-rate scoring weight");
+  assert_true(desktop.config.context.scoring.source_weight >
+                  edge_minimal.config.context.scoring.source_weight,
+              "vector-capable profiles should project a stronger source-weight bias than minimal profiles");
 
   assert_true(desktop.config.storage.wal_autocheckpoint_pages >
                   edge_balanced.config.storage.wal_autocheckpoint_pages,

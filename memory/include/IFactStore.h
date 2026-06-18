@@ -23,6 +23,8 @@ struct FactQuery {
 struct FactQueryResult {
   std::vector<contracts::MemoryFact> facts;
   std::unordered_map<std::string, double> decay_weight_by_fact_id;
+  std::unordered_map<std::string, double> recency_score_by_fact_id;
+  std::unordered_map<std::string, double> hit_rate_score_by_fact_id;
   int total_count = 0;
 };
 
