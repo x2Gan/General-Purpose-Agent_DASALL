@@ -1,3 +1,38 @@
+## 记录 #887
+
+- 日期：2026-06-18
+- 阶段：memory / desktop_full sqlite-vss default closeout
+- 任务：完成 WP-MEM-GAP-013“desktop_full 默认开启 sqlite-vss 灰度（GAP-P2-E）”
+- 状态：已完成（profile 默认向量、runtime-owned embedding glue、fail-closed 回退与 focused gates 已正式收口）
+
+### 执行前提
+
+1. [docs/deliverables/MEM-EVAL-2026-05-31-memory子系统落地评估与生产级缺口治理任务规划.md](../deliverables/MEM-EVAL-2026-05-31-memory子系统落地评估与生产级缺口治理任务规划.md) 已将 `WP-MEM-GAP-013` 固定为“desktop_full 默认开启 sqlite-vss 灰度”，并把前置依赖锁定为 `GAP-P0-B` 外部 embedding 注入与 `GAP-P0-C` 并发/长跑证据；这两个 blocker 均已在前序轮次闭合。
+2. 本地源码复核表明代码目标已在当前工作树落地：[profiles/desktop_full/runtime_policy.yaml](../../profiles/desktop_full/runtime_policy.yaml) 已固定 `enabled_modules.memory_vector: true`；[memory/src/config/MemoryConfigProjector.cpp](../../memory/src/config/MemoryConfigProjector.cpp) 已按 manifest 投影 `vector.enabled=true` 与 `backend_type=sqlite-vss`；[apps/runtime_support/src/RuntimeLiveDependencyComposition.cpp](../../apps/runtime_support/src/RuntimeLiveDependencyComposition.cpp) 已保留 `embedding_adapter_factory` 注入与 `vector0` / `vss0` 资产缺失时的 fail-closed `none` 回退。
+3. 外部参考采用 `sqlite-vss` README 与 SQLite loadable extension 文档：向量能力本身以共享扩展按需加载，直接支撑 DASALL 采用“desktop_full 默认请求 sqlite-vss，但缺扩展资产时立即回退 `none`”的灰度策略，而不是把向量能力固化成不可降级前置条件。
+
+### 改动
+
+1. 新增 [docs/todos/memory/deliverables/WP-MEM-GAP-013-desktop-full-vss-default-closeout.md](../todos/memory/deliverables/WP-MEM-GAP-013-desktop-full-vss-default-closeout.md)，固定任务边界、设计依据、当前工作树代码证据与 focused 验收口径。
+2. 更新 [docs/deliverables/MEM-EVAL-2026-05-31-memory子系统落地评估与生产级缺口治理任务规划.md](../deliverables/MEM-EVAL-2026-05-31-memory子系统落地评估与生产级缺口治理任务规划.md)，将 `GAP-P2-E / WP-MEM-GAP-013` 从“待完成”回写为“已闭合（2026-06-18）”，并同步修正总体结论、P2 缺口清单、任务拆分与 V2 路线图口径。
+3. 更新 [docs/todos/DASALL_子系统查漏补缺专项记录.md](../todos/DASALL_子系统查漏补缺专项记录.md)，新增 `MEM-GAP-019` 已闭合记录，明确 `desktop_full` 默认开向量已不再是 memory open gap。
+4. 本轮未新增 C++ 实现改动：当前工作树已满足代码目标，本轮工作内容是 focused 验收与 traceability closeout，而不是重复修改已落地实现。
+
+### 验证
+
+1. `RunCtest_CMakeTools(tests=["MemoryProfileCompatibilityTest"])`
+   - 结果：通过，1/1。
+2. `RunCtest_CMakeTools(tests=["DaemonRuntimeLiveDependencyCompositionTest"])`
+   - 结果：通过，1/1。
+3. `RunCtest_CMakeTools(tests=["MemoryProfileCompatibilityTest"])`
+   - 结果：文档回写后复验通过，1/1。
+
+### 结果
+
+1. `WP-MEM-GAP-013 / GAP-P2-E` 已闭合；`desktop_full` 默认开启 sqlite-vss 且保留 fail-closed `none` 回退的语义，现已在主规划文档、总账与 worklog 中统一收口。
+2. 本轮把“实现已在树上、但文档仍记为 open gap”的状态纠偏为可追溯 Done，避免后续评审继续把 `desktop_full` 默认开向量误判为未完成项。
+3. Memory 当前剩余 V2 焦点从 `WP-MEM-GAP-013` 转移为 `WP-MEM-GAP-019 / -020 / -021` 与更高层 installed / soak / quality SLO 证据；desktop_full 默认开向量不再是未闭合缺口。
+
 ## 记录 #886
 
 - 日期：2026-06-18
