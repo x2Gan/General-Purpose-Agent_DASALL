@@ -229,6 +229,7 @@ set(DASALL_MEMORY_PUBLIC_INCLUDE_SUBDIRECTORIES
   config
   context
   error
+  observability
   store
   vector
   working
@@ -246,6 +247,7 @@ set(DASALL_MEMORY_SKELETON_SOURCES
   src/context/ContextOrchestrator.cpp
   src/maintenance/MemoryMaintenanceWorker.cpp
   src/observability/MemoryObservability.cpp
+  src/observability/MemoryQualityProbe.cpp
   src/store/sqlite/RowMappers.cpp
   src/store/sqlite/SqliteMemoryStore.cpp
   src/store/sqlite/SqliteSchemaMigrator.cpp

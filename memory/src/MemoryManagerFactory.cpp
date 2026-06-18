@@ -12,6 +12,7 @@
 #include "context/ContextOrchestrator.h"
 #include "maintenance/MemoryMaintenanceWorker.h"
 #include "observability/MemoryObservability.h"
+#include "observability/MemoryQualityProbe.h"
 #include "store/sqlite/SqliteMemoryStore.h"
 #include "util/TokenEstimator.h"
 #include "vector/SimpleLocalEmbeddingAdapter.h"
@@ -201,6 +202,8 @@ std::unique_ptr<IMemoryManager> create_memory_manager(
   dependencies.observability = std::make_shared<observability::MemoryObservability>(
       observability::make_live_telemetry_sink(runtime_dependencies),
       runtime_dependencies.profile_id);
+    auto quality_probe = std::make_shared<observability::MemoryQualityProbe>(
+      dependencies.observability);
   dependencies.working_memory_board = create_working_memory_board();
   if (config.storage.backend == StorageBackend::Sqlite) {
     dependencies.store = store::sqlite::create_sqlite_memory_store();
@@ -244,13 +247,13 @@ std::unique_ptr<IMemoryManager> create_memory_manager(
       dependencies.embedding_adapter.get());
     dependencies.context_orchestrator = std::make_unique<ContextOrchestrator>(
         std::move(collector), std::move(allocator), std::move(compressor),
-        config, dependencies.observability, token_estimator);
+        config, dependencies.observability, quality_probe, token_estimator);
     dependencies.writeback_coordinator = std::make_unique<WritebackCoordinator>(
       *dependencies.store, *dependencies.store, *dependencies.store,
       *dependencies.store, *dependencies.store, std::move(hierarchy_coordinator),
       std::move(conflict_resolver),
       *dependencies.working_memory_board, dependencies.vector_index.get(),
-      dependencies.store_writer_mutex, dependencies.observability);
+      dependencies.store_writer_mutex, dependencies.observability, quality_probe);
     dependencies.maintenance_worker = std::make_unique<MemoryMaintenanceWorker>(
         *dependencies.store, config, dependencies.vector_index.get(),
         dependencies.store_writer_mutex, dependencies.observability);

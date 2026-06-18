@@ -19,6 +19,7 @@ class ITokenEstimator;
 namespace observability {
 
 class MemoryObservability;
+class MemoryQualityProbe;
 
 }  // namespace observability
 
@@ -29,6 +30,7 @@ class ContextOrchestrator final : public IContextOrchestrator {
                       std::unique_ptr<CompressionCoordinator> compressor,
                       const MemoryConfig& config,
                       std::shared_ptr<observability::MemoryObservability> observability = nullptr,
+                      std::shared_ptr<observability::MemoryQualityProbe> quality_probe = nullptr,
                       std::shared_ptr<const util::ITokenEstimator> token_estimator = nullptr);
 
   [[nodiscard]] ContextAssemblyResult assemble(
@@ -47,6 +49,7 @@ class ContextOrchestrator final : public IContextOrchestrator {
   std::unique_ptr<CompressionCoordinator> compressor_;
   ContextConfig context_config_{};
     std::shared_ptr<observability::MemoryObservability> observability_;
+        std::shared_ptr<observability::MemoryQualityProbe> quality_probe_;
     std::shared_ptr<const util::ITokenEstimator> token_estimator_;
 };
 

@@ -15,6 +15,7 @@
 #include "memory/SummaryMemory.h"
 #include "memory/Turn.h"
 #include "observability/MemoryObservability.h"
+#include "observability/MemoryQualityProbe.h"
 
 namespace dasall::memory {
 namespace {
@@ -310,7 +311,8 @@ WritebackCoordinator::WritebackCoordinator(
     IWorkingMemoryBoard& working_memory_board,
     VectorMemoryIndexAdapter* vector_index,
     std::shared_ptr<std::mutex> writer_mutex,
-    std::shared_ptr<observability::MemoryObservability> observability)
+    std::shared_ptr<observability::MemoryObservability> observability,
+    std::shared_ptr<observability::MemoryQualityProbe> quality_probe)
     : transaction_store_(transaction_store),
       session_store_(session_store),
       summary_store_(summary_store),
@@ -321,7 +323,8 @@ WritebackCoordinator::WritebackCoordinator(
       working_memory_board_(working_memory_board),
       vector_index_(vector_index),
       writer_mutex_(std::move(writer_mutex)),
-      observability_(std::move(observability)) {}
+      observability_(std::move(observability)),
+      quality_probe_(std::move(quality_probe)) {}
 
 WritebackResult WritebackCoordinator::persist(
     const MemoryWritebackRequest& request) {
@@ -408,9 +411,27 @@ WritebackResult WritebackCoordinator::persist(
     return result;
   }
 
-  persist_derived_data(normalized_request, result);
+  std::uint64_t attempted_conflicts = 0U;
+  std::uint64_t resolved_conflicts = 0U;
+  persist_derived_data(
+      normalized_request, result, attempted_conflicts, resolved_conflicts);
+  if (!result.conflicts.empty() && attempted_conflicts == 0U) {
+    attempted_conflicts = result.conflicts.size();
+  }
+  if (attempted_conflicts > 0U && resolved_conflicts == 0U &&
+      !result.partial && !result.conflicts.empty()) {
+    resolved_conflicts = result.conflicts.size();
+  }
   persist_vector_sidecar(normalized_request, result);
   update_working_board(normalized_request, result);
+  if (quality_probe_) {
+    quality_probe_->record_writeback_quality(normalized_request, result);
+    quality_probe_->record_conflict_quality(
+        normalized_request,
+        attempted_conflicts,
+        resolved_conflicts,
+        result.conflicts);
+  }
   if (observability_) {
     observability_->emit(
         (result.partial || result.degraded || !result.warnings.empty())
@@ -517,7 +538,9 @@ WritebackResult WritebackCoordinator::persist_core_transaction(
 
 void WritebackCoordinator::persist_derived_data(
     const MemoryWritebackRequest& request,
-    WritebackResult& result) {
+    WritebackResult& result,
+    std::uint64_t& attempted_conflicts,
+    std::uint64_t& resolved_conflicts) {
   if (!conflict_resolver_) {
     append_warning_once(result.warnings, "conflict_resolver_unwired");
   }
@@ -538,12 +561,14 @@ void WritebackCoordinator::persist_derived_data(
       append_warning_once(result.warnings, warning);
     }
     if (!plan.conflict_records.empty()) {
+      attempted_conflicts += plan.conflict_records.size();
       append_warning_once(result.warnings, "conflict_recorded_warning");
       result.conflicts.insert(result.conflicts.end(), plan.conflict_records.begin(),
                               plan.conflict_records.end());
     }
 
     if (plan.action == ConflictAction::Reject) {
+      resolved_conflicts += plan.conflict_records.size();
       continue;
     }
 
@@ -557,6 +582,10 @@ void WritebackCoordinator::persist_derived_data(
 
     result.fact_ids.push_back(
         insert_result.persisted_id.value_or(candidate.fact.fact_id.value_or("")));
+
+    if (plan.action == ConflictAction::Coexist) {
+      resolved_conflicts += plan.conflict_records.size();
+    }
 
     if (plan.action == ConflictAction::Supersede) {
       for (const auto& record : plan.conflict_records) {
@@ -572,7 +601,10 @@ void WritebackCoordinator::persist_derived_data(
           result.partial = true;
           append_warning_once(result.warnings, "partial_writeback_warning");
           append_warning_once(result.warnings, "fact_supersede_failed");
+          continue;
         }
+
+        ++resolved_conflicts;
       }
     }
   }

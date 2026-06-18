@@ -20,6 +20,7 @@ namespace dasall::memory {
 namespace observability {
 
 class MemoryObservability;
+class MemoryQualityProbe;
 
 }  // namespace observability
 
@@ -35,7 +36,8 @@ class WritebackCoordinator {
                        IWorkingMemoryBoard& working_memory_board,
                        VectorMemoryIndexAdapter* vector_index = nullptr,
                        std::shared_ptr<std::mutex> writer_mutex = nullptr,
-                       std::shared_ptr<observability::MemoryObservability> observability = nullptr);
+                       std::shared_ptr<observability::MemoryObservability> observability = nullptr,
+                       std::shared_ptr<observability::MemoryQualityProbe> quality_probe = nullptr);
 
   [[nodiscard]] WritebackResult persist(const MemoryWritebackRequest& request);
 
@@ -44,7 +46,9 @@ class WritebackCoordinator {
       const MemoryWritebackRequest& request);
 
   void persist_derived_data(const MemoryWritebackRequest& request,
-                            WritebackResult& result);
+                            WritebackResult& result,
+                            std::uint64_t& attempted_conflicts,
+                            std::uint64_t& resolved_conflicts);
 
   void persist_vector_sidecar(const MemoryWritebackRequest& request,
                               WritebackResult& result);
@@ -63,6 +67,7 @@ class WritebackCoordinator {
   VectorMemoryIndexAdapter* vector_index_ = nullptr;
   std::shared_ptr<std::mutex> writer_mutex_;
   std::shared_ptr<observability::MemoryObservability> observability_;
+  std::shared_ptr<observability::MemoryQualityProbe> quality_probe_;
 };
 
 }  // namespace dasall::memory

@@ -10,6 +10,7 @@
 #include <utility>
 
 #include "observability/MemoryObservability.h"
+#include "observability/MemoryQualityProbe.h"
 #include "context/ContextPacketGuards.h"
 #include "util/TokenEstimator.h"
 
@@ -592,6 +593,20 @@ SlotProjection project_slots(const CandidateSet& candidates,
   return projection;
 }
 
+std::vector<std::string> build_quality_supporting_contexts(
+    const SlotProjection& projection) {
+  std::vector<std::string> contexts;
+  append_all_unique(contexts, projection.retrieval_evidence);
+  append_all_unique(contexts, projection.recent_history);
+  if (!projection.latest_observation_digest_summary.empty()) {
+    contexts.push_back(projection.latest_observation_digest_summary);
+  }
+  if (!projection.belief_state_summary.empty()) {
+    contexts.push_back(projection.belief_state_summary);
+  }
+  return contexts;
+}
+
 std::string build_budget_report(const BudgetPlan& plan,
                                 const util::ITokenEstimator& token_estimator,
                                 const contracts::ContextPacket& packet) {
@@ -708,12 +723,14 @@ ContextOrchestrator::ContextOrchestrator(
     std::unique_ptr<CompressionCoordinator> compressor,
     const MemoryConfig& config,
     std::shared_ptr<observability::MemoryObservability> observability,
+    std::shared_ptr<observability::MemoryQualityProbe> quality_probe,
     std::shared_ptr<const util::ITokenEstimator> token_estimator)
     : collector_(std::move(collector)),
       allocator_(std::move(allocator)),
       compressor_(std::move(compressor)),
       context_config_(config.context),
       observability_(std::move(observability)),
+      quality_probe_(std::move(quality_probe)),
       token_estimator_(token_estimator != nullptr ? token_estimator
                                                   : util::create_token_estimator(config)) {}
 
@@ -837,6 +854,15 @@ ContextAssemblyResult ContextOrchestrator::assemble(
                                 [](const std::string& warning) {
                                   return warning_implies_degraded(warning);
                                 });
+  if (quality_probe_) {
+    quality_probe_->record_context_quality(
+        request,
+        result,
+        slot_projection.summary_memory.empty()
+            ? std::nullopt
+            : std::make_optional(slot_projection.summary_memory),
+        build_quality_supporting_contexts(slot_projection));
+  }
   if (observability_ && !result.compression_notes.empty()) {
     observability_->emit("compression.applied",
                          make_observability_context(request),

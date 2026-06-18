@@ -1,3 +1,43 @@
+## 记录 #889
+
+- 日期：2026-06-18
+- 阶段：memory / quality SLO closure
+- 任务：完成 WP-MEM-GAP-020“Memory 质量 SLO 与质量指标（V2）”
+- 状态：已完成（quality metric schema、probe wiring、curated baselines 与 focused gates 已闭合）
+
+### 执行前提
+
+1. [docs/deliverables/MEM-EVAL-2026-05-31-memory子系统落地评估与生产级缺口治理任务规划.md](../deliverables/MEM-EVAL-2026-05-31-memory子系统落地评估与生产级缺口治理任务规划.md) 已将 `WP-MEM-GAP-020` 固定为“`MemoryQualityMetrics` + `MemoryQualityProbe` + `MemoryQualityProbeIntegrationTest` + `MemoryRecallAtKBaselineTest` + `MemorySummaryFaithfulnessBaselineTest`”，且显式前置 `GAP-P0-A / -B` 已在 2026-06-02 闭合。
+2. 本地代码复核表明最小 owner 切口应在 memory module-local observability seam：现有 `MemoryObservability` 已直连 infra logger / metrics / trace / audit，但只有事件计数，没有可直接判断 recall、groundedness、conflict precision 或 partial/fallback rate 的质量指标面。
+3. 外部参考采用 Pinecone 的 offline IR evaluation（`Recall@K` 作为 deploy 前 retrieval baseline）与 Ragas Faithfulness（“被 supporting context 支持的 claims 数 / 总 claims 数”）；这直接支撑 DASALL 在 020 中把 recall 与 summary faithfulness 都收口为 curated offline baseline，而不是继续停留在 smoke/日志主观判读。
+
+### 改动
+
+1. 新增 [docs/todos/memory/deliverables/WP-MEM-GAP-020-memory-quality-slo-closeout.md](../todos/memory/deliverables/WP-MEM-GAP-020-memory-quality-slo-closeout.md)，固定任务边界、研究依据、Design->Build 映射与 focused 验收口径。
+2. 新增 [memory/include/observability/MemoryQualityMetrics.h](../../memory/include/observability/MemoryQualityMetrics.h)，冻结 `memory_quality_recall_at_k`、`memory_quality_summary_faithfulness_score`、`memory_quality_fact_conflict_precision`、`memory_quality_writeback_partial_rate`、`memory_quality_compression_fallback_rate` 及默认 SLO 常量。
+3. 更新 [memory/src/observability/MemoryObservability.h](../../memory/src/observability/MemoryObservability.h) 与 [memory/src/observability/MemoryObservability.cpp](../../memory/src/observability/MemoryObservability.cpp)，新增 `MemoryMetricSample` / `emit_metric_sample()`，让 quality probe 复用既有 memory -> infra metrics sink。
+4. 新增 [memory/src/observability/MemoryQualityProbe.h](../../memory/src/observability/MemoryQualityProbe.h) 与 [memory/src/observability/MemoryQualityProbe.cpp](../../memory/src/observability/MemoryQualityProbe.cpp)，并更新 [memory/src/context/ContextOrchestrator.h](../../memory/src/context/ContextOrchestrator.h)、[memory/src/context/ContextOrchestrator.cpp](../../memory/src/context/ContextOrchestrator.cpp)、[memory/src/writeback/WritebackCoordinator.h](../../memory/src/writeback/WritebackCoordinator.h)、[memory/src/writeback/WritebackCoordinator.cpp](../../memory/src/writeback/WritebackCoordinator.cpp)、[memory/src/MemoryManagerFactory.cpp](../../memory/src/MemoryManagerFactory.cpp) 与 [memory/CMakeLists.txt](../../memory/CMakeLists.txt)，在 `prepare_context()` / `write_back()` owner 路径采样 recall、faithfulness、conflict precision、partial rate 与 fallback rate。
+5. 新增 [tests/integration/memory/MemoryQualityProbeIntegrationTest.cpp](../../tests/integration/memory/MemoryQualityProbeIntegrationTest.cpp)、[tests/integration/memory/MemoryRecallAtKBaselineTest.cpp](../../tests/integration/memory/MemoryRecallAtKBaselineTest.cpp)、[tests/integration/memory/MemorySummaryFaithfulnessBaselineTest.cpp](../../tests/integration/memory/MemorySummaryFaithfulnessBaselineTest.cpp)，并更新 [tests/integration/memory/CMakeLists.txt](../../tests/integration/memory/CMakeLists.txt) 完成 discoverability / link / include / SQL migration wiring。
+6. 更新 [tests/unit/memory/MemoryInterfaceCompileTest.cpp](../../tests/unit/memory/MemoryInterfaceCompileTest.cpp)，把新的 `observability` public include 子目录与 `MemoryQualityMetrics` 常量纳入 interface surface regression。
+7. 更新 [docs/deliverables/MEM-EVAL-2026-05-31-memory子系统落地评估与生产级缺口治理任务规划.md](../deliverables/MEM-EVAL-2026-05-31-memory子系统落地评估与生产级缺口治理任务规划.md) 与 [docs/todos/DASALL_子系统查漏补缺专项记录.md](../todos/DASALL_子系统查漏补缺专项记录.md)，把 `WP-MEM-GAP-020` 从 open gap 回写为已闭合，并把剩余 V2 焦点收窄到 `WP-MEM-GAP-021` 与更高层 soak evidence。
+
+### 验证
+
+1. `cmake --build build-ci --target dasall_memory`
+   - 结果：通过。
+2. `cmake --build build-ci --target dasall_memory_quality_probe_integration_test && cmake --build build-ci --target dasall_memory_recall_at_k_baseline_integration_test && cmake --build build-ci --target dasall_memory_summary_faithfulness_baseline_integration_test`
+   - 结果：通过。
+3. `ctest --test-dir build-ci -R "MemoryQualityProbe|MemoryRecallAtKBaseline|MemorySummaryFaithfulness" --output-on-failure`
+   - 结果：通过，3/3。
+4. `cmake --build build-ci --target dasall_memory_interface_compile_unit_test && ctest --test-dir build-ci -R "^MemoryInterfaceCompileTest$" --output-on-failure`
+   - 结果：通过，1/1。
+
+### 结果
+
+1. `WP-MEM-GAP-020` 已闭合；Memory 现已具备 module-local quality SLO baseline，可直接对 `prepare_context()` 与 `write_back()` 的 recall、groundedness、conflict、partial、fallback 行为做可聚合量化。
+2. 本轮没有扩 shared contracts，也没有把质量判定抛给 runtime / llm public surface；quality metric owner 继续留在 memory 内部。
+3. Memory 当前剩余 V2 焦点已从 `WP-MEM-GAP-020 / -021` 收窄为 `WP-MEM-GAP-021` 与把本轮 quality metrics 嵌入更高层 soak / release evidence；quality SLO baseline 不再是 open gap。
+
 ## 记录 #888
 
 - 日期：2026-06-18

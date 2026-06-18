@@ -22,6 +22,7 @@
 #include "context/ContextAssemblyResult.h"
 #include "context/MemoryContextRequest.h"
 #include "error/MemoryError.h"
+#include "observability/MemoryQualityMetrics.h"
 #include "store/StoreResult.h"
 #include "working/IWorkingMemoryBoard.h"
 #include "working/WorkingMemoryExportRequest.h"
@@ -67,6 +68,7 @@ void test_memory_public_include_layout_exists() {
   const fs::path config_dir = include_root / "config";
   const fs::path context_dir = include_root / "context";
   const fs::path error_dir = include_root / "error";
+     const fs::path observability_dir = include_root / "observability";
   const fs::path store_dir = include_root / "store";
   const fs::path vector_dir = include_root / "vector";
   const fs::path working_dir = include_root / "working";
@@ -80,6 +82,8 @@ void test_memory_public_include_layout_exists() {
               "memory public include layout should expose the context subdirectory");
   assert_true(fs::is_directory(error_dir),
               "memory public include layout should expose the error subdirectory");
+     assert_true(fs::is_directory(observability_dir),
+                                   "memory public include layout should expose the observability subdirectory");
      assert_true(fs::is_directory(store_dir),
                                    "memory public include layout should expose the store subdirectory");
   assert_true(fs::is_directory(vector_dir),
@@ -183,6 +187,39 @@ void test_memory_context_supporting_types_compile_and_expose_expected_defaults()
                                    "context scoring should expose a positive hit-rate weight");
      assert_true(scoring_defaults.source_weight >= 0.0,
                                    "context scoring should expose a non-negative source weight");
+}
+
+void test_memory_quality_metric_schema_is_public_and_stable() {
+     using dasall::memory::observability::quality::kCompressionFallbackRateMetricName;
+     using dasall::memory::observability::quality::kCompressionFallbackRateSloCeiling;
+     using dasall::memory::observability::quality::kDefaultRecallAtK;
+     using dasall::memory::observability::quality::kFactConflictPrecisionMetricName;
+     using dasall::memory::observability::quality::kFactConflictPrecisionSloFloor;
+     using dasall::memory::observability::quality::kRecallAtKMetricName;
+     using dasall::memory::observability::quality::kSummaryFaithfulnessMetricName;
+     using dasall::memory::observability::quality::kSummaryFaithfulnessSloFloor;
+     using dasall::memory::observability::quality::kWritebackPartialRateMetricName;
+     using dasall::memory::observability::quality::kWritebackPartialRateSloCeiling;
+     using dasall::tests::support::assert_true;
+
+     assert_true(kDefaultRecallAtK == 5,
+                                   "memory quality metrics should freeze recall@k at the V2 baseline top-k");
+     assert_true(kSummaryFaithfulnessSloFloor >= 0.85,
+                                   "memory quality metrics should expose the summary faithfulness SLO floor");
+     assert_true(kFactConflictPrecisionSloFloor >= 0.90,
+                                   "memory quality metrics should expose the conflict precision SLO floor");
+     assert_true(kWritebackPartialRateSloCeiling > 0.0 &&
+                     kWritebackPartialRateSloCeiling < 1.0,
+                                   "memory quality metrics should expose a bounded writeback partial-rate ceiling");
+     assert_true(kCompressionFallbackRateSloCeiling > 0.0 &&
+                     kCompressionFallbackRateSloCeiling < 1.0,
+                                   "memory quality metrics should expose a bounded compression fallback-rate ceiling");
+     assert_true(!std::string_view(kRecallAtKMetricName).empty() &&
+                     !std::string_view(kSummaryFaithfulnessMetricName).empty() &&
+                     !std::string_view(kFactConflictPrecisionMetricName).empty() &&
+                     !std::string_view(kWritebackPartialRateMetricName).empty() &&
+                     !std::string_view(kCompressionFallbackRateMetricName).empty(),
+                                   "memory quality metrics should publish non-empty metric identities through the public include surface");
 }
 
 void test_store_result_compiles_as_an_independent_public_surface() {
@@ -922,6 +959,7 @@ int main() {
     test_memory_public_include_layout_exists();
     test_memory_module_is_no_longer_placeholder_only();
     test_memory_context_supporting_types_compile_and_expose_expected_defaults();
+         test_memory_quality_metric_schema_is_public_and_stable();
           test_store_result_compiles_as_an_independent_public_surface();
           test_memory_store_supporting_interfaces_remain_public_and_aggregate_cleanly();
     test_memory_writeback_supporting_types_compile_and_preserve_partial_retry_semantics();

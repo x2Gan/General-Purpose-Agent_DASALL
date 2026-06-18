@@ -202,6 +202,18 @@ classify_span_status(const std::string_view event_name) {
   };
 }
 
+[[nodiscard]] infra::metrics::MetricLabels make_metric_labels(
+    const MemoryMetricSample& sample,
+    const MemoryTelemetryContext& context) {
+  return infra::metrics::MetricLabels{
+      .module = "memory",
+      .stage = fallback_unknown(context.stage),
+      .profile = fallback_unknown(context.profile_id),
+      .outcome = fallback_unknown(sample.outcome),
+      .error_code = sample.error_code,
+  };
+}
+
 [[nodiscard]] infra::tracing::TraceAttributeMap make_trace_attrs(
     const std::string_view event_name,
     const MemoryTelemetryContext& context,
@@ -248,6 +260,9 @@ class NoopTelemetrySink final : public IMemoryTelemetrySink {
   void emit_metric(const std::string&,
                    const MemoryTelemetryContext&,
                    const std::vector<MemoryTelemetryField>&) override {}
+  void emit_metric_sample(const MemoryMetricSample&,
+                          const MemoryTelemetryContext&,
+                          const std::vector<MemoryTelemetryField>&) override {}
   void emit_trace(const std::string&,
                   const MemoryTelemetryContext&,
                   const std::vector<MemoryTelemetryField>&) override {}
@@ -315,6 +330,37 @@ class InfraTelemetrySink final : public IMemoryTelemetrySink {
     }
 
     (void)meter_->record(sample);
+  }
+
+  void emit_metric_sample(const MemoryMetricSample& sample,
+                          const MemoryTelemetryContext& context,
+                          const std::vector<MemoryTelemetryField>&) override {
+    if (metrics_provider_ == nullptr) {
+      return;
+    }
+
+    ensure_meter();
+    if (meter_ == nullptr || sample.name.empty() || sample.unit.empty()) {
+      return;
+    }
+
+    ensure_instrument(sample);
+    infra::metrics::MetricSample metric_sample{
+        .identity_ref = infra::metrics::MetricIdentity{
+            .name = sample.name,
+            .type = sample.type,
+            .unit = sample.unit,
+            .description = sample.description,
+        },
+        .value = sample.value,
+        .ts_unix_ms = current_time_ms(),
+        .labels = make_metric_labels(sample, context),
+    };
+    if (!metric_sample.is_valid()) {
+      return;
+    }
+
+    (void)meter_->record(metric_sample);
   }
 
   void emit_trace(const std::string& event_name,
@@ -413,6 +459,75 @@ class InfraTelemetrySink final : public IMemoryTelemetrySink {
     }
   }
 
+  void ensure_instrument(const MemoryMetricSample& sample) {
+    if (meter_ == nullptr || sample.name.empty()) {
+      return;
+    }
+
+    switch (sample.type) {
+      case infra::metrics::MetricType::Counter:
+        if (counters_.contains(sample.name)) {
+          return;
+        }
+        if (const auto handle = meter_->create_counter(
+                infra::metrics::MetricIdentity{
+                    .name = sample.name,
+                    .type = sample.type,
+                    .unit = sample.unit,
+                    .description = sample.description,
+                });
+            handle.has_value()) {
+          counters_.emplace(sample.name, *handle);
+        }
+        return;
+      case infra::metrics::MetricType::Gauge:
+        if (gauges_.contains(sample.name)) {
+          return;
+        }
+        if (const auto handle = meter_->create_gauge(
+                infra::metrics::MetricIdentity{
+                    .name = sample.name,
+                    .type = sample.type,
+                    .unit = sample.unit,
+                    .description = sample.description,
+                });
+            handle.has_value()) {
+          gauges_.emplace(sample.name, *handle);
+        }
+        return;
+      case infra::metrics::MetricType::Histogram:
+        if (histograms_.contains(sample.name)) {
+          return;
+        }
+        if (const auto handle = meter_->create_histogram(
+                infra::metrics::MetricIdentity{
+                    .name = sample.name,
+                    .type = sample.type,
+                    .unit = sample.unit,
+                    .description = sample.description,
+                });
+            handle.has_value()) {
+          histograms_.emplace(sample.name, *handle);
+        }
+        return;
+      case infra::metrics::MetricType::UpDownCounter:
+        if (gauges_.contains(sample.name)) {
+          return;
+        }
+        if (const auto handle = meter_->create_gauge(
+                infra::metrics::MetricIdentity{
+                    .name = sample.name,
+                    .type = infra::metrics::MetricType::Gauge,
+                    .unit = sample.unit,
+                    .description = sample.description,
+                });
+            handle.has_value()) {
+          gauges_.emplace(sample.name, *handle);
+        }
+        return;
+    }
+  }
+
   void ensure_tracer() {
     if (tracer_ != nullptr || tracer_provider_ == nullptr) {
       return;
@@ -432,6 +547,8 @@ class InfraTelemetrySink final : public IMemoryTelemetrySink {
   std::shared_ptr<infra::metrics::IMeter> meter_;
   std::shared_ptr<infra::tracing::ITracer> tracer_;
   std::map<std::string, infra::metrics::InstrumentHandle> counters_;
+  std::map<std::string, infra::metrics::InstrumentHandle> gauges_;
+  std::map<std::string, infra::metrics::InstrumentHandle> histograms_;
 };
 
 }  // namespace
@@ -464,6 +581,22 @@ void MemoryObservability::emit(
   sink_->emit_metric(event_name, enriched_context, fields);
   sink_->emit_trace(event_name, enriched_context, fields);
   sink_->emit_audit(event_name, enriched_context, fields);
+}
+
+void MemoryObservability::emit_metric_sample(
+    const MemoryMetricSample& sample,
+    const MemoryTelemetryContext& context,
+    std::vector<MemoryTelemetryField> fields) const {
+  if (sink_ == nullptr || sample.name.empty()) {
+    return;
+  }
+
+  auto enriched_context = context;
+  if (enriched_context.profile_id.empty()) {
+    enriched_context.profile_id = default_profile_id_;
+  }
+
+  sink_->emit_metric_sample(sample, enriched_context, fields);
 }
 
 std::shared_ptr<IMemoryTelemetrySink> make_live_telemetry_sink(

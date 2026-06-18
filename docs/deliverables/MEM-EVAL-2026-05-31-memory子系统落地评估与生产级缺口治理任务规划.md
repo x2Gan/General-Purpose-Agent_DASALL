@@ -43,7 +43,7 @@
 | 真实落地 vs 桩 | 无空壳实现；`memory/src/MemoryBuildSkeleton.cpp` 仅 4 行历史 namespace 文件可清理；所有主要组件均含真实业务体（store 1493 / orchestrator 814 / writeback 693 / vector backend 713 / observability 482 / manager 482 / schema migrator 406 / row mappers 408 / conflict resolver 371 / compression coordinator 320 / budget allocator 313 / detached vector factory 280 / candidate collector 246 / working board 244） | **无虚假实现** |
 | 距离生产级 GA | 仍欠：installed gate 绿色记录、ProgrammaticMemory 持久化、更高层质量 SLO / soak 量化 | **未到生产级** |
 
-总体结论：memory 已完成**架构 / 接口 / 持久化 / 上下文装配 / 写回 / 维护 / 观测性**的真实落地，与 runtime 同处"骨架达成、深度需补"水位；区别于 runtime 缺口的"信号外送 / 跨版本 / 并发证据"，memory 当前剩余缺口集中在**质量层（更高层质量 SLO 与 feedback loop）与运营层（installed / soak 证据）**。GA 前仍需继续收敛剩余 P0 项。
+总体结论：memory 已完成**架构 / 接口 / 持久化 / 上下文装配 / 写回 / 维护 / 观测性**的真实落地，与 runtime 同处"骨架达成、深度需补"水位；区别于 runtime 缺口的"信号外送 / 跨版本 / 并发证据"，memory 当前剩余缺口集中在**质量层（feedback loop 与更高层 soak / judge 量化）与运营层（installed / soak 证据）**。GA 前仍需继续收敛剩余 P0 项。
 
 ---
 
@@ -552,7 +552,7 @@ flowchart LR
 memory 子系统已达到 **可生产部署 v1** 水位：架构 / 详设目标 100% 落地、无虚假实现、业务链贯通、ADR 边界守门、可观测性 sink 直连、profile 兼容齐备。
 
 距离 **GA 生产级** 的真实缺口集中在两个象限：
-1. **质量层**：`GAP-P0-A` 与 `GAP-P0-B` 已于 2026-06-02 闭合，`GAP-P1-A` 已于 2026-06-03 把 token 估算收口到 `cl100k_base` 兼容实现，`GAP-P2-A` 已于 2026-06-15 闭合，`GAP-P2-B` 与 `GAP-P2-C` 已于 2026-06-17 闭合，`GAP-P2-D`、`GAP-P2-E` 与 `WP-MEM-GAP-019` 已于 2026-06-18 闭合；当前剩余关键质量缺口收敛为更高层质量 SLO 与 reflection→ExperienceMemory 反馈闭环。
+1. **质量层**：`GAP-P0-A` 与 `GAP-P0-B` 已于 2026-06-02 闭合，`GAP-P1-A` 已于 2026-06-03 把 token 估算收口到 `cl100k_base` 兼容实现，`GAP-P2-A` 已于 2026-06-15 闭合，`GAP-P2-B` 与 `GAP-P2-C` 已于 2026-06-17 闭合，`GAP-P2-D`、`GAP-P2-E`、`WP-MEM-GAP-019` 与 `WP-MEM-GAP-020` 已于 2026-06-18 闭合；当前剩余关键质量缺口收敛为 reflection→ExperienceMemory 反馈闭环，以及把本轮 quality SLO 嵌入更高层 soak / release evidence。
 2. **运营层**：并发 / 长跑 / TSAN 压力门（GAP-P0-C）已于 2026-06-02 通过 build-tree + TSAN 证据闭合；`GAP-P1-B` 已于 2026-06-03 完成 daemon-owned MaintenanceTicker 挂载；当前剩余运营焦点收敛为 installed gate（GAP-P0-D）的更高层绿色记录与 soak 采样（GAP-P3-E）。
 
 其余 P2 / P3 缺口（MEM-E02..E09）为设计文档已显式声明的演进项，不属于实现缺陷。GA 收敛优先级建议：**剩余 P0 一项 → P1 两项 → P2 链式 → P3 选择性**。
@@ -589,7 +589,7 @@ memory 子系统已达到 **可生产部署 v1** 水位：架构 / 详设目标 
 | **V2** | **WP-MEM-GAP-012** | Composite scoring（MEM-E03，已完成 2026-06-18） |
 | **V2** | **WP-MEM-GAP-013** | desktop_full 默认开启 sqlite-vss 灰度（已完成 2026-06-18） |
 | **V2** | **WP-MEM-GAP-019** | 分层递归摘要（MemGPT / MemoryOS dialog→topic→user pages，已完成 2026-06-18） |
-| **V2** | **WP-MEM-GAP-020** | Memory 质量 SLO 与 recall@k / summary-faithfulness 指标 |
+| **V2** | **WP-MEM-GAP-020** | Memory 质量 SLO 与 recall@k / summary-faithfulness 指标（已完成 2026-06-18） |
 | **V2** | **WP-MEM-GAP-021** | Reflection → ExperienceMemory 反馈闭环显性化 |
 | V3 | WP-MEM-GAP-014 | ProgrammaticMemory 持久化（MEM-E06） |
 | V3 | WP-MEM-GAP-015 | mini-store 接口收敛 |
@@ -618,17 +618,22 @@ memory 子系统已达到 **可生产部署 v1** 水位：架构 / 详设目标 
 
 #### WP-MEM-GAP-020 Memory 质量 SLO 与质量指标（V2）
 
-- **背景**：V1 只覆盖功能正确性与边界；V2 必须形成"质量"可观测的 SLO，否则无法证明真到了"高质量长会话"水位。
-- **代码目标**
-  - `memory/include/observability/MemoryQualityMetrics.h`：定义 `recall_at_k`、`summary_faithfulness_score`、`fact_conflict_precision`、`writeback_partial_rate`、`compression_fallback_rate` 等指标 schema。
-  - `memory/src/observability/MemoryQualityProbe.cpp`：在 prepare_context / write_back / compression / conflict 路径采样；通过 MemoryObservability.emit 投递 metric。
-  - 在 [tests/integration/memory/](../../tests/integration/memory/) 增加 `MemoryQualityProbeIntegrationTest`，注入 fake LLM 与 ground-truth 数据集，输出指标基线。
-  - 与 GAP-P3-E（soak gate）联动：soak 报告内嵌质量指标。
-- **测试目标**
-  - `MemoryQualityProbeIntegrationTest`、`MemoryRecallAtKBaselineTest`、`MemorySummaryFaithfulnessBaselineTest`。
-- **验收命令**
-  - `ctest --test-dir build-ci -R "MemoryQualityProbe|MemoryRecallAtKBaseline|MemorySummaryFaithfulness" --output-on-failure`
-- **阻塞 / 解阻**：依赖 V1 GAP-P0-A / -B（LLM Summarizer + Embedding 注入）。
+- **状态**：已完成（2026-06-18）。
+- **代码结果**
+  - 已新增 [memory/include/observability/MemoryQualityMetrics.h](../../memory/include/observability/MemoryQualityMetrics.h)，冻结 `memory_quality_recall_at_k`、`memory_quality_summary_faithfulness_score`、`memory_quality_fact_conflict_precision`、`memory_quality_writeback_partial_rate`、`memory_quality_compression_fallback_rate` 与默认 SLO floor/ceiling。
+  - 已更新 [memory/src/observability/MemoryObservability.h](../../memory/src/observability/MemoryObservability.h) / [memory/src/observability/MemoryObservability.cpp](../../memory/src/observability/MemoryObservability.cpp)，新增 `MemoryMetricSample` 与 `emit_metric_sample()`，让 quality probe 复用既有 memory -> infra metrics sink，而不是另起第二套 telemetry stack。
+  - 已新增 [memory/src/observability/MemoryQualityProbe.h](../../memory/src/observability/MemoryQualityProbe.h) / [memory/src/observability/MemoryQualityProbe.cpp](../../memory/src/observability/MemoryQualityProbe.cpp)，并更新 [memory/src/context/ContextOrchestrator.h](../../memory/src/context/ContextOrchestrator.h)、[memory/src/context/ContextOrchestrator.cpp](../../memory/src/context/ContextOrchestrator.cpp)、[memory/src/writeback/WritebackCoordinator.h](../../memory/src/writeback/WritebackCoordinator.h)、[memory/src/writeback/WritebackCoordinator.cpp](../../memory/src/writeback/WritebackCoordinator.cpp)、[memory/src/MemoryManagerFactory.cpp](../../memory/src/MemoryManagerFactory.cpp) 与 [memory/CMakeLists.txt](../../memory/CMakeLists.txt)，在 `prepare_context()` / `write_back()` owner 路径采样 recall@k、summary faithfulness、fact conflict precision、writeback partial rate 与 compression fallback rate。
+  - 已更新 [tests/unit/memory/MemoryInterfaceCompileTest.cpp](../../tests/unit/memory/MemoryInterfaceCompileTest.cpp)，把 `observability/MemoryQualityMetrics.h` 与新的 public include 子目录锁进 memory interface surface regression。
+- **测试结果**
+  - 已新增 [tests/integration/memory/MemoryQualityProbeIntegrationTest.cpp](../../tests/integration/memory/MemoryQualityProbeIntegrationTest.cpp)，验证同一 manager 下的 quality metric baseline 会进入 metrics facade aggregation snapshot。
+  - 已新增 [tests/integration/memory/MemoryRecallAtKBaselineTest.cpp](../../tests/integration/memory/MemoryRecallAtKBaselineTest.cpp)，验证 relaxed budget 与 tight budget 下的 retrieval evidence recall 会形成可区分 baseline。
+  - 已新增 [tests/integration/memory/MemorySummaryFaithfulnessBaselineTest.cpp](../../tests/integration/memory/MemorySummaryFaithfulnessBaselineTest.cpp)，验证 fully grounded single-claim summary 与 partially unsupported summary 在 `summary_faithfulness_score` 上形成数值分离；同时更新 [tests/integration/memory/CMakeLists.txt](../../tests/integration/memory/CMakeLists.txt) 完成 discoverability / link / SQL schema wiring。
+- **验收证据**
+  - `cmake --build build-ci --target dasall_memory`：通过。
+  - `cmake --build build-ci --target dasall_memory_quality_probe_integration_test && cmake --build build-ci --target dasall_memory_recall_at_k_baseline_integration_test && cmake --build build-ci --target dasall_memory_summary_faithfulness_baseline_integration_test`：通过。
+  - `ctest --test-dir build-ci -R "MemoryQualityProbe|MemoryRecallAtKBaseline|MemorySummaryFaithfulness" --output-on-failure`：通过，3/3。
+  - `cmake --build build-ci --target dasall_memory_interface_compile_unit_test && ctest --test-dir build-ci -R "^MemoryInterfaceCompileTest$" --output-on-failure`：通过，1/1。
+- **阻塞 / 解阻**：已解阻。`GAP-P0-A / -B` 在前序轮次已闭合；本轮未扩 shared contracts，也未引入新的 runtime / llm owner blocker。 
 
 #### WP-MEM-GAP-021 Reflection → ExperienceMemory 反馈闭环显性化（V2）
 
@@ -680,5 +685,5 @@ flowchart TB
 1. V1 GA 收敛后（P0 + P1 全绿、installed gate 上线、production composition 已注入 LLM Summarizer + Embedding）才启动 V2。
 2. **V2 第一波并行**：`WP-MEM-GAP-019` 已于 2026-06-18 闭合，`WP-MEM-GAP-011` 已于 2026-06-17 闭合；该波次当前已全部收口，不再作为 open wave 保留。
 3. **V2 第二波**：`WP-MEM-GAP-012` 与 `WP-MEM-GAP-013` 已于 2026-06-18 闭合；该波次已完成，后续进入质量量化与 feedback loop 收口。
-4. **V2 第三波（质量量化）**：WP-MEM-GAP-020（质量 SLO）+ WP-MEM-GAP-021（反馈闭环）。这两项是 V2 验收门的核心证据来源。
-5. WP-MEM-GAP-018（soak gate 增强）与 V2 第三波同步，把质量 SLO 落到长跑证据中。
+4. **V2 第三波（质量量化）**：`WP-MEM-GAP-020` 已于 2026-06-18 闭合；当前第三波剩余收敛项为 `WP-MEM-GAP-021`（反馈闭环）与 `WP-MEM-GAP-018`（soak gate 增强）。
+5. `WP-MEM-GAP-018` 后续应直接消费本轮新增的 quality metrics baseline，把 recall / faithfulness / partial / fallback 指标嵌入长跑证据，而不是再单独设计第二套质量口径。

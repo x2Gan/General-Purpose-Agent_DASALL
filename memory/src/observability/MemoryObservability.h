@@ -1,16 +1,28 @@
 #pragma once
 
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
 #include "MemoryDependencies.h"
+#include "metrics/MetricTypes.h"
 
 namespace dasall::memory::observability {
 
 struct MemoryTelemetryField {
   std::string key;
   std::string value;
+};
+
+struct MemoryMetricSample {
+  std::string name;
+  infra::metrics::MetricType type = infra::metrics::MetricType::Gauge;
+  double value = 0.0;
+  std::string unit = "1";
+  std::string description;
+  std::string outcome = "success";
+  std::string error_code;
 };
 
 struct MemoryTelemetryContext {
@@ -33,6 +45,10 @@ class IMemoryTelemetrySink {
       const std::string& event_name,
       const MemoryTelemetryContext& context,
       const std::vector<MemoryTelemetryField>& fields) = 0;
+    virtual void emit_metric_sample(
+      const MemoryMetricSample& sample,
+      const MemoryTelemetryContext& context,
+      const std::vector<MemoryTelemetryField>& fields) = 0;
   virtual void emit_trace(
       const std::string& event_name,
       const MemoryTelemetryContext& context,
@@ -51,6 +67,11 @@ class MemoryObservability {
 
   void emit(
       const std::string& event_name,
+      const MemoryTelemetryContext& context,
+      std::vector<MemoryTelemetryField> fields = {}) const;
+
+    void emit_metric_sample(
+      const MemoryMetricSample& sample,
       const MemoryTelemetryContext& context,
       std::vector<MemoryTelemetryField> fields = {}) const;
 

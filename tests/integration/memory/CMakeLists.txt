@@ -118,6 +118,27 @@ dasall_add_memory_integration_test(
 )
 
 dasall_add_memory_integration_test(
+  dasall_memory_quality_probe_integration_test
+  MemoryQualityProbeIntegrationTest
+  MemoryQualityProbeIntegrationTest.cpp
+  "integration;memory;quality"
+)
+
+dasall_add_memory_integration_test(
+  dasall_memory_recall_at_k_baseline_integration_test
+  MemoryRecallAtKBaselineTest
+  MemoryRecallAtKBaselineTest.cpp
+  "integration;memory;quality"
+)
+
+dasall_add_memory_integration_test(
+  dasall_memory_summary_faithfulness_baseline_integration_test
+  MemorySummaryFaithfulnessBaselineTest
+  MemorySummaryFaithfulnessBaselineTest.cpp
+  "integration;memory;quality"
+)
+
+dasall_add_memory_integration_test(
   dasall_memory_checkpoint_busy_integration_test
   MemoryCheckpointBusyTest
   MemoryCheckpointBusyTest.cpp
@@ -207,6 +228,26 @@ target_link_libraries(dasall_memory_compression_llm_summarizer_integration_test
     dasall_sqlite3
 )
 
+target_link_libraries(dasall_memory_quality_probe_integration_test
+  PRIVATE
+    dasall_apps_runtime_support
+    dasall_llm
+    dasall_infra
+    dasall_sqlite3
+)
+
+target_link_libraries(dasall_memory_recall_at_k_baseline_integration_test
+  PRIVATE
+    dasall_infra
+    dasall_sqlite3
+)
+
+target_link_libraries(dasall_memory_summary_faithfulness_baseline_integration_test
+  PRIVATE
+    dasall_infra
+    dasall_sqlite3
+)
+
 target_link_libraries(dasall_memory_checkpoint_busy_integration_test
   PRIVATE
     dasall_sqlite3
@@ -275,6 +316,26 @@ target_include_directories(dasall_memory_compression_llm_summarizer_integration_
     ${CMAKE_SOURCE_DIR}/tests/mocks/include
 )
 
+target_include_directories(dasall_memory_quality_probe_integration_test
+  PRIVATE
+    ${CMAKE_SOURCE_DIR}/apps/runtime_support/src
+    ${CMAKE_SOURCE_DIR}/infra/include
+    ${CMAKE_SOURCE_DIR}/infra/src
+    ${CMAKE_SOURCE_DIR}/tests/mocks/include
+)
+
+target_include_directories(dasall_memory_recall_at_k_baseline_integration_test
+  PRIVATE
+    ${CMAKE_SOURCE_DIR}/infra/include
+    ${CMAKE_SOURCE_DIR}/infra/src
+)
+
+target_include_directories(dasall_memory_summary_faithfulness_baseline_integration_test
+  PRIVATE
+    ${CMAKE_SOURCE_DIR}/infra/include
+    ${CMAKE_SOURCE_DIR}/infra/src
+)
+
 target_include_directories(dasall_memory_checkpoint_busy_integration_test
   PRIVATE
     ${CMAKE_SOURCE_DIR}/memory/src
@@ -331,6 +392,21 @@ target_compile_definitions(dasall_memory_production_logging_integration_test
 )
 
 target_compile_definitions(dasall_memory_compression_llm_summarizer_integration_test
+  PRIVATE
+    DASALL_SQL_MEMORY_DIR="${CMAKE_SOURCE_DIR}/sql/memory"
+)
+
+target_compile_definitions(dasall_memory_quality_probe_integration_test
+  PRIVATE
+    DASALL_SQL_MEMORY_DIR="${CMAKE_SOURCE_DIR}/sql/memory"
+)
+
+target_compile_definitions(dasall_memory_recall_at_k_baseline_integration_test
+  PRIVATE
+    DASALL_SQL_MEMORY_DIR="${CMAKE_SOURCE_DIR}/sql/memory"
+)
+
+target_compile_definitions(dasall_memory_summary_faithfulness_baseline_integration_test
   PRIVATE
     DASALL_SQL_MEMORY_DIR="${CMAKE_SOURCE_DIR}/sql/memory"
 )
