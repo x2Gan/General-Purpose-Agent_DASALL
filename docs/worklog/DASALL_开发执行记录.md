@@ -1,3 +1,41 @@
+## 记录 #890
+
+- 日期：2026-06-18
+- 阶段：memory / reflection feedback loop closure
+- 任务：完成 WP-MEM-GAP-021“Reflection → ExperienceMemory 反馈闭环显性化（V2）”
+- 状态：已完成（lesson projection、runtime writeback glue、next-round context recall 与 focused gates 已闭合）
+
+### 执行前提
+
+1. [docs/deliverables/MEM-EVAL-2026-05-31-memory子系统落地评估与生产级缺口治理任务规划.md](../deliverables/MEM-EVAL-2026-05-31-memory子系统落地评估与生产级缺口治理任务规划.md) 已将 `WP-MEM-GAP-021` 固定为“`ReflectionLessonProjection` + `reflection_lesson` writeback seam + `WritebackCoordinatorReflectionLessonTest` + `MemoryReflectionFeedbackLoopIntegrationTest`”，且前序 `WP-MEM-GAP-020` 已在同日闭合。
+2. 本地代码复核表明根因并不在 store/query：`CandidateCollector` 已能查询 `ExperienceMemory`，但 runtime/cognition 之间没有显式 lesson projection，`ContextOrchestrator` 也没有把 `relevant_experiences` 投影进现有 `ContextPacket` 槽位，因此 feedback loop 无法被自动化验证。
+3. 外部参考采用 LangChain / LangGraph memory 概念文档：episodic / long-term memories 的价值在于把 past agent actions 与 reflection-derived guidance 显式保存，并在后续交互中作为 grounding context 召回；这直接支撑本轮把 self-reflection lesson 落成可检索 experience，并通过现有 `retrieval_evidence` 槽位回灌，而不是把原始 reflection trace 重新塞回 prompt。
+
+### 改动
+
+1. 新增 [docs/todos/memory/deliverables/WP-MEM-GAP-021-reflection-feedback-loop-closeout.md](../todos/memory/deliverables/WP-MEM-GAP-021-reflection-feedback-loop-closeout.md)，固定任务边界、研究依据、Design->Build 映射与 focused 验收口径。
+2. 新增 [contracts/include/checkpoint/ReflectionLessonProjection.h](../../contracts/include/checkpoint/ReflectionLessonProjection.h)，并更新 [cognition/include/CognitionTypes.h](../../cognition/include/CognitionTypes.h)，为 `CognitionReflectionResult` 增加 suggestion-only `reflection_lesson` 字段。
+3. 更新 [cognition/src/CognitionFacade.cpp](../../cognition/src/CognitionFacade.cpp)，在已有 `reflection_decision` 成功产出后合成 lesson summary、trigger condition、recommended action、effectiveness score 与 reflection tags，不新增新的 reflection structured-output schema。
+4. 更新 [memory/include/writeback/MemoryWritebackRequest.h](../../memory/include/writeback/MemoryWritebackRequest.h)、[memory/src/writeback/WritebackCoordinator.cpp](../../memory/src/writeback/WritebackCoordinator.cpp) 与 [memory/src/context/ContextOrchestrator.cpp](../../memory/src/context/ContextOrchestrator.cpp)，新增 `reflection_lesson` 写回入口、`experience_kind=self_reflection` 审计标签投影，以及 `relevant_experiences -> retrieval_evidence` 的现有槽位投影。
+5. 新增 [runtime/src/ReflectionLessonProjector.h](../../runtime/src/ReflectionLessonProjector.h) / [runtime/src/ReflectionLessonProjector.cpp](../../runtime/src/ReflectionLessonProjector.cpp)，并更新 [runtime/src/AgentOrchestrator.cpp](../../runtime/src/AgentOrchestrator.cpp) / [runtime/CMakeLists.txt](../../runtime/CMakeLists.txt)，让 runtime 在 reflection 成功后按既有 belief writeback 语义发起 lesson 的 best-effort memory writeback。
+6. 新增 [tests/unit/memory/WritebackCoordinatorReflectionLessonTest.cpp](../../tests/unit/memory/WritebackCoordinatorReflectionLessonTest.cpp)、[tests/integration/memory/MemoryReflectionFeedbackLoopIntegrationTest.cpp](../../tests/integration/memory/MemoryReflectionFeedbackLoopIntegrationTest.cpp)，并更新 [tests/unit/memory/CMakeLists.txt](../../tests/unit/memory/CMakeLists.txt)、[tests/integration/memory/CMakeLists.txt](../../tests/integration/memory/CMakeLists.txt)、[tests/unit/memory/MemoryInterfaceCompileTest.cpp](../../tests/unit/memory/MemoryInterfaceCompileTest.cpp) 完成 discoverability 与 public surface regression。
+7. 更新 [docs/deliverables/MEM-EVAL-2026-05-31-memory子系统落地评估与生产级缺口治理任务规划.md](../deliverables/MEM-EVAL-2026-05-31-memory子系统落地评估与生产级缺口治理任务规划.md) 与 [docs/todos/DASALL_子系统查漏补缺专项记录.md](../todos/DASALL_子系统查漏补缺专项记录.md)，把 `WP-MEM-GAP-021` 从 open gap 回写为已闭合，并将剩余 V2 焦点收窄为 `WP-MEM-GAP-018` 与更高层 soak / release evidence。
+
+### 验证
+
+1. `ctest --test-dir build-ci -R "^WritebackCoordinatorReflectionLessonTest$" --output-on-failure`
+   - 结果：通过，1/1。
+2. `cmake --build build-ci --target dasall_memory_reflection_feedback_loop_integration_test && ctest --test-dir build-ci -R "^MemoryReflectionFeedbackLoopIntegrationTest$" --output-on-failure`
+   - 结果：通过，1/1。
+3. `ctest --test-dir build-ci -R "^(WritebackCoordinatorReflectionLessonTest|MemoryReflectionFeedbackLoopIntegrationTest|MemoryInterfaceCompileTest)$" --output-on-failure`
+   - 结果：通过，3/3。
+
+### 结果
+
+1. `WP-MEM-GAP-021` 已闭合；reflection 产出的 lesson 现在会沿 cognition → runtime → memory 显式落成 self-reflection `ExperienceMemory`，并在下一轮 context assembly 中被显性召回到 `ContextPacket`。
+2. 本轮保持了 owner 边界：cognition 只生成 suggestion-only lesson，runtime 只做 request projection，memory 只做持久化、召回与现有槽位投影；没有新增执行控制字段，也没有回退 ADR-006 / ADR-007。
+3. Memory 当前剩余 V2 / 运营焦点已从 `WP-MEM-GAP-021` 收敛为 `WP-MEM-GAP-018` 与更高层 installed / soak / release evidence；reflection feedback loop 不再是 open gap。
+
 ## 记录 #889
 
 - 日期：2026-06-18

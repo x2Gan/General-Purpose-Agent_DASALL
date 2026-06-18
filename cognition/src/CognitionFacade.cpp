@@ -338,6 +338,66 @@ namespace dasall::cognition {
             }
         }
 
+        [[nodiscard]] std::optional<std::string>
+        synthesize_reflection_trigger_condition(const ReflectionRequest& request) {
+            if (request.latest_observation.error.has_value() &&
+                !request.latest_observation.error->details.message.empty()) {
+                return request.latest_observation.error->details.message;
+            }
+
+            if (request.latest_observation.payload.has_value() &&
+                !request.latest_observation.payload->empty()) {
+                return request.latest_observation.payload;
+            }
+
+            return std::nullopt;
+        }
+
+        [[nodiscard]] std::optional<std::string>
+        synthesize_reflection_recommended_action(const contracts::ReflectionDecision& decision) {
+            if (!decision.decision_kind.has_value()) {
+                return std::nullopt;
+            }
+
+            switch (*decision.decision_kind) {
+                case contracts::ReflectionDecisionKind::RetryStep:
+                    return std::string{"retry the failed step after rechecking the latest evidence"};
+                case contracts::ReflectionDecisionKind::Replan:
+                    return std::string{"replan before executing the next action"};
+                case contracts::ReflectionDecisionKind::AbortSafe:
+                    return std::string{"stop the unsafe path and switch to a safe fallback"};
+                case contracts::ReflectionDecisionKind::Continue:
+                case contracts::ReflectionDecisionKind::Unspecified:
+                default:
+                    return std::nullopt;
+            }
+        }
+
+        [[nodiscard]] std::optional<contracts::ReflectionLessonProjection>
+        synthesize_reflection_lesson_projection(const ReflectionRequest& request,
+                                                const contracts::ReflectionDecision& decision) {
+            if (!decision.decision_kind.has_value() ||
+                *decision.decision_kind == contracts::ReflectionDecisionKind::Continue ||
+                !decision.rationale.has_value() || decision.rationale->empty()) {
+                return std::nullopt;
+            }
+
+            contracts::ReflectionLessonProjection lesson;
+            lesson.lesson_summary = decision.rationale;
+            lesson.trigger_condition = synthesize_reflection_trigger_condition(request);
+            lesson.recommended_action = synthesize_reflection_recommended_action(decision);
+            lesson.effectiveness_score = static_cast<std::uint32_t>(
+                std::clamp(decision.confidence.value_or(0.0F), 0.0F, 1.0F) * 100.0F);
+            lesson.applicable_domains = std::vector<std::string>{"reflection"};
+            lesson.tags = std::vector<std::string>{
+                "reflection",
+                "stage:reflection",
+                "experience_kind:self_reflection",
+                "cognition",
+            };
+            return lesson;
+        }
+
         /**
          * @brief Create a diagnostic string for a structured projection flag.
          * This function constructs a diagnostic string for a structured projection flag
@@ -3322,6 +3382,8 @@ namespace dasall::cognition {
                                           "reflection_pipeline.self_refine.skipped:budget_cap");
                         }
                     }
+                    result.reflection_lesson = synthesize_reflection_lesson_projection(
+                        request, *result.reflection_decision);
                     emit_pipeline_checkpoint(
                         telemetry_, make_stage_context(request, "reflection", false), "reflection",
                         "analysis", "completed",
@@ -3386,6 +3448,8 @@ namespace dasall::cognition {
                 }
 
                 result.reflection_decision = *reflection_decision.value;
+                result.reflection_lesson = synthesize_reflection_lesson_projection(
+                    request, *result.reflection_decision);
                 result.belief_update_hint = belief_update_synthesizer_.synthesize_from_reflection(
                     *reflection_decision.value, request.belief_state, request.latest_observation);
                 emit_pipeline_checkpoint(

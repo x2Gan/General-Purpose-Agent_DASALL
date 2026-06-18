@@ -7,6 +7,7 @@
 
 #include "agent/BeliefState.h"
 #include "agent/GoalContract.h"
+#include "checkpoint/ReflectionLessonProjection.h"
 #include "checkpoint/ReflectionDecision.h"
 #include "context/ContextPacket.h"
 #include "error/ErrorInfo.h"
@@ -105,6 +106,7 @@ struct ReflectionRequest {
 struct CognitionReflectionResult {
   std::optional<contracts::ResultCode> result_code;
   std::optional<contracts::ReflectionDecision> reflection_decision;
+  std::optional<contracts::ReflectionLessonProjection> reflection_lesson;
   std::optional<belief::BeliefUpdateHint> belief_update_hint;
   std::optional<contracts::ErrorInfo> error_info;
   std::vector<std::string> diagnostics;

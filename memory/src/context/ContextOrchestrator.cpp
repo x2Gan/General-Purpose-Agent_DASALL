@@ -349,6 +349,23 @@ std::vector<std::string> serialize_recent_history(const CandidateSet& candidates
 std::vector<std::string> build_retrieval_evidence_entries(
     const CandidateSet& candidates) {
   std::vector<std::string> entries;
+  for (const auto& experience : candidates.relevant_experiences) {
+    if (!experience.lesson_summary.has_value() || experience.lesson_summary->empty()) {
+      continue;
+    }
+
+    std::string entry = std::string{"[experience] "} + *experience.lesson_summary;
+    if (experience.trigger_condition.has_value() &&
+        !experience.trigger_condition->empty()) {
+      entry += std::string{" | when: "} + *experience.trigger_condition;
+    }
+    if (experience.recommended_action.has_value() &&
+        !experience.recommended_action->empty()) {
+      entry += std::string{" | do: "} + *experience.recommended_action;
+    }
+    entries.push_back(std::move(entry));
+  }
+
   auto sorted_hits = candidates.vector_hits;
   std::sort(sorted_hits.begin(), sorted_hits.end(),
             [](const VectorHit& left, const VectorHit& right) {

@@ -17,6 +17,7 @@
 #include "IResponseBuilder.h"
 #include "KnowledgeEvidenceProjector.h"
 #include "LLMGenerateRequest.h"
+#include "ReflectionLessonProjector.h"
 #include "RuntimeErrorCode.h"
 #include "RuntimeDependencySet.h"
 #include "IToolManager.h"
@@ -3744,6 +3745,31 @@ OrchestratorRunResult AgentOrchestrator::run_once(const contracts::AgentRequest&
           goal_id);
       run_result.final_state = RuntimeState::Failed;
       return run_result;
+    }
+
+    if (reflection_result.reflection_lesson.has_value()) {
+      if (const auto reflection_lesson_writeback_request =
+              ReflectionLessonProjector{}.make_writeback_request(normalized_request,
+                                                                goal_id,
+                                                                latest_observation,
+                                                                reflection_result);
+          reflection_lesson_writeback_request.has_value()) {
+        const auto reflection_writeback_result =
+            composition_.dependency_set->memory_manager->write_back(
+                *reflection_lesson_writeback_request);
+        if (reflection_writeback_result.result_code.has_value() ||
+            reflection_writeback_result.degraded ||
+            reflection_writeback_result.partial) {
+          push_trace(&run_result.stage_trace,
+                     OrchestratorStage::RecoveryRound,
+                     fsm->current_state(),
+                     fsm->current_state(),
+                     true,
+                     reflection_writeback_result.result_code.has_value()
+                         ? "reflection lesson writeback failed best-effort"
+                         : "reflection lesson writeback completed as a partial success");
+        }
+      }
     }
 
     if (reflection_result.reflection_decision.has_value() &&

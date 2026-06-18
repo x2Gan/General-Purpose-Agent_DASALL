@@ -5,6 +5,7 @@ target_sources(dasall_runtime
     src/AgentFacade.cpp
     src/AgentOrchestrator.cpp
     src/KnowledgeEvidenceProjector.cpp
+    src/ReflectionLessonProjector.cpp
     src/budget/BudgetController.cpp
     src/checkpoint/CheckpointManager.cpp
     src/checkpoint/CheckpointStateMapper.cpp

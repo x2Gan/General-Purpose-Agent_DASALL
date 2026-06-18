@@ -552,10 +552,10 @@ flowchart LR
 memory 子系统已达到 **可生产部署 v1** 水位：架构 / 详设目标 100% 落地、无虚假实现、业务链贯通、ADR 边界守门、可观测性 sink 直连、profile 兼容齐备。
 
 距离 **GA 生产级** 的真实缺口集中在两个象限：
-1. **质量层**：`GAP-P0-A` 与 `GAP-P0-B` 已于 2026-06-02 闭合，`GAP-P1-A` 已于 2026-06-03 把 token 估算收口到 `cl100k_base` 兼容实现，`GAP-P2-A` 已于 2026-06-15 闭合，`GAP-P2-B` 与 `GAP-P2-C` 已于 2026-06-17 闭合，`GAP-P2-D`、`GAP-P2-E`、`WP-MEM-GAP-019` 与 `WP-MEM-GAP-020` 已于 2026-06-18 闭合；当前剩余关键质量缺口收敛为 reflection→ExperienceMemory 反馈闭环，以及把本轮 quality SLO 嵌入更高层 soak / release evidence。
+1. **质量层**：`GAP-P0-A` 与 `GAP-P0-B` 已于 2026-06-02 闭合，`GAP-P1-A` 已于 2026-06-03 把 token 估算收口到 `cl100k_base` 兼容实现，`GAP-P2-A` 已于 2026-06-15 闭合，`GAP-P2-B` 与 `GAP-P2-C` 已于 2026-06-17 闭合，`GAP-P2-D`、`GAP-P2-E`、`WP-MEM-GAP-019`、`WP-MEM-GAP-020` 与 `WP-MEM-GAP-021` 已于 2026-06-18 闭合；当前剩余质量层工作收敛为把本轮 quality / feedback loop 证据嵌入更高层 soak / release evidence。
 2. **运营层**：并发 / 长跑 / TSAN 压力门（GAP-P0-C）已于 2026-06-02 通过 build-tree + TSAN 证据闭合；`GAP-P1-B` 已于 2026-06-03 完成 daemon-owned MaintenanceTicker 挂载；当前剩余运营焦点收敛为 installed gate（GAP-P0-D）的更高层绿色记录与 soak 采样（GAP-P3-E）。
 
-其余 P2 / P3 缺口（MEM-E02..E09）为设计文档已显式声明的演进项，不属于实现缺陷。GA 收敛优先级建议：**剩余 P0 一项 → P1 两项 → P2 链式 → P3 选择性**。
+其余 P2 / P3 缺口（MEM-E02..E09）为设计文档已显式声明的演进项，不属于实现缺陷。GA 收敛优先级建议：**剩余 P0 一项 → soak / installed 运营证据 → P3 选择性**。
 
 ---
 
@@ -590,7 +590,7 @@ memory 子系统已达到 **可生产部署 v1** 水位：架构 / 详设目标 
 | **V2** | **WP-MEM-GAP-013** | desktop_full 默认开启 sqlite-vss 灰度（已完成 2026-06-18） |
 | **V2** | **WP-MEM-GAP-019** | 分层递归摘要（MemGPT / MemoryOS dialog→topic→user pages，已完成 2026-06-18） |
 | **V2** | **WP-MEM-GAP-020** | Memory 质量 SLO 与 recall@k / summary-faithfulness 指标（已完成 2026-06-18） |
-| **V2** | **WP-MEM-GAP-021** | Reflection → ExperienceMemory 反馈闭环显性化 |
+| **V2** | **WP-MEM-GAP-021** | Reflection → ExperienceMemory 反馈闭环显性化（已完成 2026-06-18） |
 | V3 | WP-MEM-GAP-014 | ProgrammaticMemory 持久化（MEM-E06） |
 | V3 | WP-MEM-GAP-015 | mini-store 接口收敛 |
 | V3 | WP-MEM-GAP-016 | ContextAssembleRequest/Result 提升（MEM-E07） |
@@ -637,17 +637,22 @@ memory 子系统已达到 **可生产部署 v1** 水位：架构 / 详设目标 
 
 #### WP-MEM-GAP-021 Reflection → ExperienceMemory 反馈闭环显性化（V2）
 
-- **背景**：V1 的 ExperienceMemory 写回路径已存在（WritebackCoordinator.normalize_experience_candidate），但**触发源**主要是 runtime.RecoveryManager 的 outcome；自反思（cognition.reflect 阶段产出的 lesson_learned）→ ExperienceMemory 的链路在 runtime / cognition 之间没有端到端测试，导致 V2 的"经验越用越好"假设无法验证。
-- **代码目标**
-  - 在 [memory/include/writeback/MemoryWritebackRequest.h](../../memory/include/writeback/MemoryWritebackRequest.h) 增加 `reflection_lesson` 字段（experience kind = self_reflection）。
-  - WritebackCoordinator 增加 `experience_kind` 投影到审计标签。
-  - 在 cognition / runtime 协作侧（仅 contracts 层增字段，实现 owner 不变），定义 ReflectionLessonProjection。
-  - 新增 `MemoryReflectionFeedbackLoopIntegrationTest`：模拟 N 轮失败 → reflection → ExperienceMemory → 下一轮 CandidateCollector 召回该 lesson → 影响 ContextPacket。
-- **测试目标**
-  - `MemoryReflectionFeedbackLoopIntegrationTest`、`WritebackCoordinatorReflectionLessonTest`。
-- **验收命令**
-  - `ctest --test-dir build-ci -R "MemoryReflectionFeedbackLoop|WritebackCoordinatorReflectionLesson" --output-on-failure`
-- **阻塞 / 解阻**：依赖 cognition 子系统 reflection stage 暴露 lesson_learned 字段（与 COG-EVAL 协同；如 cognition 缺，先在 contracts 留空字段，memory 侧落地后端，cognition 后续填充）。
+- **状态**：已完成（2026-06-18）。
+- **代码结果**
+  - 已新增 [contracts/include/checkpoint/ReflectionLessonProjection.h](../../contracts/include/checkpoint/ReflectionLessonProjection.h)，并更新 [cognition/include/CognitionTypes.h](../../cognition/include/CognitionTypes.h)，为 `CognitionReflectionResult` 增加 suggestion-only `reflection_lesson` 字段；实现保持 owner 不变，不回退 `ReflectionDecision` / `RecoveryOutcome` 分层。
+  - 已更新 [cognition/src/CognitionFacade.cpp](../../cognition/src/CognitionFacade.cpp)，在已有 `reflection_decision` 成功产出后，按 failed observation / decision kind 合成 lesson summary、trigger condition、recommended action、effectiveness score 与 `reflection` / `stage:reflection` tags；本轮未新增新的 reflection structured-output schema。
+  - 已更新 [memory/include/writeback/MemoryWritebackRequest.h](../../memory/include/writeback/MemoryWritebackRequest.h) 与 [memory/src/writeback/WritebackCoordinator.cpp](../../memory/src/writeback/WritebackCoordinator.cpp)，新增 `reflection_lesson` 写回入口，并把其归一化为 self-reflection `ExperienceCandidate`；writeback telemetry 现会把 `experience_kind=self_reflection` 投影到审计/指标字段。
+  - 已新增 [runtime/src/ReflectionLessonProjector.h](../../runtime/src/ReflectionLessonProjector.h) 与 [runtime/src/ReflectionLessonProjector.cpp](../../runtime/src/ReflectionLessonProjector.cpp)，并更新 [runtime/src/AgentOrchestrator.cpp](../../runtime/src/AgentOrchestrator.cpp) / [runtime/CMakeLists.txt](../../runtime/CMakeLists.txt)，让 runtime 在 reflection 成功后按既有 belief writeback 语义发起 lesson 的 best-effort memory writeback。
+  - 已更新 [memory/src/context/ContextOrchestrator.cpp](../../memory/src/context/ContextOrchestrator.cpp)，把 `CandidateSet.relevant_experiences` 规范化投影到现有 `retrieval_evidence` 槽位，兑现“下一轮 recall 已影响 `ContextPacket`”而不扩 frozen slots。
+- **测试结果**
+  - 已新增 [tests/unit/memory/WritebackCoordinatorReflectionLessonTest.cpp](../../tests/unit/memory/WritebackCoordinatorReflectionLessonTest.cpp) 并更新 [tests/unit/memory/CMakeLists.txt](../../tests/unit/memory/CMakeLists.txt)，验证 `reflection_lesson` 会落成可按 `stage="reflection"` 召回的 `ExperienceMemory`，并保留 `experience_kind:self_reflection` 审计 tag。
+  - 已新增 [tests/integration/memory/MemoryReflectionFeedbackLoopIntegrationTest.cpp](../../tests/integration/memory/MemoryReflectionFeedbackLoopIntegrationTest.cpp) 并更新 [tests/integration/memory/CMakeLists.txt](../../tests/integration/memory/CMakeLists.txt)，用真实 cognition reflection flow + runtime projector + sqlite-backed memory manager 证明 failed observation 产生的 lesson 会在下一轮 `prepare_context(stage="reflection")` 中以 `retrieval_evidence` 形式回灌 `ContextPacket`。
+  - 已更新 [tests/unit/memory/MemoryInterfaceCompileTest.cpp](../../tests/unit/memory/MemoryInterfaceCompileTest.cpp)，把 `ReflectionLessonProjection` include 与 `MemoryWritebackRequest.reflection_lesson` surface 纳入 compile regression。
+- **验收证据**
+  - `ctest --test-dir build-ci -R "^WritebackCoordinatorReflectionLessonTest$" --output-on-failure`：通过，1/1。
+  - `cmake --build build-ci --target dasall_memory_reflection_feedback_loop_integration_test && ctest --test-dir build-ci -R "^MemoryReflectionFeedbackLoopIntegrationTest$" --output-on-failure`：通过，1/1。
+  - `ctest --test-dir build-ci -R "^(WritebackCoordinatorReflectionLessonTest|MemoryReflectionFeedbackLoopIntegrationTest|MemoryInterfaceCompileTest)$" --output-on-failure`：通过，3/3。
+- **阻塞 / 解阻**：已解阻。原规划中的“cognition 需先暴露 lesson 字段”在本轮被最小方案吸收：shared contracts 先增加空心 `ReflectionLessonProjection`，cognition 本地即合成该字段，不需要额外拆 blocker 任务。
 
 ### 12.4 V2 验收门 GA-MEM-Gate-V2
 
@@ -685,5 +690,5 @@ flowchart TB
 1. V1 GA 收敛后（P0 + P1 全绿、installed gate 上线、production composition 已注入 LLM Summarizer + Embedding）才启动 V2。
 2. **V2 第一波并行**：`WP-MEM-GAP-019` 已于 2026-06-18 闭合，`WP-MEM-GAP-011` 已于 2026-06-17 闭合；该波次当前已全部收口，不再作为 open wave 保留。
 3. **V2 第二波**：`WP-MEM-GAP-012` 与 `WP-MEM-GAP-013` 已于 2026-06-18 闭合；该波次已完成，后续进入质量量化与 feedback loop 收口。
-4. **V2 第三波（质量量化）**：`WP-MEM-GAP-020` 已于 2026-06-18 闭合；当前第三波剩余收敛项为 `WP-MEM-GAP-021`（反馈闭环）与 `WP-MEM-GAP-018`（soak gate 增强）。
-5. `WP-MEM-GAP-018` 后续应直接消费本轮新增的 quality metrics baseline，把 recall / faithfulness / partial / fallback 指标嵌入长跑证据，而不是再单独设计第二套质量口径。
+4. **V2 第三波（质量量化）**：`WP-MEM-GAP-020` 与 `WP-MEM-GAP-021` 已于 2026-06-18 闭合；当前第三波剩余收敛项为 `WP-MEM-GAP-018`（soak gate 增强）。
+5. `WP-MEM-GAP-018` 后续应直接消费本轮新增的 quality metrics baseline 与 reflection feedback loop evidence，把 recall / faithfulness / partial / fallback / lesson recall 指标嵌入长跑证据，而不是再单独设计第二套质量口径。

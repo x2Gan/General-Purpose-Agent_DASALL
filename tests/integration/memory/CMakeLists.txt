@@ -69,6 +69,13 @@ dasall_add_memory_integration_test(
 )
 
 dasall_add_memory_integration_test(
+  dasall_memory_reflection_feedback_loop_integration_test
+  MemoryReflectionFeedbackLoopIntegrationTest
+  MemoryReflectionFeedbackLoopIntegrationTest.cpp
+  "integration;memory;runtime;cognition"
+)
+
+dasall_add_memory_integration_test(
   dasall_memory_failure_injection_integration_test
   MemoryFailureInjectionTest
   MemoryFailureInjectionTest.cpp
@@ -172,12 +179,30 @@ target_compile_definitions(dasall_memory_external_evidence_projection_integratio
     DASALL_SQL_MEMORY_DIR="${CMAKE_SOURCE_DIR}/sql/memory"
 )
 
+target_compile_definitions(dasall_memory_reflection_feedback_loop_integration_test
+  PRIVATE
+    DASALL_SQL_MEMORY_DIR="${CMAKE_SOURCE_DIR}/sql/memory"
+)
+
 target_link_libraries(dasall_memory_external_evidence_projection_integration_test
   PRIVATE
     dasall_runtime
     dasall_cognition
     dasall_tools
     dasall_sqlite3
+)
+
+target_link_libraries(dasall_memory_reflection_feedback_loop_integration_test
+  PRIVATE
+    dasall_runtime
+    dasall_cognition
+    dasall_sqlite3
+)
+
+target_include_directories(dasall_memory_reflection_feedback_loop_integration_test
+  PRIVATE
+    ${CMAKE_SOURCE_DIR}/runtime/src
+    ${CMAKE_SOURCE_DIR}/tests/mocks/include
 )
 
 target_link_libraries(dasall_memory_writeback_integration_test

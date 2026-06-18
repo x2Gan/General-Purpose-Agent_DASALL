@@ -38,6 +38,17 @@ void append_warning_once(std::vector<std::string>& warnings,
   }
 }
 
+void append_unique_string(std::vector<std::string>& values,
+                          std::string value) {
+  if (value.empty()) {
+    return;
+  }
+
+  if (std::find(values.begin(), values.end(), value) == values.end()) {
+    values.push_back(std::move(value));
+  }
+}
+
 [[nodiscard]] bool is_retryable(
     const std::optional<contracts::ResultCode>& result_code) {
   return result_code == contracts::ResultCode::RuntimeRetryExhausted;
@@ -193,6 +204,58 @@ void append_warning_once(std::vector<std::string>& warnings,
   return candidate;
 }
 
+[[nodiscard]] ExperienceCandidate make_reflection_experience_candidate(
+    const MemoryWritebackRequest& request,
+    const contracts::ReflectionLessonProjection& lesson,
+    int index) {
+  ExperienceCandidate candidate;
+  candidate.extraction_source = "runtime.cognition.reflection_lesson";
+  candidate.experience.lesson_summary = lesson.lesson_summary;
+  candidate.experience.trigger_condition =
+      lesson.trigger_condition.has_value() && !lesson.trigger_condition->empty()
+          ? lesson.trigger_condition
+          : std::optional<std::string>{"reflection follow-up required"};
+  candidate.experience.recommended_action =
+      lesson.recommended_action.has_value() && !lesson.recommended_action->empty()
+          ? lesson.recommended_action
+          : std::optional<std::string>{"apply the latest reflection guidance"};
+  candidate.experience.effectiveness_score = lesson.effectiveness_score;
+  candidate.experience.applicable_domains = lesson.applicable_domains;
+
+  std::vector<std::string> tags = lesson.tags.value_or(std::vector<std::string>{});
+  append_unique_string(tags, "reflection");
+  append_unique_string(tags, "stage:reflection");
+  append_unique_string(
+      tags,
+      std::string{"experience_kind:"} +
+          std::string{contracts::kReflectionLessonExperienceKind});
+  candidate.experience.tags = std::move(tags);
+
+  return normalize_experience_candidate(request, std::move(candidate), index);
+}
+
+[[nodiscard]] std::vector<std::string> collect_experience_kinds(
+    const std::vector<ExperienceCandidate>& candidates) {
+  std::vector<std::string> kinds;
+  constexpr std::string_view prefix = "experience_kind:";
+
+  for (const auto& candidate : candidates) {
+    if (!candidate.experience.tags.has_value()) {
+      continue;
+    }
+
+    for (const auto& tag : *candidate.experience.tags) {
+      if (tag.rfind(prefix, 0U) != 0U || tag.size() <= prefix.size()) {
+        continue;
+      }
+
+      append_unique_string(kinds, tag.substr(prefix.size()));
+    }
+  }
+
+  return kinds;
+}
+
 [[nodiscard]] std::string build_turn_vector_text(const contracts::Turn& turn) {
   std::string text = turn.user_input.value_or("");
   if (turn.agent_response.has_value() && !turn.agent_response->empty()) {
@@ -219,7 +282,8 @@ void append_warning_once(std::vector<std::string>& warnings,
 
 [[nodiscard]] std::vector<MemoryTelemetryField> make_writeback_fields(
     const WritebackResult& result,
-    std::string failure_reason = {}) {
+  std::string failure_reason = {},
+  std::vector<std::string> experience_kinds = {}) {
   std::vector<MemoryTelemetryField> fields;
   fields.push_back(MemoryTelemetryField{.key = "warning_count",
                                         .value = std::to_string(result.warnings.size())});
@@ -246,6 +310,19 @@ void append_warning_once(std::vector<std::string>& warnings,
                                         .value = std::to_string(result.fact_ids.size())});
   fields.push_back(MemoryTelemetryField{.key = "experience_count",
                                         .value = std::to_string(result.experience_ids.size())});
+  if (!experience_kinds.empty()) {
+    std::string joined_kinds;
+    for (const auto& kind : experience_kinds) {
+      if (!joined_kinds.empty()) {
+        joined_kinds += ",";
+      }
+      joined_kinds += kind;
+    }
+    fields.push_back(MemoryTelemetryField{.key = experience_kinds.size() == 1U
+                                                     ? "experience_kind"
+                                                     : "experience_kinds",
+                                          .value = std::move(joined_kinds)});
+  }
   fields.push_back(MemoryTelemetryField{.key = "conflict_count",
                                         .value = std::to_string(result.conflicts.size())});
   fields.push_back(MemoryTelemetryField{.key = "partial",
@@ -395,6 +472,19 @@ WritebackResult WritebackCoordinator::persist(
     }
     normalized_request.experience_candidates.push_back(std::move(candidate));
   }
+  if (request.reflection_lesson.has_value()) {
+    auto candidate = make_reflection_experience_candidate(
+        request,
+        *request.reflection_lesson,
+        static_cast<int>(request.experience_candidates.size()));
+    if (!contracts::validate_experience_memory_field_rules(candidate.experience).ok) {
+      prep_result.partial = true;
+      append_warning_once(prep_result.warnings, "reflection_lesson_rejected");
+      append_warning_once(prep_result.warnings, "partial_writeback_warning");
+    } else {
+      normalized_request.experience_candidates.push_back(std::move(candidate));
+    }
+  }
 
   auto result = persist_core_transaction(normalized_request);
   result.partial = result.partial || prep_result.partial;
@@ -424,6 +514,8 @@ WritebackResult WritebackCoordinator::persist(
   }
   persist_vector_sidecar(normalized_request, result);
   update_working_board(normalized_request, result);
+  const auto experience_kinds =
+      collect_experience_kinds(normalized_request.experience_candidates);
   if (quality_probe_) {
     quality_probe_->record_writeback_quality(normalized_request, result);
     quality_probe_->record_conflict_quality(
@@ -438,7 +530,7 @@ WritebackResult WritebackCoordinator::persist(
             ? "writeback.degraded"
             : "writeback.completed",
         make_observability_context(normalized_request),
-        make_writeback_fields(result));
+        make_writeback_fields(result, {}, experience_kinds));
     for (const auto& record : result.conflicts) {
       observability_->emit(conflict_event_name(record.action),
                            make_observability_context(normalized_request),

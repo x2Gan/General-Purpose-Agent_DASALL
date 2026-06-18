@@ -4,6 +4,7 @@
 #include <string>
 #include <vector>
 
+#include "checkpoint/ReflectionLessonProjection.h"
 #include "memory/ExperienceMemory.h"
 #include "memory/MemoryFact.h"
 #include "memory/SummaryMemory.h"
@@ -29,6 +30,7 @@ struct MemoryWritebackRequest {
   std::optional<contracts::SummaryMemory> summary_candidate;
   std::vector<FactCandidate> fact_candidates;
   std::vector<ExperienceCandidate> experience_candidates;
+  std::optional<contracts::ReflectionLessonProjection> reflection_lesson;
   std::optional<std::string> side_effect_report_ref;
 };
 

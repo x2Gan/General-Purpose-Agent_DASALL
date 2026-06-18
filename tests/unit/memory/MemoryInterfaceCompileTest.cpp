@@ -338,6 +338,14 @@ void test_memory_writeback_supporting_types_compile_and_preserve_partial_retry_s
     .experience = std::move(experience_candidate),
     .extraction_source = "reflection",
     });
+     request.reflection_lesson = dasall::contracts::ReflectionLessonProjection{
+     .lesson_summary = "Refresh the retrieved evidence before retrying the failed step",
+     .trigger_condition = "tool observation timed out during reflection",
+     .recommended_action = "retry the step after refreshing retrieval evidence",
+     .effectiveness_score = 88U,
+     .applicable_domains = std::vector<std::string>{"reflection"},
+     .tags = std::vector<std::string>{"experience_kind:self_reflection"},
+     };
     request.side_effect_report_ref = "side-effect-report-1";
 
     assert_equal("session-001", request.session_id,
@@ -358,6 +366,8 @@ void test_memory_writeback_supporting_types_compile_and_preserve_partial_retry_s
          "memory writeback request should carry fact candidates");
     assert_equal(1, static_cast<int>(request.experience_candidates.size()),
          "memory writeback request should carry experience candidates");
+    assert_true(request.reflection_lesson.has_value(),
+        "memory writeback request should optionally carry a reflection lesson projection");
     assert_equal("side-effect-report-1", request.side_effect_report_ref.value_or(std::string{}),
          "memory writeback request should preserve a side-effect report reference");
 
