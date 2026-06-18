@@ -43,7 +43,7 @@
 | 真实落地 vs 桩 | 无空壳实现；`memory/src/MemoryBuildSkeleton.cpp` 仅 4 行历史 namespace 文件可清理；所有主要组件均含真实业务体（store 1493 / orchestrator 814 / writeback 693 / vector backend 713 / observability 482 / manager 482 / schema migrator 406 / row mappers 408 / conflict resolver 371 / compression coordinator 320 / budget allocator 313 / detached vector factory 280 / candidate collector 246 / working board 244） | **无虚假实现** |
 | 距离生产级 GA | 仍欠：installed gate 绿色记录、ProgrammaticMemory 持久化、更高层质量 SLO / soak 量化 | **未到生产级** |
 
-总体结论：memory 已完成**架构 / 接口 / 持久化 / 上下文装配 / 写回 / 维护 / 观测性**的真实落地，与 runtime 同处"骨架达成、深度需补"水位；区别于 runtime 缺口的"信号外送 / 跨版本 / 并发证据"，memory 当前剩余缺口集中在**质量层（分层递归摘要、更高层质量 SLO 与 feedback loop）与运营层（installed / soak 证据）**。GA 前仍需继续收敛剩余 P0 项。
+总体结论：memory 已完成**架构 / 接口 / 持久化 / 上下文装配 / 写回 / 维护 / 观测性**的真实落地，与 runtime 同处"骨架达成、深度需补"水位；区别于 runtime 缺口的"信号外送 / 跨版本 / 并发证据"，memory 当前剩余缺口集中在**质量层（更高层质量 SLO 与 feedback loop）与运营层（installed / soak 证据）**。GA 前仍需继续收敛剩余 P0 项。
 
 ---
 
@@ -552,7 +552,7 @@ flowchart LR
 memory 子系统已达到 **可生产部署 v1** 水位：架构 / 详设目标 100% 落地、无虚假实现、业务链贯通、ADR 边界守门、可观测性 sink 直连、profile 兼容齐备。
 
 距离 **GA 生产级** 的真实缺口集中在两个象限：
-1. **质量层**：`GAP-P0-A` 与 `GAP-P0-B` 已于 2026-06-02 闭合，`GAP-P1-A` 已于 2026-06-03 把 token 估算收口到 `cl100k_base` 兼容实现，`GAP-P2-A` 已于 2026-06-15 闭合，`GAP-P2-B` 与 `GAP-P2-C` 已于 2026-06-17 闭合，`GAP-P2-D` 与 `GAP-P2-E` 已于 2026-06-18 闭合；当前剩余关键质量缺口收敛为分层递归摘要、更高层质量 SLO 与 reflection→ExperienceMemory 反馈闭环。
+1. **质量层**：`GAP-P0-A` 与 `GAP-P0-B` 已于 2026-06-02 闭合，`GAP-P1-A` 已于 2026-06-03 把 token 估算收口到 `cl100k_base` 兼容实现，`GAP-P2-A` 已于 2026-06-15 闭合，`GAP-P2-B` 与 `GAP-P2-C` 已于 2026-06-17 闭合，`GAP-P2-D`、`GAP-P2-E` 与 `WP-MEM-GAP-019` 已于 2026-06-18 闭合；当前剩余关键质量缺口收敛为更高层质量 SLO 与 reflection→ExperienceMemory 反馈闭环。
 2. **运营层**：并发 / 长跑 / TSAN 压力门（GAP-P0-C）已于 2026-06-02 通过 build-tree + TSAN 证据闭合；`GAP-P1-B` 已于 2026-06-03 完成 daemon-owned MaintenanceTicker 挂载；当前剩余运营焦点收敛为 installed gate（GAP-P0-D）的更高层绿色记录与 soak 采样（GAP-P3-E）。
 
 其余 P2 / P3 缺口（MEM-E02..E09）为设计文档已显式声明的演进项，不属于实现缺陷。GA 收敛优先级建议：**剩余 P0 一项 → P1 两项 → P2 链式 → P3 选择性**。
@@ -588,7 +588,7 @@ memory 子系统已达到 **可生产部署 v1** 水位：架构 / 详设目标 
 | **V2** | **WP-MEM-GAP-011** | 遗忘曲线 / 权重衰减（MEM-E02，已完成 2026-06-17） |
 | **V2** | **WP-MEM-GAP-012** | Composite scoring（MEM-E03，已完成 2026-06-18） |
 | **V2** | **WP-MEM-GAP-013** | desktop_full 默认开启 sqlite-vss 灰度（已完成 2026-06-18） |
-| **V2** | **WP-MEM-GAP-019** | 分层递归摘要（MemGPT / MemoryOS dialog→topic→user pages） |
+| **V2** | **WP-MEM-GAP-019** | 分层递归摘要（MemGPT / MemoryOS dialog→topic→user pages，已完成 2026-06-18） |
 | **V2** | **WP-MEM-GAP-020** | Memory 质量 SLO 与 recall@k / summary-faithfulness 指标 |
 | **V2** | **WP-MEM-GAP-021** | Reflection → ExperienceMemory 反馈闭环显性化 |
 | V3 | WP-MEM-GAP-014 | ProgrammaticMemory 持久化（MEM-E06） |
@@ -601,17 +601,20 @@ memory 子系统已达到 **可生产部署 v1** 水位：架构 / 详设目标 
 
 #### WP-MEM-GAP-019 分层递归摘要（V2 / MemGPT + MemoryOS 对齐）
 
-- **背景**：当前 CompressionCoordinator 只有"recent turns → SummaryMemory"单层路径；长会话 ≥1k 轮后 SummaryMemory 自身长度也会膨胀，需要二级 / 三级递归摘要（dialog page → topic page → user profile page，类比 MemoryOS）。
-- **代码目标**
-  - `memory/include/writeback/HierarchicalSummaryRequest.h`、`HierarchicalSummaryLevel` 枚举（Dialog / Topic / Profile）。
-  - `memory/src/writeback/HierarchicalSummarizationCoordinator.cpp`：在 SummaryMemory 累积长度 / 数量达阈值后触发上一级合并；保留来源 summary_id 链路（schema V006 增加 `summary_parent_id`）。
-  - `MemoryConfig.compression.hierarchy.{enabled, dialog_to_topic_threshold, topic_to_profile_threshold}` 配置投影。
-  - 与 WP-MEM-GAP-001 LLM Summarizer 共享 `ISummarizer` 接口；不同 level 走不同 prompt。
-- **测试目标**
-  - `HierarchicalSummarizationCoordinatorTest`、`SchemaMigrationV006Test`、`MemoryLongRunningSoakTest` 增加 hierarchy 维度断言。
-- **验收命令**
-  - `ctest --test-dir build-ci -R "HierarchicalSummarizationCoordinator|SchemaMigrationV006|MemoryLongRunningSoak" --output-on-failure`
-- **阻塞 / 解阻**：依赖 WP-MEM-GAP-001（V1 LLM Summarizer 已落地）。
+- **状态**：已完成（2026-06-18）。
+- **代码结果**
+  - 已新增 [memory/include/writeback/HierarchicalSummaryRequest.h](../../memory/include/writeback/HierarchicalSummaryRequest.h)、[memory/src/writeback/HierarchicalSummarizationCoordinator.h](../../memory/src/writeback/HierarchicalSummarizationCoordinator.h) 与 [memory/src/writeback/HierarchicalSummarizationCoordinator.cpp](../../memory/src/writeback/HierarchicalSummarizationCoordinator.cpp)，定义 `HierarchicalSummaryLevel::{Dialog,Topic,Profile}`、level tag helper、`HierarchicalSummaryRequest` 与 best-effort 层级晋升协调器；实现采用 segmented page 语义，把一批 unparented child summaries 合并为上一级 page，而不是继续把 latest summary 做无限增量拼接。
+  - 已更新 [memory/include/ISummaryStore.h](../../memory/include/ISummaryStore.h)、[memory/src/store/sqlite/SqliteMemoryStore.h](../../memory/src/store/sqlite/SqliteMemoryStore.h) 与 [memory/src/store/sqlite/SqliteMemoryStore.cpp](../../memory/src/store/sqlite/SqliteMemoryStore.cpp)，新增按 level 查询 latest summary、加载 unparented child summaries 与 `assign_summary_parent(...)` seam；SQLite summary upsert 保持 dialog latest pointer 兼容，只让 dialog level 更新 `sessions.latest_summary_memory_ref`，避免 topic/profile page 污染既有 Context 装配读取口径。
+  - 已新增 [sql/memory/V006__summary_hierarchy.sql](../../sql/memory/V006__summary_hierarchy.sql)，为 `summaries` 增加 `summary_parent_id` 与 hierarchy lookup index；`SummaryMemory` shared contract 本身未扩字段，parent 链路继续留在 module-local schema 中。
+  - 已更新 [memory/include/config/MemoryConfig.h](../../memory/include/config/MemoryConfig.h)、[memory/src/config/MemoryConfigProjector.cpp](../../memory/src/config/MemoryConfigProjector.cpp)、[memory/src/writeback/WritebackCoordinator.h](../../memory/src/writeback/WritebackCoordinator.h)、[memory/src/writeback/WritebackCoordinator.cpp](../../memory/src/writeback/WritebackCoordinator.cpp) 与 [memory/src/MemoryManagerFactory.cpp](../../memory/src/MemoryManagerFactory.cpp)，新增 `MemoryConfig.compression.hierarchy.{enabled,dialog_to_topic_threshold,topic_to_profile_threshold}` 投影，并在 summary core commit 后由 `WritebackCoordinator` 在同一 writer mutex 下 best-effort 触发 hierarchy promotion；若 hierarchy 失败，仅回写 warning，不回滚 turn/session/dialog summary 的核心事务。
+- **测试结果**
+  - 已新增 [tests/unit/memory/HierarchicalSummarizationCoordinatorTest.cpp](../../tests/unit/memory/HierarchicalSummarizationCoordinatorTest.cpp) 并更新 [tests/unit/memory/CMakeLists.txt](../../tests/unit/memory/CMakeLists.txt)，验证 threshold 未达时不晋升、达阈值时会创建 topic page，并把 child dialog summaries 从 unparented 集合中移除。
+  - 已新增 [tests/unit/memory/SchemaMigrationV006Test.cpp](../../tests/unit/memory/SchemaMigrationV006Test.cpp)，并同步更新 [tests/unit/memory/SchemaMigrationTest.cpp](../../tests/unit/memory/SchemaMigrationTest.cpp)，验证 fresh DB 与 V004→V006 upgrade 都会得到 `summary_parent_id` 与 hierarchy index，且 migration ledger `current_version/target_version` 正确推进到 6。
+  - 已更新 [tests/integration/memory/MemoryLongRunningSoakTest.cpp](../../tests/integration/memory/MemoryLongRunningSoakTest.cpp)，在长跑窗口内显式开启 hierarchy 并断言 topic/profile page 实际出现；同时回归 [tests/unit/memory/WritebackCoordinatorCoreTest.cpp](../../tests/unit/memory/WritebackCoordinatorCoreTest.cpp)、[tests/unit/memory/WritebackCoordinatorPartialTest.cpp](../../tests/unit/memory/WritebackCoordinatorPartialTest.cpp)、[tests/unit/memory/MemoryInterfaceCompileTest.cpp](../../tests/unit/memory/MemoryInterfaceCompileTest.cpp) 与 [tests/integration/memory/MemoryProfileCompatibilityTest.cpp](../../tests/integration/memory/MemoryProfileCompatibilityTest.cpp) 以锁定新 seam 不回退。
+- **验收证据**
+  - `Build_CMakeTools(buildTargets=["dasall_memory","dasall_memory_hierarchical_summarization_coordinator_unit_test","dasall_memory_schema_migration_v006_unit_test","dasall_memory_long_running_soak_integration_test","dasall_memory_writeback_core_unit_test","dasall_memory_writeback_partial_unit_test","dasall_memory_profile_compatibility_integration_test","dasall_memory_interface_compile_unit_test","dasall_memory_schema_migration_unit_test"])`：通过。
+  - `RunCtest_CMakeTools(tests=["MemoryInterfaceCompileTest","MemoryProfileCompatibilityTest","SchemaMigrationTest","SchemaMigrationV006Test","WritebackCoordinatorCoreTest","WritebackCoordinatorPartialTest","HierarchicalSummarizationCoordinatorTest","MemoryLongRunningSoakTest"])`：通过，8/8。
+- **阻塞 / 解阻**：已解阻。`WP-MEM-GAP-001` 的 LLM Summarizer 注入已在前序轮次闭合；本轮未再引入 shared contracts blocker 或 runtime owner blocker。
 
 #### WP-MEM-GAP-020 Memory 质量 SLO 与质量指标（V2）
 
@@ -675,7 +678,7 @@ flowchart TB
 
 执行建议：
 1. V1 GA 收敛后（P0 + P1 全绿、installed gate 上线、production composition 已注入 LLM Summarizer + Embedding）才启动 V2。
-2. **V2 第一波并行**：WP-MEM-GAP-019（分层摘要）+ WP-MEM-GAP-011（遗忘曲线）—— `WP-MEM-GAP-009` 已于 2026-06-15 闭合，`WP-MEM-GAP-010` 已于 2026-06-17 闭合，剩余项仍保持低耦合。
+2. **V2 第一波并行**：`WP-MEM-GAP-019` 已于 2026-06-18 闭合，`WP-MEM-GAP-011` 已于 2026-06-17 闭合；该波次当前已全部收口，不再作为 open wave 保留。
 3. **V2 第二波**：`WP-MEM-GAP-012` 与 `WP-MEM-GAP-013` 已于 2026-06-18 闭合；该波次已完成，后续进入质量量化与 feedback loop 收口。
 4. **V2 第三波（质量量化）**：WP-MEM-GAP-020（质量 SLO）+ WP-MEM-GAP-021（反馈闭环）。这两项是 V2 验收门的核心证据来源。
 5. WP-MEM-GAP-018（soak gate 增强）与 V2 第三波同步，把质量 SLO 落到长跑证据中。

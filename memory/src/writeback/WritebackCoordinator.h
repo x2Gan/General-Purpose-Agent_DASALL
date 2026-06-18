@@ -11,6 +11,7 @@
 #include "conflict/MemoryConflictResolver.h"
 #include "vector/VectorMemoryIndexAdapter.h"
 #include "working/IWorkingMemoryBoard.h"
+#include "writeback/HierarchicalSummarizationCoordinator.h"
 #include "writeback/MemoryWritebackRequest.h"
 #include "writeback/WritebackResult.h"
 
@@ -29,6 +30,7 @@ class WritebackCoordinator {
                        ISummaryStore& summary_store,
                        IFactStore& fact_store,
                        IExperienceStore& experience_store,
+                       std::unique_ptr<HierarchicalSummarizationCoordinator> hierarchy_coordinator,
                        std::unique_ptr<MemoryConflictResolver> conflict_resolver,
                        IWorkingMemoryBoard& working_memory_board,
                        VectorMemoryIndexAdapter* vector_index = nullptr,
@@ -55,6 +57,7 @@ class WritebackCoordinator {
   ISummaryStore& summary_store_;
   IFactStore& fact_store_;
   IExperienceStore& experience_store_;
+  std::unique_ptr<HierarchicalSummarizationCoordinator> hierarchy_coordinator_;
   std::unique_ptr<MemoryConflictResolver> conflict_resolver_;
   IWorkingMemoryBoard& working_memory_board_;
   VectorMemoryIndexAdapter* vector_index_ = nullptr;

@@ -116,6 +116,9 @@ int query_scalar_count(const std::filesystem::path& database_path,
   config.storage.busy_timeout_ms = 100;
   config.context.compression_trigger_turns = 6;
   config.context.compression_trigger_ratio = 0.5;
+  config.compression.hierarchy.enabled = true;
+  config.compression.hierarchy.dialog_to_topic_threshold = 2;
+  config.compression.hierarchy.topic_to_profile_threshold = 2;
   config.maintenance.retention_turns = 24;
   config.maintenance.fact_ttl_ms = 5000;
   config.maintenance.experience_ttl_ms = 5000;
@@ -311,6 +314,17 @@ void test_memory_manager_long_running_soak_keeps_wal_and_retention_bounded() {
       (kSoakIterationCount / kSummaryInterval) + kSoakBatchSize;
   assert_true(bundle.total_turn_count <= max_expected_turns,
               "long-running soak should keep retained turns bounded after repeated maintenance");
+
+    const auto latest_topic_summary = seeding_store.load_latest_summary(
+      "session-memory-long-running-soak",
+      dasall::memory::HierarchicalSummaryLevel::Topic);
+    assert_true(latest_topic_summary.has_value(),
+          "long-running soak should promote dialog summaries into at least one topic page");
+    const auto latest_profile_summary = seeding_store.load_latest_summary(
+      "session-memory-long-running-soak",
+      dasall::memory::HierarchicalSummaryLevel::Profile);
+    assert_true(latest_profile_summary.has_value(),
+          "long-running soak should cascade topic pages into a profile page when thresholds are met");
 
   assert_equal(0,
                query_scalar_count(

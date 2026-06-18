@@ -1,3 +1,41 @@
+## 记录 #888
+
+- 日期：2026-06-18
+- 阶段：memory / hierarchical summarization closure
+- 任务：完成 WP-MEM-GAP-019“分层递归摘要（V2 / MemGPT + MemoryOS 对齐）”
+- 状态：已完成（hierarchy config、summary parent chain、best-effort promotion 与 focused gates 已闭合）
+
+### 执行前提
+
+1. [docs/deliverables/MEM-EVAL-2026-05-31-memory子系统落地评估与生产级缺口治理任务规划.md](../deliverables/MEM-EVAL-2026-05-31-memory子系统落地评估与生产级缺口治理任务规划.md) 已将 `WP-MEM-GAP-019` 固定为“`HierarchicalSummaryLevel` + `HierarchicalSummarizationCoordinator` + schema `summary_parent_id` + hierarchy config 投影 + soak 断言”，且显式前置 `WP-MEM-GAP-001` 已在 2026-06-02 闭合。
+2. 本地代码复核表明 owner 边界清晰：`CompressionCoordinator` 在 `ContextOrchestrator::assemble()` 中负责 dialog summary 压缩，`WritebackCoordinator` 负责 summary core commit；因此 019 的最小可执行切口应是扩展 memory 内部 summary store/schema 与 writeback 后置晋升，而不是改 runtime 或 shared `SummaryMemory` contracts。
+3. 外部参考采用 MemGPT 与 MemoryOS：MemGPT 强调层级记忆系统上的 virtual context movement，MemoryOS 明确采用 short-term / mid-term / long-term personal memory 三层存储与 segmented page organization mid->long 更新；这直接支撑 DASALL 在 019 中采用 `dialog -> topic -> profile` page 晋升，而不是继续无限增量拼接 latest summary。
+
+### 改动
+
+1. 新增 [docs/todos/memory/deliverables/WP-MEM-GAP-019-hierarchical-summarization-closeout.md](../todos/memory/deliverables/WP-MEM-GAP-019-hierarchical-summarization-closeout.md)，固定任务边界、外部参考、Design->Build 映射与 focused 验收口径。
+2. 新增 [memory/include/writeback/HierarchicalSummaryRequest.h](../../memory/include/writeback/HierarchicalSummaryRequest.h)、[memory/src/writeback/HierarchicalSummarizationCoordinator.h](../../memory/src/writeback/HierarchicalSummarizationCoordinator.h) 与 [memory/src/writeback/HierarchicalSummarizationCoordinator.cpp](../../memory/src/writeback/HierarchicalSummarizationCoordinator.cpp)，定义 `Dialog / Topic / Profile` level、level tag helper、批次晋升请求与 best-effort 层级摘要协调器。
+3. 更新 [memory/include/config/MemoryConfig.h](../../memory/include/config/MemoryConfig.h)、[memory/src/config/MemoryConfigProjector.cpp](../../memory/src/config/MemoryConfigProjector.cpp)、[memory/include/ISummaryStore.h](../../memory/include/ISummaryStore.h)、[memory/src/store/sqlite/SqliteMemoryStore.h](../../memory/src/store/sqlite/SqliteMemoryStore.h)、[memory/src/store/sqlite/SqliteMemoryStore.cpp](../../memory/src/store/sqlite/SqliteMemoryStore.cpp)、[memory/src/writeback/WritebackCoordinator.h](../../memory/src/writeback/WritebackCoordinator.h)、[memory/src/writeback/WritebackCoordinator.cpp](../../memory/src/writeback/WritebackCoordinator.cpp) 与 [memory/src/MemoryManagerFactory.cpp](../../memory/src/MemoryManagerFactory.cpp)，新增 hierarchy config、按 level 查询 latest/unparented summaries、`assign_summary_parent(...)` seam，以及 summary core commit 后的 best-effort hierarchy promotion wiring。
+4. 新增 [sql/memory/V006__summary_hierarchy.sql](../../sql/memory/V006__summary_hierarchy.sql)，为 `summaries` 表增加 `summary_parent_id` 与 hierarchy lookup indexes；shared `SummaryMemory` contract 本身未扩字段。
+5. 新增 [tests/unit/memory/HierarchicalSummarizationCoordinatorTest.cpp](../../tests/unit/memory/HierarchicalSummarizationCoordinatorTest.cpp)、[tests/unit/memory/SchemaMigrationV006Test.cpp](../../tests/unit/memory/SchemaMigrationV006Test.cpp)，并更新 [tests/unit/memory/CMakeLists.txt](../../tests/unit/memory/CMakeLists.txt)、[tests/unit/memory/SchemaMigrationTest.cpp](../../tests/unit/memory/SchemaMigrationTest.cpp)、[tests/unit/memory/MemoryInterfaceCompileTest.cpp](../../tests/unit/memory/MemoryInterfaceCompileTest.cpp)、[tests/unit/memory/WritebackCoordinatorCoreTest.cpp](../../tests/unit/memory/WritebackCoordinatorCoreTest.cpp)、[tests/unit/memory/WritebackCoordinatorPartialTest.cpp](../../tests/unit/memory/WritebackCoordinatorPartialTest.cpp) 与 [tests/integration/memory/MemoryProfileCompatibilityTest.cpp](../../tests/integration/memory/MemoryProfileCompatibilityTest.cpp) 锁定新 seam。
+6. 更新 [tests/integration/memory/MemoryLongRunningSoakTest.cpp](../../tests/integration/memory/MemoryLongRunningSoakTest.cpp)，在长跑窗口内开启 hierarchy 并断言 topic/profile page 实际生成。
+7. 更新 [docs/deliverables/MEM-EVAL-2026-05-31-memory子系统落地评估与生产级缺口治理任务规划.md](../deliverables/MEM-EVAL-2026-05-31-memory子系统落地评估与生产级缺口治理任务规划.md) 与 [docs/todos/DASALL_子系统查漏补缺专项记录.md](../todos/DASALL_子系统查漏补缺专项记录.md)，把 `WP-MEM-GAP-019` 从 open gap 回写为已闭合，并把剩余 V2 焦点收窄到 `WP-MEM-GAP-020 / -021`。
+
+### 验证
+
+1. `Build_CMakeTools(buildTargets=["dasall_memory"])`
+   - 结果：通过。
+2. `Build_CMakeTools(buildTargets=["dasall_memory_hierarchical_summarization_coordinator_unit_test","dasall_memory_schema_migration_v006_unit_test","dasall_memory_long_running_soak_integration_test","dasall_memory_writeback_core_unit_test","dasall_memory_writeback_partial_unit_test","dasall_memory_profile_compatibility_integration_test","dasall_memory_interface_compile_unit_test","dasall_memory_schema_migration_unit_test"])`
+   - 结果：通过。
+3. `RunCtest_CMakeTools(tests=["MemoryInterfaceCompileTest","MemoryProfileCompatibilityTest","SchemaMigrationTest","SchemaMigrationV006Test","WritebackCoordinatorCoreTest","WritebackCoordinatorPartialTest","HierarchicalSummarizationCoordinatorTest","MemoryLongRunningSoakTest"])`
+   - 结果：通过，8/8。
+
+### 结果
+
+1. `WP-MEM-GAP-019` 已闭合；Memory 现可在不扩 shared `SummaryMemory` contracts 的前提下，把 dialog summaries 按阈值晋升为 topic/profile page，并保留 child->parent `summary_parent_id` 链路。
+2. 本轮保持了 owner 边界：runtime 没有接手 hierarchy 调度，`WritebackCoordinator` 只在 summary core commit 后 best-effort 触发分层晋升；hierarchy 失败只回 warning，不回滚核心 turn/session/dialog summary 提交。
+3. Memory 当前剩余 V2 焦点已从 `WP-MEM-GAP-019 / -020 / -021` 收窄为 `WP-MEM-GAP-020 / -021` 与更高层 quality / soak evidence；分层递归摘要不再是未闭合缺口。
+
 ## 记录 #887
 
 - 日期：2026-06-18

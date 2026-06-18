@@ -39,6 +39,16 @@ class SqliteMemoryStore final : public IMemoryStore {
       const contracts::SummaryMemory& summary) override;
   [[nodiscard]] std::optional<contracts::SummaryMemory> load_latest_summary(
       const std::string& session_id) const override;
+  [[nodiscard]] std::optional<contracts::SummaryMemory> load_latest_summary(
+      const std::string& session_id,
+      HierarchicalSummaryLevel level) const override;
+  [[nodiscard]] std::vector<contracts::SummaryMemory> load_unparented_summaries(
+      const std::string& session_id,
+      HierarchicalSummaryLevel level,
+      std::size_t limit) const override;
+  [[nodiscard]] StoreResult assign_summary_parent(
+      const std::vector<std::string>& summary_ids,
+      const std::string& parent_summary_id) override;
 
   [[nodiscard]] FactQueryResult query_facts(const FactQuery& query) const override;
   [[nodiscard]] FactQueryResult query_facts_by_user(

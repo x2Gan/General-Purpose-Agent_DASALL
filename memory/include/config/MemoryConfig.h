@@ -127,6 +127,16 @@ struct VectorConfig {
   std::string sqlite_vss_vss0_path;
 };
 
+struct CompressionConfig {
+  struct HierarchyConfig {
+    bool enabled = false;
+    int dialog_to_topic_threshold = 4;
+    int topic_to_profile_threshold = 3;
+  };
+
+  HierarchyConfig hierarchy;
+};
+
 struct ConflictConfig {
   double embedding_similarity_threshold = 0.85;
 };
@@ -158,6 +168,7 @@ struct MemoryConfig {
   ContextConfig context;
   ExperienceConfig experience;
   VectorConfig vector;
+  CompressionConfig compression;
   ConflictConfig conflict;
   MaintenanceConfig maintenance;
   TokenEstimatorBackend token_estimator = TokenEstimatorBackend::Tiktoken;

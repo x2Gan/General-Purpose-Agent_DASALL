@@ -19,6 +19,7 @@
 #include "vector/UnavailableVectorMemoryIndexAdapter.h"
 #include "working/IWorkingMemoryBoard.h"
 #include "writeback/CompressionCoordinator.h"
+#include "writeback/HierarchicalSummarizationCoordinator.h"
 #include "writeback/WritebackCoordinator.h"
 
 namespace dasall::memory {
@@ -233,6 +234,10 @@ std::unique_ptr<IMemoryManager> create_memory_manager(
     auto allocator = std::make_unique<BudgetAllocator>(config, token_estimator);
     auto compressor = std::make_unique<CompressionCoordinator>(
         *dependencies.store, dependencies.summarizer.get(), token_estimator);
+    auto hierarchy_coordinator =
+      std::make_unique<HierarchicalSummarizationCoordinator>(
+        *dependencies.store, *dependencies.store, config,
+        dependencies.summarizer.get(), token_estimator);
     auto conflict_resolver = std::make_unique<MemoryConflictResolver>(
       *dependencies.store,
       config.conflict,
@@ -242,7 +247,8 @@ std::unique_ptr<IMemoryManager> create_memory_manager(
         config, dependencies.observability, token_estimator);
     dependencies.writeback_coordinator = std::make_unique<WritebackCoordinator>(
       *dependencies.store, *dependencies.store, *dependencies.store,
-      *dependencies.store, *dependencies.store, std::move(conflict_resolver),
+      *dependencies.store, *dependencies.store, std::move(hierarchy_coordinator),
+      std::move(conflict_resolver),
       *dependencies.working_memory_board, dependencies.vector_index.get(),
       dependencies.store_writer_mutex, dependencies.observability);
     dependencies.maintenance_worker = std::make_unique<MemoryMaintenanceWorker>(

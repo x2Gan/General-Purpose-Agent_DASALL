@@ -87,6 +87,13 @@ std::optional<MemoryConfig> project_memory_config(
   config.vector.enabled = vector_enabled;
   config.vector.backend_type = vector_enabled ? VectorBackend::SqliteVss : VectorBackend::None;
   config.vector.search_top_k = search_top_k;
+  config.compression.hierarchy.enabled = true;
+  config.compression.hierarchy.dialog_to_topic_threshold =
+      clamp_value(std::max(2, compression_trigger_turns / 4),
+                  2,
+                  6);
+  config.compression.hierarchy.topic_to_profile_threshold =
+      vector_enabled ? 2 : 3;
   config.conflict.embedding_similarity_threshold = 0.85;
     config.token_estimator = TokenEstimatorBackend::Tiktoken;
 

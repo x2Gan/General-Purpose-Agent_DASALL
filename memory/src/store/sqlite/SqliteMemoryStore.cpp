@@ -1108,10 +1108,19 @@ StoreResult SqliteMemoryStore::upsert_summary(
   }
 
   sqlite3_stmt* statement = nullptr;
-  constexpr auto upsert_sql =
-      "INSERT OR REPLACE INTO summaries(summary_id, session_id, summary_text, source_turn_ids_json, "
+    constexpr auto upsert_sql =
+      "INSERT INTO summaries(summary_id, session_id, summary_text, source_turn_ids_json, "
       "decisions_made_json, confirmed_facts_json, tool_outcomes_json, created_at, tags_json) "
-      "VALUES(?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)";
+      "VALUES(?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9) "
+      "ON CONFLICT(summary_id) DO UPDATE SET "
+      "session_id = excluded.session_id, "
+      "summary_text = excluded.summary_text, "
+      "source_turn_ids_json = excluded.source_turn_ids_json, "
+      "decisions_made_json = excluded.decisions_made_json, "
+      "confirmed_facts_json = excluded.confirmed_facts_json, "
+      "tool_outcomes_json = excluded.tool_outcomes_json, "
+      "created_at = excluded.created_at, "
+      "tags_json = excluded.tags_json";
   if (sqlite3_prepare_v2(writer_connection_, upsert_sql, -1, &statement, nullptr) != SQLITE_OK) {
     return StoreResult::failure(contracts::ResultCode::RuntimeRetryExhausted,
                                 std::string{"failed to prepare summary upsert"});
@@ -1138,7 +1147,8 @@ StoreResult SqliteMemoryStore::upsert_summary(
     return StoreResult::failure(*result, std::string{"failed to upsert summary"});
   }
 
-  if (summary.session_id.has_value() && summary.summary_id.has_value()) {
+  if (summary.session_id.has_value() && summary.summary_id.has_value() &&
+      summary_matches_level(summary, HierarchicalSummaryLevel::Dialog)) {
     sqlite3_stmt* update_statement = nullptr;
     constexpr auto update_sql =
         "UPDATE sessions SET latest_summary_memory_ref = ?1 WHERE session_id = ?2";
@@ -1156,6 +1166,12 @@ StoreResult SqliteMemoryStore::upsert_summary(
 
 std::optional<contracts::SummaryMemory> SqliteMemoryStore::load_latest_summary(
     const std::string& session_id) const {
+  return load_latest_summary(session_id, HierarchicalSummaryLevel::Dialog);
+}
+
+std::optional<contracts::SummaryMemory> SqliteMemoryStore::load_latest_summary(
+    const std::string& session_id,
+    HierarchicalSummaryLevel level) const {
   const auto reader_lease = select_reader_connection();
   sqlite3* reader_connection = reader_lease.connection;
   if (reader_connection == nullptr) {
@@ -1166,18 +1182,105 @@ std::optional<contracts::SummaryMemory> SqliteMemoryStore::load_latest_summary(
   constexpr auto query =
       "SELECT summary_id, session_id, summary_text, source_turn_ids_json, decisions_made_json, "
       "confirmed_facts_json, tool_outcomes_json, created_at, tags_json "
-      "FROM summaries WHERE session_id = ?1 ORDER BY created_at DESC LIMIT 1";
+      "FROM summaries WHERE session_id = ?1 ORDER BY created_at DESC";
   if (sqlite3_prepare_v2(reader_connection, query, -1, &statement, nullptr) != SQLITE_OK) {
     return std::nullopt;
   }
 
   sqlite3_bind_text(statement, 1, session_id.c_str(), -1, SQLITE_TRANSIENT);
   std::optional<contracts::SummaryMemory> summary;
-  if (sqlite3_step(statement) == SQLITE_ROW) {
-    summary = map_row_to_summary(statement);
+  while (sqlite3_step(statement) == SQLITE_ROW) {
+    auto candidate = map_row_to_summary(statement);
+    if (!summary_matches_level(candidate, level)) {
+      continue;
+    }
+    summary = std::move(candidate);
+    break;
   }
   sqlite3_finalize(statement);
   return summary;
+}
+
+std::vector<contracts::SummaryMemory> SqliteMemoryStore::load_unparented_summaries(
+    const std::string& session_id,
+    HierarchicalSummaryLevel level,
+    std::size_t limit) const {
+  const auto reader_lease = select_reader_connection();
+  sqlite3* reader_connection = reader_lease.connection;
+  if (reader_connection == nullptr) {
+    return {};
+  }
+
+  sqlite3_stmt* statement = nullptr;
+  constexpr auto query =
+      "SELECT summary_id, session_id, summary_text, source_turn_ids_json, decisions_made_json, "
+      "confirmed_facts_json, tool_outcomes_json, created_at, tags_json "
+      "FROM summaries WHERE session_id = ?1 AND summary_parent_id IS NULL ORDER BY created_at ASC";
+  if (sqlite3_prepare_v2(reader_connection, query, -1, &statement, nullptr) != SQLITE_OK) {
+    return {};
+  }
+
+  sqlite3_bind_text(statement, 1, session_id.c_str(), -1, SQLITE_TRANSIENT);
+
+  std::vector<contracts::SummaryMemory> summaries;
+  while (sqlite3_step(statement) == SQLITE_ROW) {
+    auto candidate = map_row_to_summary(statement);
+    if (!summary_matches_level(candidate, level)) {
+      continue;
+    }
+
+    summaries.push_back(std::move(candidate));
+    if (limit > 0U && summaries.size() >= limit) {
+      break;
+    }
+  }
+
+  sqlite3_finalize(statement);
+  return summaries;
+}
+
+StoreResult SqliteMemoryStore::assign_summary_parent(
+    const std::vector<std::string>& summary_ids,
+    const std::string& parent_summary_id) {
+  if (writer_connection_ == nullptr) {
+    return StoreResult::failure(contracts::ResultCode::RuntimeRetryExhausted,
+                                std::string{"sqlite store is not open"});
+  }
+
+  if (summary_ids.empty()) {
+    return StoreResult::success(parent_summary_id);
+  }
+
+  std::string sql = "UPDATE summaries SET summary_parent_id = ?1 WHERE summary_id IN (";
+  for (std::size_t index = 0; index < summary_ids.size(); ++index) {
+    if (index != 0U) {
+      sql += ", ";
+    }
+    sql += "?" + std::to_string(index + 2U);
+  }
+  sql += ")";
+
+  sqlite3_stmt* statement = nullptr;
+  if (sqlite3_prepare_v2(writer_connection_, sql.c_str(), -1, &statement, nullptr) !=
+      SQLITE_OK) {
+    return StoreResult::failure(contracts::ResultCode::RuntimeRetryExhausted,
+                                std::string{"failed to prepare summary parent assignment"});
+  }
+
+  sqlite3_bind_text(statement, 1, parent_summary_id.c_str(), -1, SQLITE_TRANSIENT);
+  for (std::size_t index = 0; index < summary_ids.size(); ++index) {
+    sqlite3_bind_text(statement, static_cast<int>(index + 2U), summary_ids[index].c_str(), -1,
+                      SQLITE_TRANSIENT);
+  }
+
+  const int step_status = sqlite3_step(statement);
+  sqlite3_finalize(statement);
+  if (const auto result = map_sqlite_result(step_status); result.has_value()) {
+    return StoreResult::failure(*result,
+                                std::string{"failed to assign summary parent"});
+  }
+
+  return StoreResult::success(parent_summary_id);
 }
 
 FactQueryResult SqliteMemoryStore::query_facts(const FactQuery& query) const {

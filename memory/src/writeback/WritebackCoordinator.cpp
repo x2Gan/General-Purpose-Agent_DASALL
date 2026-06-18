@@ -305,6 +305,7 @@ WritebackCoordinator::WritebackCoordinator(
     ISummaryStore& summary_store,
     IFactStore& fact_store,
     IExperienceStore& experience_store,
+  std::unique_ptr<HierarchicalSummarizationCoordinator> hierarchy_coordinator,
     std::unique_ptr<MemoryConflictResolver> conflict_resolver,
     IWorkingMemoryBoard& working_memory_board,
     VectorMemoryIndexAdapter* vector_index,
@@ -315,6 +316,7 @@ WritebackCoordinator::WritebackCoordinator(
       summary_store_(summary_store),
       fact_store_(fact_store),
       experience_store_(experience_store),
+      hierarchy_coordinator_(std::move(hierarchy_coordinator)),
       conflict_resolver_(std::move(conflict_resolver)),
       working_memory_board_(working_memory_board),
       vector_index_(vector_index),
@@ -497,6 +499,14 @@ WritebackResult WritebackCoordinator::persist_core_transaction(
     result.persisted_turn_id = request.turn.turn_id;
     if (request.summary_candidate.has_value()) {
       result.summary_id = request.summary_candidate->summary_id;
+      if (hierarchy_coordinator_) {
+        const auto hierarchy_result =
+            hierarchy_coordinator_->promote_from_summary(*request.summary_candidate);
+        for (const auto& warning : hierarchy_result.warnings) {
+          append_warning_once(result.warnings, warning);
+        }
+        result.degraded = result.degraded || !hierarchy_result.warnings.empty();
+      }
     }
     return result;
   }

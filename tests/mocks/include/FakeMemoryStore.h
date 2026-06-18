@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <limits>
 #include <memory>
 #include <optional>
 #include <string>
@@ -121,10 +122,15 @@ class FakeMemoryStore final : public memory::IMemoryStore {
           std::string{"summary_id and session_id are required"});
     }
 
-    summaries_by_session_[*session_id] = summary;
+    summaries_by_id_[*summary_id] = summary;
+    auto& summary_ids = summary_ids_by_session_[*session_id];
+    if (std::find(summary_ids.begin(), summary_ids.end(), *summary_id) == summary_ids.end()) {
+      summary_ids.push_back(*summary_id);
+    }
 
     auto session_it = sessions_.find(*session_id);
-    if (session_it != sessions_.end()) {
+    if (session_it != sessions_.end() &&
+        memory::summary_matches_level(summary, memory::HierarchicalSummaryLevel::Dialog)) {
       session_it->second.latest_summary_memory_ref = *summary_id;
     }
 
@@ -133,12 +139,82 @@ class FakeMemoryStore final : public memory::IMemoryStore {
 
   [[nodiscard]] std::optional<contracts::SummaryMemory> load_latest_summary(
       const std::string& session_id) const override {
-    const auto summary_it = summaries_by_session_.find(session_id);
-    if (summary_it == summaries_by_session_.end()) {
+    return load_latest_summary(session_id, memory::HierarchicalSummaryLevel::Dialog);
+  }
+
+  [[nodiscard]] std::optional<contracts::SummaryMemory> load_latest_summary(
+      const std::string& session_id,
+      memory::HierarchicalSummaryLevel level) const override {
+    const auto summary_ids_it = summary_ids_by_session_.find(session_id);
+    if (summary_ids_it == summary_ids_by_session_.end()) {
       return std::nullopt;
     }
 
-    return summary_it->second;
+    std::optional<contracts::SummaryMemory> latest_summary;
+    std::int64_t latest_created_at = std::numeric_limits<std::int64_t>::min();
+    for (const auto& summary_id : summary_ids_it->second) {
+      const auto summary_it = summaries_by_id_.find(summary_id);
+      if (summary_it == summaries_by_id_.end() ||
+          !memory::summary_matches_level(summary_it->second, level)) {
+        continue;
+      }
+
+      const auto created_at = summary_it->second.created_at.value_or(0);
+      if (!latest_summary.has_value() || created_at >= latest_created_at) {
+        latest_created_at = created_at;
+        latest_summary = summary_it->second;
+      }
+    }
+
+    return latest_summary;
+  }
+
+  [[nodiscard]] std::vector<contracts::SummaryMemory> load_unparented_summaries(
+      const std::string& session_id,
+      memory::HierarchicalSummaryLevel level,
+      std::size_t limit) const override {
+    std::vector<contracts::SummaryMemory> summaries;
+    const auto summary_ids_it = summary_ids_by_session_.find(session_id);
+    if (summary_ids_it == summary_ids_by_session_.end()) {
+      return summaries;
+    }
+
+    for (const auto& summary_id : summary_ids_it->second) {
+      if (summary_parent_by_id_.contains(summary_id)) {
+        continue;
+      }
+
+      const auto summary_it = summaries_by_id_.find(summary_id);
+      if (summary_it == summaries_by_id_.end() ||
+          !memory::summary_matches_level(summary_it->second, level)) {
+        continue;
+      }
+
+      summaries.push_back(summary_it->second);
+    }
+
+    std::sort(summaries.begin(), summaries.end(),
+              [](const contracts::SummaryMemory& left,
+                 const contracts::SummaryMemory& right) {
+                return left.created_at.value_or(0) < right.created_at.value_or(0);
+              });
+    if (limit > 0U && summaries.size() > limit) {
+      summaries.resize(limit);
+    }
+    return summaries;
+  }
+
+  [[nodiscard]] memory::StoreResult assign_summary_parent(
+      const std::vector<std::string>& summary_ids,
+      const std::string& parent_summary_id) override {
+    for (const auto& summary_id : summary_ids) {
+      if (!summaries_by_id_.contains(summary_id)) {
+        continue;
+      }
+      summary_parent_by_id_[summary_id] = parent_summary_id;
+    }
+
+    return memory::StoreResult::success(parent_summary_id);
   }
 
   [[nodiscard]] memory::FactQueryResult query_facts(
@@ -596,7 +672,9 @@ class FakeMemoryStore final : public memory::IMemoryStore {
   memory::MemoryConfig config_{};
   std::unordered_map<std::string, contracts::Session> sessions_;
   std::unordered_map<std::string, std::vector<contracts::Turn>> turns_by_session_;
-  std::unordered_map<std::string, contracts::SummaryMemory> summaries_by_session_;
+  std::unordered_map<std::string, contracts::SummaryMemory> summaries_by_id_;
+  std::unordered_map<std::string, std::vector<std::string>> summary_ids_by_session_;
+  std::unordered_map<std::string, std::string> summary_parent_by_id_;
   std::unordered_map<std::string, contracts::MemoryFact> facts_by_id_;
   std::unordered_map<std::string, AccessMetadata> fact_access_by_id_;
   std::unordered_map<std::string, contracts::ExperienceMemory> experiences_by_id_;

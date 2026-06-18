@@ -359,6 +359,8 @@ void test_memory_writeback_supporting_types_compile_and_preserve_partial_retry_s
           "MemoryConfig should expose the storage projection");
     static_assert(std::is_same_v<decltype(MemoryConfig{}.vector), dasall::memory::VectorConfig>,
           "MemoryConfig should expose the vector projection");
+    static_assert(std::is_same_v<decltype(MemoryConfig{}.compression), dasall::memory::CompressionConfig>,
+         "MemoryConfig should expose the compression projection");
     static_assert(std::is_same_v<decltype(MemoryConfig{}.conflict), dasall::memory::ConflictConfig>,
          "MemoryConfig should expose the conflict projection");
     static_assert(std::is_same_v<decltype(MemoryConfig{}.token_estimator),
@@ -411,6 +413,12 @@ void test_memory_writeback_supporting_types_compile_and_preserve_partial_retry_s
          "memory vector config should expose sqlite-vss as the default backend type");
     assert_equal(5, config.vector.search_top_k,
          "memory vector config should default top-k search width to five");
+    assert_true(config.compression.hierarchy.enabled == false,
+        "memory compression hierarchy should default disabled until profile projection enables it");
+    assert_equal(4, config.compression.hierarchy.dialog_to_topic_threshold,
+         "memory compression hierarchy should default dialog-to-topic threshold to four");
+    assert_equal(3, config.compression.hierarchy.topic_to_profile_threshold,
+         "memory compression hierarchy should default topic-to-profile threshold to three");
     assert_true(config.conflict.embedding_similarity_threshold > 0.84 &&
         config.conflict.embedding_similarity_threshold < 0.86,
         "memory conflict config should default embedding similarity threshold to 0.85");

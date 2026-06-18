@@ -156,6 +156,16 @@ void test_memory_profile_projection_tracks_vector_maintenance_and_budget_differe
                "edge_balanced should keep a tighter summary candidate fan-in");
   assert_equal(1, edge_minimal.config.context.max_summary_candidates,
                "edge_minimal should fall back to a single summary candidate");
+  assert_true(desktop.config.compression.hierarchy.enabled,
+              "desktop_full should project hierarchical summarization as enabled");
+  assert_true(edge_balanced.config.compression.hierarchy.enabled,
+              "edge_balanced should project hierarchical summarization as enabled");
+  assert_true(edge_minimal.config.compression.hierarchy.enabled,
+              "edge_minimal should project hierarchical summarization as enabled");
+  assert_true(desktop.config.compression.hierarchy.dialog_to_topic_threshold >= 2,
+              "desktop_full should project a valid dialog-to-topic hierarchy threshold");
+  assert_true(edge_minimal.config.compression.hierarchy.topic_to_profile_threshold >= 2,
+              "edge_minimal should project a valid topic-to-profile hierarchy threshold");
   assert_true(desktop.config.context.scoring.composite_enabled,
               "desktop_full should keep composite context scoring enabled");
   assert_true(edge_balanced.config.context.scoring.composite_enabled,
