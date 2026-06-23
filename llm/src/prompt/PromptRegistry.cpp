@@ -15,6 +15,7 @@ namespace {
 
 using CompositionStage = dasall::contracts::CompositionStage;
 using PromptAssetDescriptor = dasall::llm::prompt::PromptAssetDescriptor;
+using PromptAssetMetadata = dasall::llm::prompt::PromptAssetMetadata;
 using PromptQuery = dasall::llm::prompt::PromptQuery;
 using PromptRegistryConfig = dasall::llm::prompt::PromptRegistryConfig;
 using PromptRegistryResult = dasall::llm::prompt::PromptRegistryResult;
@@ -105,6 +106,19 @@ std::vector<std::string> effective_trusted_sources(const PromptRegistryConfig& c
   }
 
   return intersect_values(configured, requested);
+}
+
+[[nodiscard]] PromptAssetMetadata make_asset_metadata(
+    const PromptAssetDescriptor& descriptor) {
+  PromptAssetMetadata metadata;
+  metadata.prompt_release_id =
+      descriptor.release.prompt_id.value_or(std::string()) + "@" +
+      descriptor.release.version.value_or(std::string());
+  metadata.package_id = descriptor.package_id;
+  metadata.content_hash = descriptor.content_hash;
+  metadata.source_layer = descriptor.source_layer;
+  metadata.source_uri = descriptor.source_uri;
+  return metadata;
 }
 
 bool matches_stage(const PromptAssetDescriptor& descriptor, CompositionStage stage) {
@@ -389,6 +403,35 @@ PromptRegistryResult PromptRegistry::select(const PromptQuery& query) const {
   }
 
   return make_failure(ResultCode::ValidationFieldMissing, "no_default_prompt_release");
+}
+
+std::optional<PromptAssetMetadata> PromptRegistry::lookup_release_asset(
+    std::string_view prompt_release_id) const {
+  if (!initialized_) {
+    return std::nullopt;
+  }
+
+  const auto release_id = parse_prompt_release_id(prompt_release_id);
+  if (!release_id.has_value()) {
+    return std::nullopt;
+  }
+
+  const auto snapshot = repository_.snapshot();
+  if (snapshot == nullptr || !snapshot->has_consistent_values()) {
+    return std::nullopt;
+  }
+
+  const auto* descriptor = snapshot->find_release(release_id->first, release_id->second);
+  if (descriptor == nullptr) {
+    return std::nullopt;
+  }
+
+  auto metadata = make_asset_metadata(*descriptor);
+  if (!metadata.has_consistent_values()) {
+    return std::nullopt;
+  }
+
+  return metadata;
 }
 
 }  // namespace dasall::llm::prompt

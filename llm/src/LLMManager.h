@@ -106,6 +106,8 @@ class LLMManager final : public ILLMManager {
   [[nodiscard]] LLMManagerResult generate(const LLMGenerateRequest& request) override;
   [[nodiscard]] LLMManagerResult stream_generate(const LLMGenerateRequest& request,
                                                  IStreamObserver* observer) override;
+  [[nodiscard]] std::optional<prompt::PromptAssetMetadata>
+  lookup_prompt_asset_metadata(std::string_view prompt_release_id) const override;
   [[nodiscard]] bool abandon_call(std::string_view llm_call_id) override;
   [[nodiscard]] HealthStatus health_check() const override;
 

@@ -21,6 +21,8 @@ class PromptPipeline final : public IPromptPipeline {
       const PromptQuery& query,
       const dasall::contracts::PromptComposeRequest& compose_request,
       const PromptPolicyInput& policy_input) const override;
+  [[nodiscard]] std::optional<PromptAssetMetadata> lookup_release_asset(
+      std::string_view prompt_release_id) const override;
 
  private:
   std::shared_ptr<IPromptRegistry> registry_;

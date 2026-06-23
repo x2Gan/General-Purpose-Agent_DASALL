@@ -26,6 +26,10 @@ add_executable(dasall_prompt_source_overlay_unit_test
 	PromptSourceOverlayTest.cpp
 )
 
+add_executable(dasall_prompt_asset_metadata_lookup_unit_test
+	PromptAssetMetadataLookupTest.cpp
+)
+
 add_executable(dasall_provider_catalog_parse_unit_test
 	ProviderCatalogParseTest.cpp
 )
@@ -196,6 +200,12 @@ target_link_libraries(dasall_prompt_asset_package_parse_unit_test
 )
 
 target_link_libraries(dasall_prompt_source_overlay_unit_test
+	PRIVATE
+		dasall_test_support
+		dasall_llm
+)
+
+target_link_libraries(dasall_prompt_asset_metadata_lookup_unit_test
 	PRIVATE
 		dasall_test_support
 		dasall_llm
@@ -487,6 +497,9 @@ set_tests_properties(PromptAssetPackageParseTest PROPERTIES LABELS "unit;llm")
 
 add_test(NAME PromptSourceOverlayTest COMMAND dasall_prompt_source_overlay_unit_test)
 set_tests_properties(PromptSourceOverlayTest PROPERTIES LABELS "unit;llm")
+
+add_test(NAME PromptAssetMetadataLookupTest COMMAND dasall_prompt_asset_metadata_lookup_unit_test)
+set_tests_properties(PromptAssetMetadataLookupTest PROPERTIES LABELS "unit;llm")
 
 add_test(NAME ProviderCatalogParseTest COMMAND dasall_provider_catalog_parse_unit_test)
 set_tests_properties(ProviderCatalogParseTest PROPERTIES LABELS "unit;llm")

@@ -1,3 +1,38 @@
+## 记录 #891
+
+- 日期：2026-06-23
+- 阶段：memory / programmatic-memory blocker recovery
+- 任务：为 WP-MEM-GAP-014 补齐 llm prompt 资产只读元数据查询 seam
+- 状态：已完成（PromptAssetMetadata public seam、registry/pipeline/manager lookup 链与 focused llm test 已闭合）
+
+### 执行前提
+
+1. [docs/deliverables/MEM-EVAL-2026-05-31-memory子系统落地评估与生产级缺口治理任务规划.md](../deliverables/MEM-EVAL-2026-05-31-memory子系统落地评估与生产级缺口治理任务规划.md) 将 `WP-MEM-GAP-014` 的前置条件冻结为“llm PromptAssetRepository 冻结后，ProgrammaticMemory 仅持久化 asset ref / lease / digest，不复制 Prompt 正文”。
+2. 本地代码复核表明 `PromptAssetRepository` 已经具备 `package_id`、`content_hash`、`source_layer` 与 `source_uri`，但这些字段只停留在 `llm/src/prompt/PromptAssetDescriptor` 私有层；runtime / memory 只能看到 `prompt_id` 与 `prompt_version`，无法为 ProgrammaticMemory 写回稳定的 digest/asset ref。
+3. 边界约束仍由 [docs/architecture/DASALL_memory子系统详细设计.md](../architecture/DASALL_memory子系统详细设计.md) §6.5.1a 与 [docs/architecture/DASALL_llm子系统详细设计.md](../architecture/DASALL_llm子系统详细设计.md) §6.15.5 共同限定：memory 不能 include llm 私有实现，llm 也不能回引 memory，因此解阻动作必须落成 llm public read-only seam，而不是跨层直接暴露 `src/prompt` 结构体。
+
+### 改动
+
+1. 新增 [llm/include/prompt/PromptAssetMetadata.h](../../llm/include/prompt/PromptAssetMetadata.h)，冻结 prompt 资产只读元数据面：`prompt_release_id`、`package_id`、`content_hash`、`source_layer`、`source_uri`。
+2. 更新 [llm/include/prompt/IPromptRegistry.h](../../llm/include/prompt/IPromptRegistry.h)、[llm/include/prompt/IPromptPipeline.h](../../llm/include/prompt/IPromptPipeline.h)、[llm/include/ILLMManager.h](../../llm/include/ILLMManager.h)，新增 `lookup_release_asset(...)` / `lookup_prompt_asset_metadata(...)` 只读查询 seam。
+3. 更新 [llm/src/prompt/PromptRegistry.h](../../llm/src/prompt/PromptRegistry.h)、[llm/src/prompt/PromptRegistry.cpp](../../llm/src/prompt/PromptRegistry.cpp)、[llm/src/prompt/PromptPipeline.h](../../llm/src/prompt/PromptPipeline.h)、[llm/src/prompt/PromptPipeline.cpp](../../llm/src/prompt/PromptPipeline.cpp)、[llm/src/LLMManager.h](../../llm/src/LLMManager.h)、[llm/src/LLMManager.cpp](../../llm/src/LLMManager.cpp)，把 release-id 到 asset metadata 的查找链收口为 `PromptAssetRepository snapshot -> PromptRegistry -> PromptPipeline -> LLMManager`。
+4. 新增 [tests/unit/llm/PromptAssetMetadataLookupTest.cpp](../../tests/unit/llm/PromptAssetMetadataLookupTest.cpp) 并更新 [tests/unit/llm/CMakeLists.txt](../../tests/unit/llm/CMakeLists.txt)，锁定已知 release 的 `package_id/content_hash/source_*` 正例，以及 malformed / unknown release id 负例。
+
+### 验证
+
+1. `cmake -S . -B build-ci`
+   - 结果：通过。
+2. `cmake --build build-ci --target dasall_prompt_asset_metadata_lookup_unit_test`
+   - 结果：通过。
+3. `ctest --test-dir build-ci -R "^PromptAssetMetadataLookupTest$" --output-on-failure`
+   - 结果：通过，1/1。
+
+### 结果
+
+1. `WP-MEM-GAP-014` 的直接 blocker 已解除：runtime 现在可以在不越过 llm/private boundary 的前提下读取 prompt release 对应的稳定资产元数据，为后续 ProgrammaticMemory 的 asset-ref/digest/lease 写回提供唯一可信来源。
+2. 本轮没有把 Prompt 正文、PromptAssetDescriptor 或 `PromptAssetRepository` 私有类型泄漏到 llm public contracts，也没有让 memory/include 直接依赖 llm。
+3. 下一轮可以直接进入 memory 主任务：新增 `IProgrammaticMemoryStore`、V005 `programmatic_assets` schema 与 runtime writeback projection，而不需要再为 llm 资产查询另拆 blocker。
+
 ## 记录 #890
 
 - 日期：2026-06-18

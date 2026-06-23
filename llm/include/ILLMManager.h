@@ -5,6 +5,7 @@
 #include "HealthStatus.h"
 #include "LLMGenerateRequest.h"
 #include "LLMManagerResult.h"
+#include "prompt/PromptAssetMetadata.h"
 
 namespace dasall::llm {
 
@@ -19,6 +20,8 @@ class ILLMManager {
   virtual LLMManagerResult generate(const LLMGenerateRequest& request) = 0;
   virtual LLMManagerResult stream_generate(const LLMGenerateRequest& request,
                                            IStreamObserver* observer) = 0;
+  [[nodiscard]] virtual std::optional<prompt::PromptAssetMetadata>
+  lookup_prompt_asset_metadata(std::string_view prompt_release_id) const = 0;
   [[nodiscard]] virtual bool abandon_call(std::string_view llm_call_id) = 0;
   virtual HealthStatus health_check() const = 0;
 };

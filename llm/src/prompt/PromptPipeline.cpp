@@ -205,4 +205,13 @@ PromptPipelineResult PromptPipeline::run(const PromptQuery& query,
                             std::move(policy_decision));
 }
 
+std::optional<PromptAssetMetadata> PromptPipeline::lookup_release_asset(
+    std::string_view prompt_release_id) const {
+  if (!initialized_ || registry_ == nullptr) {
+    return std::nullopt;
+  }
+
+  return registry_->lookup_release_asset(prompt_release_id);
+}
+
 }  // namespace dasall::llm::prompt

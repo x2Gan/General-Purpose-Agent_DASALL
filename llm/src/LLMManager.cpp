@@ -2690,6 +2690,15 @@ LLMManagerResult LLMManager::stream_generate(const LLMGenerateRequest& request,
       attempted_routes.empty() ? std::string{} : attempted_routes.back()));
 }
 
+std::optional<prompt::PromptAssetMetadata> LLMManager::lookup_prompt_asset_metadata(
+    std::string_view prompt_release_id) const {
+  if (!initialized_ || prompt_pipeline_ == nullptr || prompt_release_id.empty()) {
+    return std::nullopt;
+  }
+
+  return prompt_pipeline_->lookup_release_asset(prompt_release_id);
+}
+
 HealthStatus LLMManager::health_check() const {
   if (!initialized_) {
     return HealthStatus{

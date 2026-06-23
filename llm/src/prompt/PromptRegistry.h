@@ -9,6 +9,8 @@ class PromptRegistry final : public IPromptRegistry {
  public:
   bool init(const PromptRegistryConfig& config) override;
   PromptRegistryResult select(const PromptQuery& query) const override;
+  [[nodiscard]] std::optional<PromptAssetMetadata> lookup_release_asset(
+      std::string_view prompt_release_id) const override;
 
  private:
   PromptRegistryConfig config_;
