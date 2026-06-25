@@ -381,6 +381,7 @@ WritebackCoordinator::WritebackCoordinator(
     ITransactionalStore& transaction_store,
     ISessionStore& session_store,
     ISummaryStore& summary_store,
+  IProgrammaticMemoryStore& programmatic_store,
     IFactStore& fact_store,
     IExperienceStore& experience_store,
   std::unique_ptr<HierarchicalSummarizationCoordinator> hierarchy_coordinator,
@@ -393,6 +394,7 @@ WritebackCoordinator::WritebackCoordinator(
     : transaction_store_(transaction_store),
       session_store_(session_store),
       summary_store_(summary_store),
+      programmatic_store_(programmatic_store),
       fact_store_(fact_store),
       experience_store_(experience_store),
       hierarchy_coordinator_(std::move(hierarchy_coordinator)),
@@ -637,7 +639,8 @@ void WritebackCoordinator::persist_derived_data(
     append_warning_once(result.warnings, "conflict_resolver_unwired");
   }
 
-  if (request.fact_candidates.empty() && request.experience_candidates.empty()) {
+  if (request.fact_candidates.empty() && request.experience_candidates.empty() &&
+      request.programmatic_candidates.empty()) {
     return;
   }
 
@@ -712,6 +715,17 @@ void WritebackCoordinator::persist_derived_data(
 
     result.experience_ids.push_back(insert_result.persisted_id.value_or(
         candidate.experience.experience_id.value_or("")));
+  }
+
+  for (const auto& candidate : request.programmatic_candidates) {
+    const auto upsert_result =
+        programmatic_store_.upsert_programmatic_asset(candidate.record);
+    if (!upsert_result.ok) {
+      result.partial = true;
+      append_warning_once(result.warnings, "partial_writeback_warning");
+      append_warning_once(result.warnings, "programmatic_asset_write_failed");
+      continue;
+    }
   }
 
   if (derived_txn) {

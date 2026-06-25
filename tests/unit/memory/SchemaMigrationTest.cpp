@@ -120,8 +120,8 @@ void test_sqlite_schema_migrator_applies_v001_and_reports_up_to_date_status() {
               "V002 schema should create the vector sidecar table");
   assert_true(table_exists(connection.get(), "quarantined_records"),
               "V001 schema should create the quarantine table");
-  assert_equal(5, query_count(connection.get(), "SELECT COUNT(*) FROM schema_migrations"),
-               "fresh database should record all bundled migrations after V006");
+  assert_equal(6, query_count(connection.get(), "SELECT COUNT(*) FROM schema_migrations"),
+               "fresh database should record all bundled migrations through V006");
 
   const auto migration_status = migrator.status(connection.get());
   assert_equal(6, migration_status.current_version,
@@ -134,7 +134,7 @@ void test_sqlite_schema_migrator_applies_v001_and_reports_up_to_date_status() {
   const auto second_result = migrator.migrate(connection.get());
   assert_true(!second_result.has_value(),
               "schema migrator should be a no-op when the database is already up-to-date");
-  assert_equal(5, query_count(connection.get(), "SELECT COUNT(*) FROM schema_migrations"),
+  assert_equal(6, query_count(connection.get(), "SELECT COUNT(*) FROM schema_migrations"),
                "re-running migrate should not duplicate applied migration rows");
 }
 

@@ -18,6 +18,7 @@
 #include "KnowledgeEvidenceProjector.h"
 #include "LLMGenerateRequest.h"
 #include "ReflectionLessonProjector.h"
+#include "PromptAssetWritebackProjector.h"
 #include "RuntimeErrorCode.h"
 #include "RuntimeDependencySet.h"
 #include "IToolManager.h"
@@ -1181,7 +1182,9 @@ void append_runtime_checkpoint_execution_model_tags(std::vector<std::string>& ta
 [[nodiscard]] memory::MemoryWritebackRequest make_llm_direct_writeback_request(
     const contracts::AgentRequest& request,
     const std::string& goal_id,
-    const std::string& response_text) {
+  const std::string& response_text,
+  const llm::LLMManagerResult& llm_result,
+  const std::shared_ptr<llm::ILLMManager>& llm_manager) {
   const auto request_id = request.request_id.value_or(std::string{"req-live-unary"});
   const auto session_id = request.session_id.value_or(std::string{"session-live-unary"});
   const auto created_at = request.created_at.value_or(current_time_ms());
@@ -1205,7 +1208,8 @@ void append_runtime_checkpoint_execution_model_tags(std::vector<std::string>& ta
       std::vector<std::string>{"production llm direct response completed"};
   writeback_request.summary_candidate->confirmed_facts =
       std::vector<std::string>{"llm direct response persisted through memory writeback"};
-  return writeback_request;
+    return PromptAssetWritebackProjector{}.enrich_with_prompt_asset(
+      std::move(writeback_request), request, llm_result, llm_manager);
 }
 
 [[nodiscard]] std::string make_context_reload_reason(
@@ -2602,7 +2606,11 @@ OrchestratorRunResult AgentOrchestrator::run_once(const contracts::AgentRequest&
     }
 
     const auto llm_writeback_result = composition_.dependency_set->memory_manager->write_back(
-        make_llm_direct_writeback_request(normalized_request, goal_id, response_text));
+      make_llm_direct_writeback_request(normalized_request,
+                       goal_id,
+                       response_text,
+                       llm_result,
+                       composition_.dependency_set->llm_manager));
     if (llm_writeback_result.result_code.has_value() || llm_writeback_result.degraded ||
         llm_writeback_result.partial) {
       const std::string writeback_detail = llm_writeback_result.result_code.has_value()

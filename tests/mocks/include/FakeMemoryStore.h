@@ -217,6 +217,56 @@ class FakeMemoryStore final : public memory::IMemoryStore {
     return memory::StoreResult::success(parent_summary_id);
   }
 
+  [[nodiscard]] std::vector<memory::ProgrammaticMemoryRecord> query_programmatic_assets(
+      const memory::ProgrammaticMemoryQuery& query) const override {
+    std::vector<memory::ProgrammaticMemoryRecord> records;
+    for (const auto& [asset_ref, record] : programmatic_assets_by_ref_) {
+      (void)asset_ref;
+      if (record.session_id != query.session_id) {
+        continue;
+      }
+      if (query.asset_ref.has_value() && *query.asset_ref != record.asset_ref) {
+        continue;
+      }
+      records.push_back(record);
+      if (query.limit > 0 && static_cast<int>(records.size()) >= query.limit) {
+        break;
+      }
+    }
+    return records;
+  }
+
+  [[nodiscard]] memory::StoreResult upsert_programmatic_asset(
+      const memory::ProgrammaticMemoryRecord& record) override {
+    if (!record.has_consistent_values()) {
+      return memory::StoreResult::failure(
+          contracts::ResultCode::ValidationFieldMissing,
+          std::string{"programmatic asset is inconsistent"});
+    }
+
+    programmatic_assets_by_ref_[record.asset_ref] = record;
+    return memory::StoreResult::success(record.asset_ref);
+  }
+
+  [[nodiscard]] memory::StoreResult renew_programmatic_asset_lease(
+      const memory::ProgrammaticMemoryLease& lease) override {
+    if (!lease.has_consistent_values()) {
+      return memory::StoreResult::failure(
+          contracts::ResultCode::ValidationFieldMissing,
+          std::string{"programmatic lease is inconsistent"});
+    }
+
+    auto it = programmatic_assets_by_ref_.find(lease.asset_ref);
+    if (it == programmatic_assets_by_ref_.end()) {
+      return memory::StoreResult::failure(
+          contracts::ResultCode::ValidationFieldMissing,
+          std::string{"programmatic asset not found"});
+    }
+
+    it->second.lease_expires_at = lease.lease_expires_at;
+    return memory::StoreResult::success(lease.asset_ref);
+  }
+
   [[nodiscard]] memory::FactQueryResult query_facts(
       const memory::FactQuery& query) const override {
     memory::FactQueryResult result;
@@ -675,6 +725,7 @@ class FakeMemoryStore final : public memory::IMemoryStore {
   std::unordered_map<std::string, contracts::SummaryMemory> summaries_by_id_;
   std::unordered_map<std::string, std::vector<std::string>> summary_ids_by_session_;
   std::unordered_map<std::string, std::string> summary_parent_by_id_;
+  std::unordered_map<std::string, memory::ProgrammaticMemoryRecord> programmatic_assets_by_ref_;
   std::unordered_map<std::string, contracts::MemoryFact> facts_by_id_;
   std::unordered_map<std::string, AccessMetadata> fact_access_by_id_;
   std::unordered_map<std::string, contracts::ExperienceMemory> experiences_by_id_;

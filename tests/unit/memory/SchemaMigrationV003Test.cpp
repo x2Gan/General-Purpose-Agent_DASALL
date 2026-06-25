@@ -108,14 +108,14 @@ void test_schema_migration_v003_adds_idx_facts_user_id_on_fresh_database() {
               "V003 migration should apply cleanly on a fresh database");
   assert_true(index_exists(connection.get(), "idx_facts_user_id"),
               "V003 migration should create idx_facts_user_id on facts(user_id)");
-  assert_equal(3, query_count(connection.get(), "SELECT COUNT(*) FROM schema_migrations"),
-               "fresh V003 migrate should record three bundled migration rows");
+  assert_equal(6, query_count(connection.get(), "SELECT COUNT(*) FROM schema_migrations"),
+               "fresh migrate should record all bundled migration rows through V006");
 
   const auto status = migrator.status(connection.get());
-  assert_equal(3, status.current_version,
-               "fresh V003 migrate should report current_version=3");
-  assert_equal(3, status.target_version,
-               "fresh V003 migrate should report target_version=3");
+  assert_equal(6, status.current_version,
+               "fresh migrate should report current_version=6 after applying bundled migrations through V006");
+  assert_equal(6, status.target_version,
+               "fresh migrate should report target_version=6 when bundled migrations extend through V006");
   assert_true(status.up_to_date,
               "fresh V003 migrate should leave the database up-to-date");
 }
@@ -143,17 +143,17 @@ void test_schema_migration_v003_upgrades_existing_v002_database() {
       DASALL_SQL_MEMORY_DIR);
   const auto upgrade_result = full_migrator.migrate(connection.get());
   assert_true(!upgrade_result.has_value(),
-              "re-running migrate against bundled migrations should apply only V003");
+              "re-running migrate against bundled migrations should apply the pending V003..V006 migrations");
   assert_true(index_exists(connection.get(), "idx_facts_user_id"),
               "V003 upgrade should add idx_facts_user_id to an existing V002 database");
-  assert_equal(3, query_count(connection.get(), "SELECT COUNT(*) FROM schema_migrations"),
-               "V003 upgrade should append one migration row to the V002 baseline");
+  assert_equal(6, query_count(connection.get(), "SELECT COUNT(*) FROM schema_migrations"),
+               "upgrade from V002 should append bundled migrations through V006");
 
   const auto status = full_migrator.status(connection.get());
-  assert_equal(3, status.current_version,
-               "V003 upgrade should advance current_version to 3");
-  assert_equal(3, status.target_version,
-               "V003 upgrade should report target_version=3");
+  assert_equal(6, status.current_version,
+               "upgrade from V002 should advance current_version to 6");
+  assert_equal(6, status.target_version,
+               "upgrade from V002 should report target_version=6");
   assert_true(status.up_to_date,
               "V003 upgrade should leave the database up-to-date");
 

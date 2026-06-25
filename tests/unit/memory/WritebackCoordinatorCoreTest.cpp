@@ -166,6 +166,22 @@ class CommitFailingStore final : public dasall::memory::IMemoryStore {
     return std::nullopt;
   }
 
+  [[nodiscard]] std::vector<dasall::memory::ProgrammaticMemoryRecord> query_programmatic_assets(
+      const dasall::memory::ProgrammaticMemoryQuery& query) const override {
+    (void)query;
+    return {};
+  }
+
+  [[nodiscard]] dasall::memory::StoreResult upsert_programmatic_asset(
+      const dasall::memory::ProgrammaticMemoryRecord& record) override {
+    return dasall::memory::StoreResult::success(record.asset_ref);
+  }
+
+  [[nodiscard]] dasall::memory::StoreResult renew_programmatic_asset_lease(
+      const dasall::memory::ProgrammaticMemoryLease& lease) override {
+    return dasall::memory::StoreResult::success(lease.asset_ref);
+  }
+
   [[nodiscard]] dasall::memory::FactQueryResult query_facts(
       const dasall::memory::FactQuery& query) const override {
     (void)query;
@@ -336,13 +352,25 @@ void test_writeback_coordinator_persists_core_transaction_and_updates_working_bo
   auto conflict_resolver =
       std::make_unique<dasall::memory::MemoryConflictResolver>(*store);
   dasall::memory::WritebackCoordinator coordinator(
-      *store, *store, *store, *store, *store,
+      *store, *store, *store, *store, *store, *store,
       nullptr,
       std::move(conflict_resolver), *working_board, &vector_index);
 
-  const auto request = make_request("session-021-core", "turn-021-core",
-                                    "记录最近一次执行结果", "已写入核心事务");
-  const auto result = coordinator.persist(request);
+    auto request = make_request("session-021-core", "turn-021-core",
+                  "记录最近一次执行结果", "已写入核心事务");
+    request.programmatic_candidates.push_back(
+      dasall::memory::ProgrammaticMemoryCandidate{
+        .record = dasall::memory::ProgrammaticMemoryRecord{
+          .asset_ref = "prompt:responder@2026.06.23",
+          .session_id = "session-021-core",
+          .source_turn_id = "turn-021-core",
+          .content_digest = "sha256:core-programmatic",
+          .lease_expires_at = 2000 + 86400000,
+          .tags = {"programmatic", "prompt"},
+        },
+        .extraction_source = "test.prompt_asset",
+      });
+    const auto result = coordinator.persist(request);
 
   assert_true(!result.result_code.has_value(),
               "writeback coordinator should succeed on the sqlite core path");
@@ -376,6 +404,17 @@ void test_writeback_coordinator_persists_core_transaction_and_updates_working_bo
                   vector_index.upserted_documents.front().doc_id == "turn-021-core",
               "writeback coordinator should upsert the persisted turn into the vector sidecar when available");
 
+    const auto programmatic_records = store->query_programmatic_assets(
+      dasall::memory::ProgrammaticMemoryQuery{
+        .session_id = "session-021-core",
+        .asset_ref = std::optional<std::string>{"prompt:responder@2026.06.23"},
+        .limit = 10,
+      });
+    assert_true(programmatic_records.size() == 1U,
+          "writeback coordinator should persist programmatic assets through the derived-data path");
+    assert_true(programmatic_records.front().content_digest == "sha256:core-programmatic",
+          "writeback coordinator should preserve the programmatic asset digest");
+
   store->close();
 }
 
@@ -387,7 +426,7 @@ void test_writeback_coordinator_rolls_back_when_commit_fails() {
   auto conflict_resolver =
       std::make_unique<dasall::memory::MemoryConflictResolver>(store);
   dasall::memory::WritebackCoordinator coordinator(
-      store, store, store, store, store,
+      store, store, store, store, store, store,
       nullptr,
       std::move(conflict_resolver), *working_board);
 

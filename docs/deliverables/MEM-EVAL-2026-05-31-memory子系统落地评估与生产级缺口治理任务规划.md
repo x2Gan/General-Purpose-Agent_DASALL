@@ -41,7 +41,7 @@
 | 可观测性（log/metric/audit/trace） | [memory/src/observability/MemoryObservability.cpp](../../memory/src/observability/MemoryObservability.cpp) 482 行；`MemoryProductionLoggingIntegrationTest` / `MemoryObservabilityBridgeTest` 端到端覆盖 | **达成**（生产侧 sink 已直连，**比 runtime 子系统更完整**） |
 | 业务链贯通（Runtime ↔ Memory ↔ SQLite ↔ Vector ↔ Profile ↔ Observability） | unary、resume、recovery、context-assemble、writeback、maintenance、failure-injection、checkpoint-busy、profile-compat、production-logging 等 11 条集成测全部存在 | **可贯通** |
 | 真实落地 vs 桩 | 无空壳实现；`memory/src/MemoryBuildSkeleton.cpp` 仅 4 行历史 namespace 文件可清理；所有主要组件均含真实业务体（store 1493 / orchestrator 814 / writeback 693 / vector backend 713 / observability 482 / manager 482 / schema migrator 406 / row mappers 408 / conflict resolver 371 / compression coordinator 320 / budget allocator 313 / detached vector factory 280 / candidate collector 246 / working board 244） | **无虚假实现** |
-| 距离生产级 GA | 仍欠：installed gate 绿色记录、ProgrammaticMemory 持久化、更高层质量 SLO / soak 量化 | **未到生产级** |
+| 距离生产级 GA | 仍欠：installed gate 绿色记录、更高层质量 SLO / soak 量化 | **未到生产级** |
 
 总体结论：memory 已完成**架构 / 接口 / 持久化 / 上下文装配 / 写回 / 维护 / 观测性**的真实落地，与 runtime 同处"骨架达成、深度需补"水位；区别于 runtime 缺口的"信号外送 / 跨版本 / 并发证据"，memory 当前剩余缺口集中在**质量层（feedback loop 与更高层 soak / judge 量化）与运营层（installed / soak 证据）**。GA 前仍需继续收敛剩余 P0 项。
 
@@ -56,7 +56,7 @@
 | 恢复权不外溢（ADR-007） | WritebackCoordinator 仅 bounded retry；其他错误一律上抛 | 达成 |
 | 主控权不并行（ADR-008） | MemoryMaintenanceWorker 被动调度；factory 不创建第二主循环 | 达成（生产侧 ticker 缺，见 GAP-P1-A） |
 | 五层记忆显式分层（§5.3.2 / §4.1） | Working/Short/Long-Semantic/Experience/Vector 全部独立组件 + 独立表 | 达成 |
-| Programmatic Memory（§4.1 / §6.5.1a） | **未落地持久化**，仅设计声明 asset ref/lease | 与设计一致（MEM-E06 后置） |
+| Programmatic Memory（§4.1 / §6.5.1a） | 已通过 `IProgrammaticMemoryStore` + `programmatic_assets` + runtime prompt-asset projection 落地 `asset_ref/digest/lease` 持久化，且不复制 Prompt 正文 | **达成（2026-06-23 闭合 MEM-E06）** |
 | ContextPacket 11 槽位 + token 预算 + 压缩触发 | ContextOrchestrator.build_packet + BudgetAllocator + CompressionCoordinator | 达成 |
 | 冲突检测 + 置信度 + 来源引用（§5.3.4） | MemoryConflictResolver 真实规则引擎（kPolarityPairs / kNegationMarkers / kNoiseTokens / shared_anchor_count / has_polarity_conflict / extract_single_number） + 可选 embedding 余弦相似度辅助 + ConflictAction 4 态 | 达成（2026-06-15 已闭合 MEM-E09） |
 | 写回 SummaryMemory 含 decisions_made/confirmed_facts/tool_outcomes（§5.3.5） | CompressionCoordinator extract_decisions / extract_confirmed_facts / extract_tool_outcomes + runtime_support 注入的 `LLMBackedSummarizer`；`prompt_release_id_override=responder@2026.06.02` 输出结构化 summary payload | **达成**（2026-06-02 已接入生产侧 LLM-backed Summarizer；后续仅继续治理 prompt/provider 质量） |
@@ -113,7 +113,7 @@
 | §6.12.5 FactQuery 跨 session | 已通过 [memory/include/IFactStore.h](../../memory/include/IFactStore.h) `query_facts_by_user(...)`、[memory/src/store/sqlite/SqliteMemoryStore.cpp](../../memory/src/store/sqlite/SqliteMemoryStore.cpp) user-scoped query、[sql/memory/V003__fact_user_lookup_index.sql](../../sql/memory/V003__fact_user_lookup_index.sql) 与 [memory/src/context/CandidateCollector.cpp](../../memory/src/context/CandidateCollector.cpp) user-level facts 装配闭合 | 结构性缺口已清零；后续只继续治理 `< 50ms` latency / profile 基线与更高层 scoring | GAP-P2-B 已闭合（2026-06-17） |
 | §4.1.1 / MemoryOS 对齐 遗忘曲线权重衰减 | 已通过 `last_accessed_at` / `hit_count`、指数衰减权重、access touch 与 decay purge 收口 fact / experience 热度治理 | 结构性缺口已清零；后续只继续在 012 上扩展多因子 scoring | GAP-P2-C 已闭合（2026-06-17） |
 | §4.1.1 / CrewAI 对齐 composite scoring | 已通过 [memory/include/config/MemoryConfig.h](../../memory/include/config/MemoryConfig.h) `ContextConfig::ScoringConfig`、[memory/src/config/MemoryConfigProjector.cpp](../../memory/src/config/MemoryConfigProjector.cpp) 权重投影、[memory/src/context/CandidateCollector.cpp](../../memory/src/context/CandidateCollector.cpp) `confidence + recency + hit_rate + source_weight` 组合评分与 confidence-only fallback 收口 | 结构性缺口已清零；后续只继续治理更高层 recall / quality 指标 | GAP-P2-D 已闭合（2026-06-18） |
-| §6.5.1a ProgrammaticMemory | 完全空白，仅 asset ref 字段冻结 | 设计已声明 MEM-E06 后置，依赖 llm 资产治理 | GAP-P3-A（MEM-E06） |
+| §6.5.1a ProgrammaticMemory | 已通过 [memory/include/IProgrammaticMemoryStore.h](../../memory/include/IProgrammaticMemoryStore.h)、[sql/memory/V005__programmatic_assets.sql](../../sql/memory/V005__programmatic_assets.sql)、[memory/src/store/sqlite/SqliteMemoryStore.cpp](../../memory/src/store/sqlite/SqliteMemoryStore.cpp) 与 [runtime/src/PromptAssetWritebackProjector.cpp](../../runtime/src/PromptAssetWritebackProjector.cpp) 闭合 `asset_ref + digest + lease` 路径 | 风险已从“未实现”收敛为后续更高层 asset family 扩展 | GAP-P3-A（已闭合，2026-06-23） |
 | §6.6 接口数量 | `IFactStore` / `IExperienceStore` / `ISessionStore` / `ISummaryStore` / `IMaintenanceStore` / `ITransactionalStore` 6 个 mini-interface 全部由 `SqliteMemoryStore` 单类实现 | 与 §6.6 决策"逻辑职责保留 + 实现统一"一致，但接口数量略冗余 | GAP-P3-B（设计冗余清理） |
 | 长跑 / 并发 / soak 证据 | 已通过 [tests/unit/memory/MemoryConcurrencyStressTest.cpp](../../tests/unit/memory/MemoryConcurrencyStressTest.cpp) 1k+ 轮 manager 并发压力、[tests/integration/memory/MemoryLongRunningSoakTest.cpp](../../tests/integration/memory/MemoryLongRunningSoakTest.cpp) 压缩长跑 soak，以及 [scripts/ci/memory_tsan_stress.sh](../../scripts/ci/memory_tsan_stress.sh) / [.github/workflows/ci.yml](../../.github/workflows/ci.yml) 的 `memory_tsan_stress` 复跑 | 结构性缺口已清零；后续只保留 installed / qemu 与更高层 release-soak 采样 | GAP-P0-C 已闭合（2026-06-02） |
 | installed package gate | 已有 `MemoryMaintenanceProofRunner.cpp` + `RuntimeInstalledProofRunner.cpp` 给到 daemon 侧，但**memory 维度的 installed-evidence 文档未集中归档** | 与 access / runtime 风格不完全对齐 | GAP-P1-C |
@@ -230,7 +230,7 @@
 
 ### 6.4 P3（运营 / 清理 / 演进）
 
-- **GAP-P3-A ProgrammaticMemory 持久化（MEM-E06）**：依赖 llm 子系统 PromptAssetRepository 冻结。
+- **GAP-P3-A ProgrammaticMemory 持久化（MEM-E06）**（已闭合，2026-06-23）：已通过 llm public `PromptAssetMetadata` seam、[memory/include/IProgrammaticMemoryStore.h](../../memory/include/IProgrammaticMemoryStore.h)、[sql/memory/V005__programmatic_assets.sql](../../sql/memory/V005__programmatic_assets.sql) 与 runtime prompt-asset projection 落地 `asset_ref / content_digest / lease_expires_at` 持久化；Prompt 正文仍保持由 llm owner 管理，不复制到 memory。
 - **GAP-P3-B mini-store 接口收敛**：评估将 `IFactStore` / `IExperienceStore` / `ISessionStore` / `ISummaryStore` / `IMaintenanceStore` 合并到 `IMemoryStore`，消除冗余（仅当不影响测试 mock 时）。
 - **GAP-P3-C ContextAssembleRequest/Result 提升为 shared contracts（MEM-E07）**：仅当多消费者出现时触发。
 - **GAP-P3-D 历史遗留清理**：删除 [memory/src/MemoryBuildSkeleton.cpp](../../memory/src/MemoryBuildSkeleton.cpp)；评估 CMake 中残留引用。
@@ -460,12 +460,21 @@
 
 #### WP-MEM-GAP-014 ProgrammaticMemory 持久化（GAP-P3-A / MEM-E06）
 
-- **代码目标**
-  - 引入 `IProgrammaticMemoryStore` 与 `ProgrammaticMemoryRecord`（仅 asset_ref / lease / digest，不持有 prompt 正文）。
-  - SchemaMigrator V005 新表 `programmatic_assets`。
-  - 与 llm.PromptAssetRepository 联动 lease 续约。
-- **测试目标**：`ProgrammaticMemoryAssetRefTest`、`SchemaMigrationV005Test`。
-- **阻塞 / 解阻**：依赖 llm 子系统 PromptAssetRepository 冻结。
+- **状态**：已完成（2026-06-23）。
+- **代码结果**
+  - 新增 [memory/include/IProgrammaticMemoryStore.h](../../memory/include/IProgrammaticMemoryStore.h)，冻结 `ProgrammaticMemoryRecord`、`ProgrammaticMemoryQuery`、`ProgrammaticMemoryLease` 与 `query/upsert/renew` public seam；[memory/include/IMemoryStore.h](../../memory/include/IMemoryStore.h) 现聚合该接口。
+  - 新增 [sql/memory/V005__programmatic_assets.sql](../../sql/memory/V005__programmatic_assets.sql)，落盘 `programmatic_assets` 表与 session/lease 索引；[memory/src/store/sqlite/RowMappers.h](../../memory/src/store/sqlite/RowMappers.h)、[memory/src/store/sqlite/RowMappers.cpp](../../memory/src/store/sqlite/RowMappers.cpp)、[memory/src/store/sqlite/SqliteMemoryStore.h](../../memory/src/store/sqlite/SqliteMemoryStore.h) 与 [memory/src/store/sqlite/SqliteMemoryStore.cpp](../../memory/src/store/sqlite/SqliteMemoryStore.cpp) 已补 query/upsert/lease-renew 路径。
+  - [memory/include/writeback/MemoryWritebackRequest.h](../../memory/include/writeback/MemoryWritebackRequest.h)、[memory/src/writeback/WritebackCoordinator.h](../../memory/src/writeback/WritebackCoordinator.h)、[memory/src/writeback/WritebackCoordinator.cpp](../../memory/src/writeback/WritebackCoordinator.cpp) 与 [memory/src/MemoryManagerFactory.cpp](../../memory/src/MemoryManagerFactory.cpp) 现支持 `programmatic_candidates` derived writes；[runtime/src/PromptAssetWritebackProjector.h](../../runtime/src/PromptAssetWritebackProjector.h)、[runtime/src/PromptAssetWritebackProjector.cpp](../../runtime/src/PromptAssetWritebackProjector.cpp) 与 [runtime/src/AgentOrchestrator.cpp](../../runtime/src/AgentOrchestrator.cpp) 则把 direct LLM response 的 selected prompt release 投影为 `prompt:<release_id>` ProgrammaticMemory candidate。
+  - 前置 llm blocker 已通过 [llm/include/prompt/PromptAssetMetadata.h](../../llm/include/prompt/PromptAssetMetadata.h)、[llm/include/ILLMManager.h](../../llm/include/ILLMManager.h) 与 [tests/unit/llm/PromptAssetMetadataLookupTest.cpp](../../tests/unit/llm/PromptAssetMetadataLookupTest.cpp) 闭合，memory 未直接依赖 llm 私有实现。
+- **测试结果**
+  - [tests/unit/memory/SchemaMigrationV005Test.cpp](../../tests/unit/memory/SchemaMigrationV005Test.cpp) 验证 fresh DB 与 V004 -> V005 upgrade 两条路径都会创建 `programmatic_assets` 与对应索引。
+  - [tests/unit/runtime/PromptAssetWritebackProjectorTest.cpp](../../tests/unit/runtime/PromptAssetWritebackProjectorTest.cpp) 已通过 `ProgrammaticMemoryAssetRefTest` 名称注册，验证 runtime 会把 `LLMResponse.prompt_id/prompt_version` 与 llm public metadata seam 投影成稳定 `asset_ref/content_digest/lease`。
+  - [tests/unit/memory/SqliteMemoryStoreTest.cpp](../../tests/unit/memory/SqliteMemoryStoreTest.cpp)、[tests/unit/memory/WritebackCoordinatorCoreTest.cpp](../../tests/unit/memory/WritebackCoordinatorCoreTest.cpp)、[tests/unit/memory/WritebackCoordinatorPartialTest.cpp](../../tests/unit/memory/WritebackCoordinatorPartialTest.cpp) 与 [tests/unit/memory/MemoryInterfaceCompileTest.cpp](../../tests/unit/memory/MemoryInterfaceCompileTest.cpp) 已锁定 SQLite roundtrip、derived writeback partial 语义与 public surface regression。
+- **验收证据**
+  - `ctest --test-dir build-ci -R "^(ProgrammaticMemoryAssetRefTest|SchemaMigrationV005Test|SqliteMemoryStoreTest|WritebackCoordinatorCoreTest|WritebackCoordinatorPartialTest|MemoryInterfaceCompileTest)$" --output-on-failure`：通过，6/6。
+  - `ctest --test-dir build-ci -R "^(SchemaMigrationTest|SchemaMigrationV003Test|SchemaMigrationV004Test|SchemaMigrationV005Test|SchemaMigrationV006Test)$" --output-on-failure`：通过，5/5。
+  - `ctest --test-dir build-ci -R "^PromptAssetMetadataLookupTest$" --output-on-failure`：通过，1/1。
+- **阻塞 / 解阻**：已解阻。`PromptAssetRepository` 冻结已在同日 blocker-fix 提交中通过 llm public metadata seam 闭合；主任务本轮未再引入新的跨层 blocker。
 
 #### WP-MEM-GAP-015 Mini-store 接口收敛（GAP-P3-B）
 
@@ -519,7 +528,7 @@ flowchart LR
 1. **剩余 P0**：WP-MEM-GAP-004 继续单独推进；WP-MEM-GAP-001 / -002 / -003 已于 2026-06-02 闭合。
 2. **第二批（P1）**：WP-MEM-GAP-005 / -006 / -007 / -008 已于 2026-06-03 全部闭合；P1 entry tasks 不再剩余未收口项。
 3. **第三批（P2 演进）**：WP-MEM-GAP-009 已于 2026-06-15 闭合，WP-MEM-GAP-010 与 WP-MEM-GAP-011 已于 2026-06-17 闭合，WP-MEM-GAP-012 与 WP-MEM-GAP-013 已于 2026-06-18 闭合；P2 entry tasks 已全部 Done。
-4. **第四批（P3 清理与运营）**：WP-MEM-GAP-014 ← llm 资产；WP-MEM-GAP-015 / -016 / -017；WP-MEM-GAP-018 在 P0/P1 全部 Done 后执行。
+4. **第四批（P3 清理与运营）**：WP-MEM-GAP-014 已于 2026-06-23 闭合；后续聚焦 WP-MEM-GAP-015 / -016 / -017，`WP-MEM-GAP-018` 继续在 P0/P1 全部 Done 后执行。
 
 ---
 

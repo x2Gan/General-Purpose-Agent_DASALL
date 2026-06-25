@@ -1,3 +1,40 @@
+## 记录 #892
+
+- 日期：2026-06-23
+- 阶段：memory / programmatic-memory closure
+- 任务：完成 WP-MEM-GAP-014“ProgrammaticMemory 持久化（GAP-P3-A / MEM-E06）”
+- 状态：已完成（ProgrammaticMemory store、V005 schema、runtime prompt asset projection 与 focused gates 已闭合）
+
+### 执行前提
+
+1. 2026-06-23 上一条记录已为 `WP-MEM-GAP-014` 解除了 llm blocker：`PromptAssetRepository` 的 `package_id/content_hash/source_*` 已可通过 llm public metadata seam 被 runtime 安全读取。
+2. [docs/deliverables/MEM-EVAL-2026-05-31-memory子系统落地评估与生产级缺口治理任务规划.md](../deliverables/MEM-EVAL-2026-05-31-memory子系统落地评估与生产级缺口治理任务规划.md) 已把本轮三件套冻结为 `IProgrammaticMemoryStore` / `ProgrammaticMemoryRecord`、V005 `programmatic_assets`、`ProgrammaticMemoryAssetRefTest` 与 `SchemaMigrationV005Test`。
+3. 外部参考沿用 Kubernetes Lease 的 time-bounded metadata 语义与 OCI 对 composable / minimal / trust-oriented identity 的约束，支撑“只持久化 `asset_ref + content_digest + lease_expires_at`，不复制 Prompt 正文”的字段选择。
+
+### 改动
+
+1. 新增 [memory/include/IProgrammaticMemoryStore.h](../../memory/include/IProgrammaticMemoryStore.h)，冻结 `ProgrammaticMemoryRecord`、`ProgrammaticMemoryQuery`、`ProgrammaticMemoryLease` 与 `query/upsert/renew` public seam；[memory/include/IMemoryStore.h](../../memory/include/IMemoryStore.h) 已同步聚合该接口。
+2. 新增 [sql/memory/V005__programmatic_assets.sql](../../sql/memory/V005__programmatic_assets.sql)，落盘 `programmatic_assets` 表以及 session/lease 索引；同时更新 [tests/unit/memory/SchemaMigrationTest.cpp](../../tests/unit/memory/SchemaMigrationTest.cpp)、[tests/unit/memory/SchemaMigrationV003Test.cpp](../../tests/unit/memory/SchemaMigrationV003Test.cpp)、[tests/unit/memory/SchemaMigrationV004Test.cpp](../../tests/unit/memory/SchemaMigrationV004Test.cpp)、[tests/unit/memory/SchemaMigrationV006Test.cpp](../../tests/unit/memory/SchemaMigrationV006Test.cpp) 的 migration ledger 计数。
+3. 更新 [memory/src/store/sqlite/RowMappers.h](../../memory/src/store/sqlite/RowMappers.h) / [memory/src/store/sqlite/RowMappers.cpp](../../memory/src/store/sqlite/RowMappers.cpp) 与 [memory/src/store/sqlite/SqliteMemoryStore.h](../../memory/src/store/sqlite/SqliteMemoryStore.h) / [memory/src/store/sqlite/SqliteMemoryStore.cpp](../../memory/src/store/sqlite/SqliteMemoryStore.cpp)，新增 ProgrammaticMemory 的 row mapper、query、upsert 与 lease renew 路径。
+4. 更新 [memory/include/writeback/MemoryWritebackRequest.h](../../memory/include/writeback/MemoryWritebackRequest.h)、[memory/src/writeback/WritebackCoordinator.h](../../memory/src/writeback/WritebackCoordinator.h)、[memory/src/writeback/WritebackCoordinator.cpp](../../memory/src/writeback/WritebackCoordinator.cpp) 与 [memory/src/MemoryManagerFactory.cpp](../../memory/src/MemoryManagerFactory.cpp)，把 `programmatic_candidates` 纳入 derived write path。
+5. 新增 [runtime/src/PromptAssetWritebackProjector.h](../../runtime/src/PromptAssetWritebackProjector.h) / [runtime/src/PromptAssetWritebackProjector.cpp](../../runtime/src/PromptAssetWritebackProjector.cpp)，并更新 [runtime/src/AgentOrchestrator.cpp](../../runtime/src/AgentOrchestrator.cpp) 与 [runtime/CMakeLists.txt](../../runtime/CMakeLists.txt)，让 direct LLM response path 自动把 selected prompt release 投影为 ProgrammaticMemory candidate。
+6. 新增 [docs/todos/memory/deliverables/WP-MEM-GAP-014-programmatic-memory-closeout.md](../todos/memory/deliverables/WP-MEM-GAP-014-programmatic-memory-closeout.md)，并更新 [docs/deliverables/MEM-EVAL-2026-05-31-memory子系统落地评估与生产级缺口治理任务规划.md](../deliverables/MEM-EVAL-2026-05-31-memory子系统落地评估与生产级缺口治理任务规划.md) 与 [docs/architecture/DASALL_memory子系统详细设计.md](../architecture/DASALL_memory子系统详细设计.md) 的相关 stale 状态。
+
+### 验证
+
+1. `ctest --test-dir build-ci -R "^(PromptAssetMetadataLookupTest)$" --output-on-failure`
+   - 结果：通过，1/1。
+2. `ctest --test-dir build-ci -R "^(WritebackCoordinatorCoreTest|WritebackCoordinatorPartialTest|ProgrammaticMemoryAssetRefTest)$" --output-on-failure`
+   - 结果：通过，3/3。
+3. `ctest --test-dir build-ci -R "^(MemoryInterfaceCompileTest|SchemaMigrationTest|SchemaMigrationV003Test|SchemaMigrationV004Test|SchemaMigrationV005Test|SchemaMigrationV006Test|SqliteMemoryStoreTest|WritebackCoordinatorCoreTest|WritebackCoordinatorPartialTest|ProgrammaticMemoryAssetRefTest)$" --output-on-failure`
+   - 结果：通过，10/10。
+
+### 结果
+
+1. `WP-MEM-GAP-014` 已闭合；Memory 现已支持不复制 Prompt 正文的 ProgrammaticMemory 持久化，能够保存稳定 `asset_ref / content_digest / lease_expires_at / source_turn_id`。
+2. ProgrammaticMemory 写回保持 derived-write 语义：core session/turn/summary 事务成功后再持久化 programmatic assets；相关失败仅标记 partial，不回滚主链。
+3. 当前 memory 的 P3 焦点已收敛为 `WP-MEM-GAP-015 / -016 / -017 / -018`；`GAP-P3-A / MEM-E06` 不再是开放缺口。
+
 ## 记录 #891
 
 - 日期：2026-06-23

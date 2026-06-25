@@ -146,14 +146,14 @@ void test_schema_migration_v004_adds_decay_metadata_on_fresh_database() {
               "V004 migration should add experiences.last_accessed_at");
   assert_true(column_exists(connection.get(), "experiences", "hit_count"),
               "V004 migration should add experiences.hit_count");
-  assert_equal(4, query_count(connection.get(), "SELECT COUNT(*) FROM schema_migrations"),
-               "fresh V004 migrate should record four bundled migration rows");
+  assert_equal(6, query_count(connection.get(), "SELECT COUNT(*) FROM schema_migrations"),
+               "fresh migrate should record all bundled migration rows through V006");
 
   const auto status = migrator.status(connection.get());
-  assert_equal(4, status.current_version,
-               "fresh V004 migrate should report current_version=4");
-  assert_equal(4, status.target_version,
-               "fresh V004 migrate should report target_version=4");
+  assert_equal(6, status.current_version,
+               "fresh migrate should report current_version=6 after applying bundled migrations through V006");
+  assert_equal(6, status.target_version,
+               "fresh migrate should report target_version=6 when bundled migrations extend through V006");
   assert_true(status.up_to_date,
               "fresh V004 migrate should leave the database up-to-date");
 }
@@ -187,9 +187,9 @@ void test_schema_migration_v004_backfills_existing_rows_on_v003_upgrade() {
       DASALL_SQL_MEMORY_DIR);
   const auto upgrade_result = full_migrator.migrate(connection.get());
   assert_true(!upgrade_result.has_value(),
-              "re-running migrate against bundled migrations should apply only V004");
-  assert_equal(4, query_count(connection.get(), "SELECT COUNT(*) FROM schema_migrations"),
-               "V004 upgrade should append one migration row to the V003 baseline");
+              "re-running migrate against bundled migrations should apply the pending V004..V006 migrations");
+  assert_equal(6, query_count(connection.get(), "SELECT COUNT(*) FROM schema_migrations"),
+               "upgrade from V003 should append bundled migrations through V006");
   assert_true(column_exists(connection.get(), "facts", "last_accessed_at"),
               "V004 upgrade should add facts.last_accessed_at");
   assert_true(column_exists(connection.get(), "facts", "hit_count"),

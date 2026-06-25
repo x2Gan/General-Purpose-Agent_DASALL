@@ -405,4 +405,15 @@ contracts::ExperienceMemory map_row_to_experience(sqlite3_stmt* statement) {
   return experience;
 }
 
+ProgrammaticMemoryRecord map_row_to_programmatic_asset(sqlite3_stmt* statement) {
+  ProgrammaticMemoryRecord record;
+  record.asset_ref = column_text(statement, 0).value_or(std::string{});
+  record.session_id = column_text(statement, 1).value_or(std::string{});
+  record.source_turn_id = column_text(statement, 2).value_or(std::string{});
+  record.content_digest = column_text(statement, 3).value_or(std::string{});
+  record.lease_expires_at = column_int64(statement, 4).value_or(0);
+  record.tags = decode_string_array(column_text(statement, 5).value_or("[]"));
+  return record;
+}
+
 }  // namespace dasall::memory::store::sqlite

@@ -391,6 +391,85 @@ void test_sqlite_memory_store_persists_fact_experience_and_maintenance_paths() {
   std::filesystem::remove(database_path);
 }
 
+void test_sqlite_memory_store_persists_programmatic_assets_and_renews_leases() {
+  using dasall::tests::support::assert_equal;
+  using dasall::tests::support::assert_true;
+
+  const auto database_path = make_temp_database_path();
+  auto store = dasall::memory::store::sqlite::create_sqlite_memory_store();
+  const auto config = make_sqlite_config(database_path);
+  const auto now_millis = current_time_millis();
+
+  assert_true(!store->open(config).has_value(),
+              "sqlite store should open for programmatic asset coverage");
+
+  dasall::contracts::Session session;
+  session.session_id = "session-016";
+  session.turn_ids = std::vector<std::string>{};
+  session.user_id = "user-016";
+  session.created_at = now_millis - 1000;
+  session.last_active_at = now_millis - 1000;
+  assert_true(store->create_session(session).ok,
+              "sqlite store should create a session before programmatic asset inserts");
+
+  dasall::contracts::Turn turn;
+  turn.turn_id = "turn-016-001";
+  turn.session_id = "session-016";
+  turn.user_input = "persist selected prompt release";
+  turn.created_at = now_millis - 900;
+  assert_true(store->append_turn(turn).ok,
+              "sqlite store should append a turn before programmatic asset inserts");
+
+  dasall::memory::ProgrammaticMemoryRecord record;
+  record.asset_ref = "prompt:responder@2026.06.23";
+  record.session_id = "session-016";
+  record.source_turn_id = "turn-016-001";
+  record.content_digest = "sha256:programmatic-016";
+  record.lease_expires_at = now_millis + 60000;
+  record.tags = {"programmatic", "prompt"};
+
+  const auto upsert_result = store->upsert_programmatic_asset(record);
+  assert_true(upsert_result.ok,
+              "sqlite store should persist a programmatic asset record");
+
+  const auto stored_records = store->query_programmatic_assets(
+      dasall::memory::ProgrammaticMemoryQuery{
+          .session_id = "session-016",
+          .asset_ref = std::optional<std::string>{"prompt:responder@2026.06.23"},
+          .limit = 10,
+      });
+  assert_equal(1, static_cast<int>(stored_records.size()),
+               "query_programmatic_assets should return the persisted asset row");
+  assert_equal(std::string{"sha256:programmatic-016"}, stored_records.front().content_digest,
+               "query_programmatic_assets should preserve the asset digest");
+  assert_equal(std::string{"turn-016-001"}, stored_records.front().source_turn_id,
+               "query_programmatic_assets should preserve the source turn reference");
+  assert_equal(2, static_cast<int>(stored_records.front().tags.size()),
+               "query_programmatic_assets should preserve tags");
+
+  const auto renew_result = store->renew_programmatic_asset_lease(
+      dasall::memory::ProgrammaticMemoryLease{
+          .asset_ref = "prompt:responder@2026.06.23",
+          .lease_expires_at = now_millis + 120000,
+      });
+  assert_true(renew_result.ok,
+              "sqlite store should renew a persisted programmatic asset lease");
+
+  const auto renewed_records = store->query_programmatic_assets(
+      dasall::memory::ProgrammaticMemoryQuery{
+          .session_id = "session-016",
+          .asset_ref = std::optional<std::string>{"prompt:responder@2026.06.23"},
+          .limit = 10,
+      });
+  assert_equal(1, static_cast<int>(renewed_records.size()),
+               "query_programmatic_assets should still return the renewed asset row");
+  assert_true(renewed_records.front().lease_expires_at > record.lease_expires_at,
+              "renew_programmatic_asset_lease should update the stored lease expiry");
+
+  store->close();
+  std::filesystem::remove(database_path);
+}
+
 }  // namespace
 
 int main() {
@@ -398,6 +477,7 @@ int main() {
     test_sqlite_memory_store_rejects_runtime_below_configured_minimum_version();
     test_sqlite_memory_store_persists_session_turn_and_summary_roundtrip();
     test_sqlite_memory_store_persists_fact_experience_and_maintenance_paths();
+    test_sqlite_memory_store_persists_programmatic_assets_and_renews_leases();
   } catch (const std::exception& exception) {
     std::cerr << exception.what() << '\n';
     return 1;

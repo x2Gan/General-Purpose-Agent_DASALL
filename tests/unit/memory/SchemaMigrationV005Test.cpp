@@ -1,7 +1,6 @@
 #include <chrono>
 #include <exception>
 #include <filesystem>
-#include <fstream>
 #include <iostream>
 #include <stdexcept>
 #include <string>
@@ -44,8 +43,7 @@ class ScopedSqliteConnection {
 
 int query_count(sqlite3* connection, const std::string& sql) {
   sqlite3_stmt* statement = nullptr;
-  if (sqlite3_prepare_v2(connection, sql.c_str(), -1, &statement, nullptr) !=
-      SQLITE_OK) {
+  if (sqlite3_prepare_v2(connection, sql.c_str(), -1, &statement, nullptr) != SQLITE_OK) {
     throw std::runtime_error("failed to prepare count query");
   }
 
@@ -57,26 +55,19 @@ int query_count(sqlite3* connection, const std::string& sql) {
   return value;
 }
 
-bool column_exists(sqlite3* connection,
-                   const std::string& table_name,
-                   const std::string& column_name) {
+bool table_exists(sqlite3* connection, const std::string& table_name) {
   sqlite3_stmt* statement = nullptr;
-  const auto pragma = "PRAGMA table_info(" + table_name + ")";
-  if (sqlite3_prepare_v2(connection, pragma.c_str(), -1, &statement, nullptr) !=
-      SQLITE_OK) {
-    throw std::runtime_error("failed to prepare table_info query");
+  constexpr auto query =
+      "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = ?1";
+  if (sqlite3_prepare_v2(connection, query, -1, &statement, nullptr) != SQLITE_OK) {
+    throw std::runtime_error("failed to prepare table-exists query");
   }
 
+  sqlite3_bind_text(statement, 1, table_name.c_str(), -1, SQLITE_TRANSIENT);
   bool exists = false;
-  while (sqlite3_step(statement) == SQLITE_ROW) {
-    const auto* current_column =
-        reinterpret_cast<const char*>(sqlite3_column_text(statement, 1));
-    if (current_column != nullptr && column_name == current_column) {
-      exists = true;
-      break;
-    }
+  if (sqlite3_step(statement) == SQLITE_ROW) {
+    exists = sqlite3_column_int(statement, 0) == 1;
   }
-
   sqlite3_finalize(statement);
   return exists;
 }
@@ -103,7 +94,7 @@ std::filesystem::path make_temp_migration_dir(const std::string& suffix) {
                              std::chrono::system_clock::now().time_since_epoch())
                              .count();
   const auto directory = std::filesystem::temp_directory_path() /
-                         ("dasall-memory-v006-migrations-" + suffix + "-" +
+                         ("dasall-memory-v005-migrations-" + suffix + "-" +
                           std::to_string(timestamp));
   std::filesystem::create_directories(directory);
   return directory;
@@ -121,7 +112,7 @@ void copy_migration_file(const std::filesystem::path& destination,
                              std::filesystem::copy_options::overwrite_existing);
 }
 
-void test_schema_migration_v006_adds_summary_parent_id_on_fresh_database() {
+void test_schema_migration_v005_adds_programmatic_assets_on_fresh_database() {
   using dasall::tests::support::assert_equal;
   using dasall::tests::support::assert_true;
 
@@ -131,26 +122,26 @@ void test_schema_migration_v006_adds_summary_parent_id_on_fresh_database() {
 
   const auto migration_result = migrator.migrate(connection.get());
   assert_true(!migration_result.has_value(),
-              "V006 migration should apply cleanly on a fresh database");
-  assert_true(column_exists(connection.get(), "summaries", "summary_parent_id"),
-              "V006 migration should add summaries.summary_parent_id");
-  assert_true(index_exists(connection.get(), "idx_summaries_session_parent_created_at"),
-              "V006 migration should add the session/parent lookup index");
-  assert_true(index_exists(connection.get(), "idx_summaries_parent_id"),
-              "V006 migration should add the direct parent lookup index");
+              "V005 migration should apply cleanly on a fresh database");
+  assert_true(table_exists(connection.get(), "programmatic_assets"),
+              "V005 migration should create the programmatic_assets table");
+  assert_true(index_exists(connection.get(), "idx_programmatic_assets_session_id"),
+              "V005 migration should add the session lookup index");
+  assert_true(index_exists(connection.get(), "idx_programmatic_assets_lease_expires_at"),
+              "V005 migration should add the lease expiry index");
   assert_equal(6, query_count(connection.get(), "SELECT COUNT(*) FROM schema_migrations"),
-               "fresh V006 migrate should record six bundled migration rows including V005");
+               "fresh V005 migrate should record six bundled migration rows");
 
   const auto status = migrator.status(connection.get());
   assert_equal(6, status.current_version,
-               "fresh V006 migrate should report current_version=6");
+               "fresh migrate should report current_version=6 after applying bundled migrations through V006");
   assert_equal(6, status.target_version,
-               "fresh V006 migrate should report target_version=6");
+               "fresh migrate should report target_version=6 when bundled migrations extend through V006");
   assert_true(status.up_to_date,
-              "fresh V006 migrate should leave the database up-to-date");
+              "fresh migrate should leave the database up-to-date");
 }
 
-void test_schema_migration_v006_upgrades_existing_v004_database() {
+void test_schema_migration_v005_upgrades_existing_v004_database() {
   using dasall::tests::support::assert_equal;
   using dasall::tests::support::assert_true;
 
@@ -165,35 +156,43 @@ void test_schema_migration_v006_upgrades_existing_v004_database() {
       v004_dir.string());
   const auto baseline_result = v004_migrator.migrate(connection.get());
   assert_true(!baseline_result.has_value(),
-              "V004 baseline migrations should apply before the V006 upgrade check");
+              "V004 baseline migrations should apply before the V005 upgrade check");
   assert_equal(4, query_count(connection.get(), "SELECT COUNT(*) FROM schema_migrations"),
                "V004 baseline should only record the first four migrations");
-  assert_true(!column_exists(connection.get(), "summaries", "summary_parent_id"),
-              "V004 baseline should not already contain summary_parent_id");
+  assert_true(!table_exists(connection.get(), "programmatic_assets"),
+              "V004 baseline should not already contain programmatic_assets");
 
-  const dasall::memory::store::sqlite::SqliteSchemaMigrator full_migrator(
-      DASALL_SQL_MEMORY_DIR);
-  const auto upgrade_result = full_migrator.migrate(connection.get());
+  const auto v005_dir = make_temp_migration_dir("upgrade");
+  copy_migration_file(v005_dir, "V001__initial_schema.sql");
+  copy_migration_file(v005_dir, "V002__vector_sidecar.sql");
+  copy_migration_file(v005_dir, "V003__fact_user_lookup_index.sql");
+  copy_migration_file(v005_dir, "V004__retention_decay_metadata.sql");
+  copy_migration_file(v005_dir, "V005__programmatic_assets.sql");
+
+  const dasall::memory::store::sqlite::SqliteSchemaMigrator v005_migrator(
+      v005_dir.string());
+  const auto upgrade_result = v005_migrator.migrate(connection.get());
   assert_true(!upgrade_result.has_value(),
-              "re-running migrate against bundled migrations should apply the pending hierarchy migration");
-  assert_equal(6, query_count(connection.get(), "SELECT COUNT(*) FROM schema_migrations"),
-               "upgrade from V004 should append the pending V005 and V006 migration rows");
-  assert_true(column_exists(connection.get(), "summaries", "summary_parent_id"),
-              "V006 upgrade should add summary_parent_id to summaries");
-  assert_true(index_exists(connection.get(), "idx_summaries_session_parent_created_at"),
-              "V006 upgrade should add the session/parent lookup index");
-  assert_true(index_exists(connection.get(), "idx_summaries_parent_id"),
-              "V006 upgrade should add the direct parent lookup index");
+              "re-running migrate against V005 bundle should append the pending programmatic-assets migration");
+  assert_equal(5, query_count(connection.get(), "SELECT COUNT(*) FROM schema_migrations"),
+               "V005 upgrade should append one migration row to the V004 baseline");
+  assert_true(table_exists(connection.get(), "programmatic_assets"),
+              "V005 upgrade should create the programmatic_assets table");
+  assert_true(index_exists(connection.get(), "idx_programmatic_assets_session_id"),
+              "V005 upgrade should add the session lookup index");
+  assert_true(index_exists(connection.get(), "idx_programmatic_assets_lease_expires_at"),
+              "V005 upgrade should add the lease expiry index");
 
   std::filesystem::remove_all(v004_dir);
+  std::filesystem::remove_all(v005_dir);
 }
 
 }  // namespace
 
 int main() {
   try {
-    test_schema_migration_v006_adds_summary_parent_id_on_fresh_database();
-    test_schema_migration_v006_upgrades_existing_v004_database();
+    test_schema_migration_v005_adds_programmatic_assets_on_fresh_database();
+    test_schema_migration_v005_upgrades_existing_v004_database();
   } catch (const std::exception& exception) {
     std::cerr << exception.what() << '\n';
     return 1;

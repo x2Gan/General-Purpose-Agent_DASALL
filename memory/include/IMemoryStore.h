@@ -7,6 +7,7 @@
 #include "IMaintenanceStore.h"
 #include "ISessionStore.h"
 #include "ISummaryStore.h"
+#include "IProgrammaticMemoryStore.h"
 #include "ITransactionalStore.h"
 #include "config/MemoryConfig.h"
 
@@ -15,6 +16,7 @@ namespace dasall::memory {
 class IMemoryStore : public ITransactionalStore,
                      public ISessionStore,
                      public ISummaryStore,
+                     public IProgrammaticMemoryStore,
                      public IFactStore,
                      public IExperienceStore,
                      public IMaintenanceStore {

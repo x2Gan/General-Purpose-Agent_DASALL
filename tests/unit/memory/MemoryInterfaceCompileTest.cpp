@@ -11,6 +11,7 @@
 #include "IMemoryManager.h"
 #include "IMaintenanceStore.h"
 #include "IMemoryStore.h"
+#include "IProgrammaticMemoryStore.h"
 #include "ISessionStore.h"
 #include "ISummarizer.h"
 #include "IStoreTransaction.h"
@@ -251,6 +252,10 @@ void test_memory_store_supporting_interfaces_remain_public_and_aggregate_cleanly
      using dasall::memory::IFactStore;
      using dasall::memory::IMaintenanceStore;
      using dasall::memory::IMemoryStore;
+     using dasall::memory::IProgrammaticMemoryStore;
+     using dasall::memory::ProgrammaticMemoryLease;
+     using dasall::memory::ProgrammaticMemoryQuery;
+     using dasall::memory::ProgrammaticMemoryRecord;
      using dasall::memory::ISessionStore;
      using dasall::memory::ISummaryStore;
      using dasall::memory::ITransactionalStore;
@@ -262,6 +267,8 @@ void test_memory_store_supporting_interfaces_remain_public_and_aggregate_cleanly
                                         "IMemoryStore should aggregate session access through a narrow interface");
      static_assert(std::is_base_of_v<ISummaryStore, IMemoryStore>,
                                         "IMemoryStore should aggregate summary access through a narrow interface");
+     static_assert(std::is_base_of_v<IProgrammaticMemoryStore, IMemoryStore>,
+                                       "IMemoryStore should aggregate programmatic-asset access through a narrow interface");
      static_assert(std::is_base_of_v<IFactStore, IMemoryStore>,
                                         "IMemoryStore should aggregate fact access through a narrow interface");
      static_assert(std::is_base_of_v<IExperienceStore, IMemoryStore>,
@@ -283,6 +290,15 @@ void test_memory_store_supporting_interfaces_remain_public_and_aggregate_cleanly
           static_assert(std::is_same_v<decltype(&IMaintenanceStore::run_quarantine_cleanup),
                                   int (IMaintenanceStore::*)(const MemoryConfig&, MaintenanceReport&)>,
                                        "quarantine cleanup should stay reachable via the abstract maintenance interface");
+          static_assert(std::is_same_v<decltype(&IProgrammaticMemoryStore::query_programmatic_assets),
+                                       std::vector<ProgrammaticMemoryRecord> (IProgrammaticMemoryStore::*)(const ProgrammaticMemoryQuery&) const>,
+                                            "programmatic asset query should stay reachable via the abstract programmatic-memory interface");
+          static_assert(std::is_same_v<decltype(&IProgrammaticMemoryStore::upsert_programmatic_asset),
+                                       dasall::memory::StoreResult (IProgrammaticMemoryStore::*)(const ProgrammaticMemoryRecord&)>,
+                                            "programmatic asset upsert should stay reachable via the abstract programmatic-memory interface");
+          static_assert(std::is_same_v<decltype(&IProgrammaticMemoryStore::renew_programmatic_asset_lease),
+                                       dasall::memory::StoreResult (IProgrammaticMemoryStore::*)(const ProgrammaticMemoryLease&)>,
+                                            "programmatic asset lease renewal should stay reachable via the abstract programmatic-memory interface");
 
      assert_true(std::has_virtual_destructor_v<ITransactionalStore>,
                                    "transactional store interface should remain safely polymorphic");
@@ -290,12 +306,31 @@ void test_memory_store_supporting_interfaces_remain_public_and_aggregate_cleanly
                                    "session store interface should remain safely polymorphic");
      assert_true(std::has_virtual_destructor_v<ISummaryStore>,
                                    "summary store interface should remain safely polymorphic");
+           assert_true(std::has_virtual_destructor_v<IProgrammaticMemoryStore>,
+                                                                                      "programmatic-memory store interface should remain safely polymorphic");
      assert_true(std::has_virtual_destructor_v<IFactStore>,
                                    "fact store interface should remain safely polymorphic");
      assert_true(std::has_virtual_destructor_v<IExperienceStore>,
                                    "experience store interface should remain safely polymorphic");
      assert_true(std::has_virtual_destructor_v<IMaintenanceStore>,
                                    "maintenance store interface should remain safely polymorphic");
+
+           ProgrammaticMemoryRecord record{
+                .asset_ref = "prompt:responder@2026.06.23",
+                .session_id = "session-compile-001",
+                .source_turn_id = "turn-compile-001",
+                .content_digest = "sha256:compile-surface",
+                .lease_expires_at = 123456,
+                .tags = std::vector<std::string>{"programmatic", "prompt"},
+           };
+           ProgrammaticMemoryLease lease{
+                .asset_ref = record.asset_ref,
+                .lease_expires_at = 223456,
+           };
+           assert_true(record.has_consistent_values(),
+                                                                                      "programmatic memory record should enforce asset-ref/digest/lease consistency on the public surface");
+           assert_true(lease.has_consistent_values(),
+                                                                                      "programmatic memory lease should enforce asset-ref/lease consistency on the public surface");
 }
 
 void test_memory_writeback_supporting_types_compile_and_preserve_partial_retry_semantics() {

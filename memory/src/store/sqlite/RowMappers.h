@@ -10,6 +10,7 @@
 #include "memory/Turn.h"
 #include "memory/MemoryFact.h"
 #include "memory/ExperienceMemory.h"
+#include "IProgrammaticMemoryStore.h"
 
 struct sqlite3_stmt;
 
@@ -33,5 +34,6 @@ namespace dasall::memory::store::sqlite {
 [[nodiscard]] contracts::SummaryMemory map_row_to_summary(sqlite3_stmt* statement);
 [[nodiscard]] contracts::MemoryFact map_row_to_fact(sqlite3_stmt* statement);
 [[nodiscard]] contracts::ExperienceMemory map_row_to_experience(sqlite3_stmt* statement);
+[[nodiscard]] ProgrammaticMemoryRecord map_row_to_programmatic_asset(sqlite3_stmt* statement);
 
 }  // namespace dasall::memory::store::sqlite

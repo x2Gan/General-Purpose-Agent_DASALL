@@ -1239,6 +1239,140 @@ std::vector<contracts::SummaryMemory> SqliteMemoryStore::load_unparented_summari
   return summaries;
 }
 
+std::vector<ProgrammaticMemoryRecord> SqliteMemoryStore::query_programmatic_assets(
+    const ProgrammaticMemoryQuery& query) const {
+  const auto reader_lease = select_reader_connection();
+  sqlite3* reader_connection = reader_lease.connection;
+  if (reader_connection == nullptr || query.session_id.empty()) {
+    return {};
+  }
+
+  std::string sql =
+      "SELECT asset_ref, session_id, source_turn_id, content_digest, lease_expires_at, tags_json "
+      "FROM programmatic_assets WHERE session_id = ?1";
+  int bind_index = 2;
+  int asset_ref_index = 0;
+  if (query.asset_ref.has_value() && !query.asset_ref->empty()) {
+    sql += " AND asset_ref = ?" + std::to_string(bind_index);
+    asset_ref_index = bind_index++;
+  }
+  sql += " ORDER BY updated_at DESC";
+  if (query.limit > 0) {
+    sql += " LIMIT " + std::to_string(query.limit);
+  }
+
+  sqlite3_stmt* statement = nullptr;
+  if (sqlite3_prepare_v2(reader_connection, sql.c_str(), -1, &statement, nullptr) != SQLITE_OK) {
+    return {};
+  }
+
+  sqlite3_bind_text(statement, 1, query.session_id.c_str(), -1, SQLITE_TRANSIENT);
+  if (asset_ref_index > 0) {
+    sqlite3_bind_text(statement,
+                      asset_ref_index,
+                      query.asset_ref->c_str(),
+                      -1,
+                      SQLITE_TRANSIENT);
+  }
+
+  std::vector<ProgrammaticMemoryRecord> records;
+  while (sqlite3_step(statement) == SQLITE_ROW) {
+    records.push_back(map_row_to_programmatic_asset(statement));
+  }
+
+  sqlite3_finalize(statement);
+  return records;
+}
+
+StoreResult SqliteMemoryStore::upsert_programmatic_asset(
+    const ProgrammaticMemoryRecord& record) {
+  if (writer_connection_ == nullptr) {
+    return StoreResult::failure(contracts::ResultCode::RuntimeRetryExhausted,
+                                std::string{"sqlite store is not open"});
+  }
+
+  if (!record.has_consistent_values()) {
+    return StoreResult::failure(contracts::ResultCode::ValidationFieldMissing,
+                                std::string{"programmatic asset record is inconsistent"});
+  }
+
+  sqlite3_stmt* statement = nullptr;
+  constexpr auto upsert_sql =
+      "INSERT INTO programmatic_assets(asset_ref, session_id, source_turn_id, content_digest, "
+      "lease_expires_at, tags_json, created_at, updated_at) "
+      "VALUES(?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8) "
+      "ON CONFLICT(asset_ref) DO UPDATE SET "
+      "session_id = excluded.session_id, "
+      "source_turn_id = excluded.source_turn_id, "
+      "content_digest = excluded.content_digest, "
+      "lease_expires_at = excluded.lease_expires_at, "
+      "tags_json = excluded.tags_json, "
+      "updated_at = excluded.updated_at";
+  if (sqlite3_prepare_v2(writer_connection_, upsert_sql, -1, &statement, nullptr) != SQLITE_OK) {
+    return StoreResult::failure(contracts::ResultCode::RuntimeRetryExhausted,
+                                std::string{"failed to prepare programmatic asset upsert"});
+  }
+
+  const auto now_millis = current_time_millis();
+  sqlite3_bind_text(statement, 1, record.asset_ref.c_str(), -1, SQLITE_TRANSIENT);
+  sqlite3_bind_text(statement, 2, record.session_id.c_str(), -1, SQLITE_TRANSIENT);
+  sqlite3_bind_text(statement, 3, record.source_turn_id.c_str(), -1, SQLITE_TRANSIENT);
+  sqlite3_bind_text(statement, 4, record.content_digest.c_str(), -1, SQLITE_TRANSIENT);
+  sqlite3_bind_int64(statement, 5, record.lease_expires_at);
+  const std::optional<std::vector<std::string>> tags = record.tags;
+  sqlite3_bind_text(statement, 6, encode_string_array(tags).c_str(), -1, SQLITE_TRANSIENT);
+  sqlite3_bind_int64(statement, 7, now_millis);
+  sqlite3_bind_int64(statement, 8, now_millis);
+
+  const int step_status = sqlite3_step(statement);
+  sqlite3_finalize(statement);
+  if (const auto result_code = map_sqlite_result(step_status); result_code.has_value()) {
+    return StoreResult::failure(*result_code,
+                                std::string{"failed to upsert programmatic asset"});
+  }
+
+  return StoreResult::success(record.asset_ref);
+}
+
+StoreResult SqliteMemoryStore::renew_programmatic_asset_lease(
+    const ProgrammaticMemoryLease& lease) {
+  if (writer_connection_ == nullptr) {
+    return StoreResult::failure(contracts::ResultCode::RuntimeRetryExhausted,
+                                std::string{"sqlite store is not open"});
+  }
+
+  if (!lease.has_consistent_values()) {
+    return StoreResult::failure(contracts::ResultCode::ValidationFieldMissing,
+                                std::string{"programmatic asset lease is inconsistent"});
+  }
+
+  sqlite3_stmt* statement = nullptr;
+  constexpr auto update_sql =
+      "UPDATE programmatic_assets SET lease_expires_at = ?1, updated_at = ?2 WHERE asset_ref = ?3";
+  if (sqlite3_prepare_v2(writer_connection_, update_sql, -1, &statement, nullptr) != SQLITE_OK) {
+    return StoreResult::failure(contracts::ResultCode::RuntimeRetryExhausted,
+                                std::string{"failed to prepare programmatic asset lease update"});
+  }
+
+  sqlite3_bind_int64(statement, 1, lease.lease_expires_at);
+  sqlite3_bind_int64(statement, 2, current_time_millis());
+  sqlite3_bind_text(statement, 3, lease.asset_ref.c_str(), -1, SQLITE_TRANSIENT);
+
+  const int step_status = sqlite3_step(statement);
+  sqlite3_finalize(statement);
+  if (const auto result_code = map_sqlite_result(step_status); result_code.has_value()) {
+    return StoreResult::failure(*result_code,
+                                std::string{"failed to renew programmatic asset lease"});
+  }
+
+  if (sqlite3_changes(writer_connection_) == 0) {
+    return StoreResult::failure(contracts::ResultCode::ValidationFieldMissing,
+                                std::string{"programmatic asset not found"});
+  }
+
+  return StoreResult::success(lease.asset_ref);
+}
+
 StoreResult SqliteMemoryStore::assign_summary_parent(
     const std::vector<std::string>& summary_ids,
     const std::string& parent_summary_id) {

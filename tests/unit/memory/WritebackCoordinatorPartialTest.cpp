@@ -61,6 +61,21 @@ class DerivedFailureStore final : public dasall::memory::IMemoryStore {
     return delegate_.load_latest_summary(session_id);
   }
 
+  [[nodiscard]] std::vector<dasall::memory::ProgrammaticMemoryRecord> query_programmatic_assets(
+      const dasall::memory::ProgrammaticMemoryQuery& query) const override {
+    return delegate_.query_programmatic_assets(query);
+  }
+
+  [[nodiscard]] dasall::memory::StoreResult upsert_programmatic_asset(
+      const dasall::memory::ProgrammaticMemoryRecord& record) override {
+    return delegate_.upsert_programmatic_asset(record);
+  }
+
+  [[nodiscard]] dasall::memory::StoreResult renew_programmatic_asset_lease(
+      const dasall::memory::ProgrammaticMemoryLease& lease) override {
+    return delegate_.renew_programmatic_asset_lease(lease);
+  }
+
   [[nodiscard]] dasall::memory::FactQueryResult query_facts(
       const dasall::memory::FactQuery& query) const override {
     (void)query;
@@ -211,7 +226,7 @@ void test_writeback_coordinator_marks_partial_without_rolling_back_core_transact
   auto conflict_resolver =
       std::make_unique<dasall::memory::MemoryConflictResolver>(store);
   dasall::memory::WritebackCoordinator coordinator(
-      store, store, store, store, store,
+      store, store, store, store, store, store,
       nullptr,
       std::move(conflict_resolver), *working_board, &vector_index);
 

@@ -50,6 +50,13 @@ class SqliteMemoryStore final : public IMemoryStore {
       const std::vector<std::string>& summary_ids,
       const std::string& parent_summary_id) override;
 
+  [[nodiscard]] std::vector<ProgrammaticMemoryRecord> query_programmatic_assets(
+      const ProgrammaticMemoryQuery& query) const override;
+  [[nodiscard]] StoreResult upsert_programmatic_asset(
+      const ProgrammaticMemoryRecord& record) override;
+  [[nodiscard]] StoreResult renew_programmatic_asset_lease(
+      const ProgrammaticMemoryLease& lease) override;
+
   [[nodiscard]] FactQueryResult query_facts(const FactQuery& query) const override;
   [[nodiscard]] FactQueryResult query_facts_by_user(
       const std::string& user_id,

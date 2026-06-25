@@ -5,6 +5,7 @@
 
 #include "IExperienceStore.h"
 #include "IFactStore.h"
+#include "IProgrammaticMemoryStore.h"
 #include "ISessionStore.h"
 #include "ISummaryStore.h"
 #include "ITransactionalStore.h"
@@ -29,6 +30,7 @@ class WritebackCoordinator {
   WritebackCoordinator(ITransactionalStore& transaction_store,
                        ISessionStore& session_store,
                        ISummaryStore& summary_store,
+                       IProgrammaticMemoryStore& programmatic_store,
                        IFactStore& fact_store,
                        IExperienceStore& experience_store,
                        std::unique_ptr<HierarchicalSummarizationCoordinator> hierarchy_coordinator,
@@ -59,6 +61,7 @@ class WritebackCoordinator {
   ITransactionalStore& transaction_store_;
   ISessionStore& session_store_;
   ISummaryStore& summary_store_;
+  IProgrammaticMemoryStore& programmatic_store_;
   IFactStore& fact_store_;
   IExperienceStore& experience_store_;
   std::unique_ptr<HierarchicalSummarizationCoordinator> hierarchy_coordinator_;

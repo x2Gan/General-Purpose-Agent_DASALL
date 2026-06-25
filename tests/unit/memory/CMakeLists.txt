@@ -50,6 +50,10 @@ add_executable(dasall_memory_schema_migration_v004_unit_test
 	SchemaMigrationV004Test.cpp
 )
 
+add_executable(dasall_memory_schema_migration_v005_unit_test
+	SchemaMigrationV005Test.cpp
+)
+
 add_executable(dasall_memory_schema_migration_v006_unit_test
 	SchemaMigrationV006Test.cpp
 )
@@ -258,6 +262,13 @@ target_link_libraries(dasall_memory_schema_migration_v003_unit_test
 )
 
 target_link_libraries(dasall_memory_schema_migration_v004_unit_test
+	PRIVATE
+		dasall_memory
+		dasall_sqlite3
+		dasall_test_support
+)
+
+target_link_libraries(dasall_memory_schema_migration_v005_unit_test
 	PRIVATE
 		dasall_memory
 		dasall_sqlite3
@@ -656,6 +667,11 @@ target_include_directories(dasall_memory_schema_migration_v004_unit_test
 		${CMAKE_SOURCE_DIR}/memory/src
 )
 
+target_include_directories(dasall_memory_schema_migration_v005_unit_test
+	PRIVATE
+		${CMAKE_SOURCE_DIR}/memory/src
+)
+
 target_include_directories(dasall_memory_schema_migration_v006_unit_test
 	PRIVATE
 		${CMAKE_SOURCE_DIR}/memory/src
@@ -687,6 +703,11 @@ target_compile_definitions(dasall_memory_schema_migration_v003_unit_test
 )
 
 target_compile_definitions(dasall_memory_schema_migration_v004_unit_test
+	PRIVATE
+		DASALL_SQL_MEMORY_DIR="${CMAKE_SOURCE_DIR}/sql/memory"
+)
+
+target_compile_definitions(dasall_memory_schema_migration_v005_unit_test
 	PRIVATE
 		DASALL_SQL_MEMORY_DIR="${CMAKE_SOURCE_DIR}/sql/memory"
 )
@@ -854,6 +875,9 @@ set_tests_properties(SchemaMigrationV003Test PROPERTIES LABELS "unit;memory")
 add_test(NAME SchemaMigrationV004Test COMMAND dasall_memory_schema_migration_v004_unit_test)
 set_tests_properties(SchemaMigrationV004Test PROPERTIES LABELS "unit;memory")
 
+add_test(NAME SchemaMigrationV005Test COMMAND dasall_memory_schema_migration_v005_unit_test)
+set_tests_properties(SchemaMigrationV005Test PROPERTIES LABELS "unit;memory")
+
 add_test(NAME SchemaMigrationV006Test COMMAND dasall_memory_schema_migration_v006_unit_test)
 set_tests_properties(SchemaMigrationV006Test PROPERTIES LABELS "unit;memory")
 
@@ -967,6 +991,7 @@ set(DASALL_MEMORY_UNIT_TEST_EXECUTABLE_TARGETS
 	dasall_memory_schema_migration_unit_test
 	dasall_memory_schema_migration_v003_unit_test
 	dasall_memory_schema_migration_v004_unit_test
+	dasall_memory_schema_migration_v005_unit_test
 	dasall_memory_schema_migration_v006_unit_test
 	dasall_memory_sqlite_transaction_unit_test
 	dasall_memory_sqlite_store_unit_test

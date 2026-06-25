@@ -250,6 +250,7 @@ std::unique_ptr<IMemoryManager> create_memory_manager(
         config, dependencies.observability, quality_probe, token_estimator);
     dependencies.writeback_coordinator = std::make_unique<WritebackCoordinator>(
       *dependencies.store, *dependencies.store, *dependencies.store,
+      *dependencies.store,
       *dependencies.store, *dependencies.store, std::move(hierarchy_coordinator),
       std::move(conflict_resolver),
       *dependencies.working_memory_board, dependencies.vector_index.get(),

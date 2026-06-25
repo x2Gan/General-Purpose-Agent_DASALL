@@ -519,7 +519,7 @@ MEM-TODO-023 冻结结论：
 | Long-Term Memory（Semantic） | MemoryFact | FactCandidate、MemoryConflictRecord、FactQuery | 稳定事实面，必须带来源与置信度 |
 | Experience Memory | ExperienceMemory | ExperienceCandidate、ExperienceQuery | 经验、失败恢复、重规划教训沉淀 |
 | Vector Memory | 当前无 frozen shared object | VectorDocument、VectorHit、VectorIndexHealth | backend 细节保留在 memory 内部 |
-| Programmatic Memory | 当前不新增 shared object | ProgrammaticMemoryRef | 当前阶段只保留 asset ref/tag，不复制 Prompt/Skill 本体 |
+| Programmatic Memory | 当前不新增 shared object | ProgrammaticMemoryRecord、ProgrammaticMemoryLease | 当前阶段只保留 `asset_ref/content_digest/lease` 语义引用，不复制 Prompt/Skill 本体 |
 
 #### 6.5.1a 架构三子层到详细设计的收敛映射
 
@@ -529,7 +529,7 @@ MEM-TODO-023 冻结结论：
 |---|---|---|---|
 | Episodic Memory（历史会话与任务摘要） | Session、Turn、SummaryMemory | SessionTimelineRepository、SummaryRepository、CompressionCoordinator | SummaryMemory 以结构化摘要（decisions_made、confirmed_facts、tool_outcomes）形式承载 Episodic 沉淀；Turn 保留原始回合索引 |
 | Semantic Memory（稳定事实/外部知识索引） | MemoryFact | FactRepository、MemoryConflictResolver、VectorMemoryIndexAdapter | MemoryFact 承载经过置信度和证据链验证的稳定事实；VectorMemory 提供语义索引辅助检索 |
-| Programmatic Memory（Skill/Prompt 资产行为约束） | 当前无 frozen shared object | 当前阶段不持久化 | 理由：Prompt/Skill 资产本体归 llm 模块 PromptAssetRepository 管理（见 DASALL_llm子系统详细设计.md §5），memory 当前阶段只允许保留 asset ref/tag 语义引用（ProgrammaticMemoryRef），不复制资产正文；待 llm 资产治理稳定并明确跨模块 lease 方案后再评估是否需要独立持久化 |
+| Programmatic Memory（Skill/Prompt 资产行为约束） | 当前无 frozen shared object | 已通过 module-local `ProgrammaticMemoryRecord` + `IProgrammaticMemoryStore` + `programmatic_assets` 落地 `asset_ref/content_digest/lease` 持久化 | 理由：Prompt/Skill 资产本体仍归 llm 模块 PromptAssetRepository 管理（见 DASALL_llm子系统详细设计.md §5）；memory 仅持久化稳定 asset ref、digest 与 lease 语义，不复制资产正文 |
 
 此映射确保架构期望的三子层在详细设计中有明确落点或明确推迟理由，不产生"无人认领"的空白地带。
 
@@ -2288,7 +2288,7 @@ Smoke 覆盖：MemoryManagerSmokeTest 验证 init → prepare_context → write_
 ### 10.3 扩展预留点
 
 1. Vector backend 可从 SQLite-vss 扩展到本地独立索引 backend，但 facade 不变。
-2. ProgrammaticMemory 后续若确需落地，应优先定义 asset ref/lease，而不是复制 Prompt/Skill 正文。
+2. ProgrammaticMemory 当前已按 `asset_ref/content_digest/lease` 落地；后续若扩展到更多 asset family，仍应继续保持“引用 + digest + lease”模式，而不是复制 Prompt/Skill 正文。
 3. 若未来多进程或远程化场景出现，可把 IMemoryStore backend 从本地 SQLite 替换为 service adapter，但 ContextOrchestrator 和 WritebackCoordinator 责任不变。
 4. 若 SummaryMemory 未来确需结构化承载 open_questions，必须走 contracts 评审和迁移窗口，而不是在本轮提前扩字段。
 
@@ -2316,7 +2316,7 @@ Smoke 覆盖：MemoryManagerSmokeTest 验证 init → prepare_context → write_
 | MEM-B04 | SQLite 版本基线未在工程依赖中锁定 | WAL 并发与 checkpoint 可靠性存在风险 | 工程侧明确 sqlite >= 3.51.3 或回补版本 | edge_minimal 回退到 DELETE journal 或禁用后台 checkpoint |
 | MEM-B05 | profile 的 retention / compression / checkpoint 阈值未统一 | 默认参数可能与 edge profile 不匹配 | profiles 评审明确 memory 配置键 | 先使用 conservative default |
 | MEM-B06 | knowledge -> memory 的外部证据投影实现尚未落地 | 若 runtime 未按统一规则投影，CandidateCollector 的 external evidence 会出现文本/结构化语义漂移 | 按 [../ssot/CrossModuleDataProjectionMatrix.md](../ssot/CrossModuleDataProjectionMatrix.md) 实现 v1 文本投影，并保留 structured evidence refs 于 knowledge/runtime invoke-scoped sidecar | 文档层已冻结 `external_evidence` 为 `std::vector<std::string>`；实现前不得私自扩 shape |
-| MEM-B07 | ProgrammaticMemory 边界未细化 | 容易错误复制 Prompt/Skill 正文 | llm/tools 资产治理文档明确 asset ref 方案 | 当前阶段不落 ProgrammaticMemory 持久化 |
+| MEM-B07 | 已解除：ProgrammaticMemory 边界已细化为 `asset_ref/content_digest/lease` | 继续扩展 asset family 时仍需防止错误复制 Prompt/Skill 正文 | llm PromptAssetRepository public metadata seam 已提供唯一 digest/source 来源 | 当前阶段只保留引用语义，不复制资产正文 |
 
 ### 11.3 回退策略矩阵
 
@@ -2336,7 +2336,7 @@ Smoke 覆盖：MemoryManagerSmokeTest 验证 init → prepare_context → write_
 1. ContextAssembleRequest/Result 未来是否需要 shared contract 化，还是继续留在 memory/include 足够。
 2. open_questions 是否需要在后续版本进入 SummaryMemory 结构化字段，还是继续停留在 WorkingMemoryProjection + summary_text。
 3. VectorMemory 是否由 memory 单独负责全部 backend 生命周期，还是仅提供基础存储给 knowledge 调用。
-4. ProgrammaticMemory 在 DASALL 中是否需要独立持久化对象，还是只保留 asset ref/tag 语义。
+4. ProgrammaticMemory 后续是否需要从当前 prompt asset family 扩展到 skill/tool asset family，还是继续保持仅 prompt asset 的最小持久化面。
 5. edge_minimal 场景下是否允许完全关闭 Long-Term/Experience，仅保留 Session/Turn/Summary。
 
 ### 12.2 后续任务建议
@@ -2357,7 +2357,7 @@ Smoke 覆盖：MemoryManagerSmokeTest 验证 init → prepare_context → write_
 | MEM-E03 | CandidateCollector composite scoring（参考 CrewAI） | 候选评分需要超越简单 confidence 阈值 | MEM-D002 ContextOrchestrator 落地 | §4.1.1 CrewAI 对照 |
 | MEM-E04 | IEmbeddingAdapter 外部 embedding service 注入 | VectorMemory 需要高质量语义搜索 | MEM-D008 VectorMemory 基线 | §6.3.2 |
 | MEM-E05 | 跨 session 事实共享（user-level FactQuery，已完成 2026-06-17） | 已通过显式 `query_facts_by_user(...)` seam、`idx_facts_user_id` 与 `ContextOrchestrator` user-level facts 装配闭合多 session 用户偏好召回 | MEM-D007 Fact 仓储稳定 | §6.12.5 FactQuery |
-| MEM-E06 | ProgrammaticMemory 独立持久化 | llm 资产治理稳定 + 明确跨模块 asset ref/lease 方案 | llm 子系统 PromptAssetRepository 冻结 | §6.5.1a |
+| MEM-E06 | ProgrammaticMemory 独立持久化（已完成，2026-06-23） | 已通过 llm public metadata seam、`IProgrammaticMemoryStore`、V005 `programmatic_assets` 与 runtime prompt asset projection 闭合 `asset_ref/content_digest/lease` 路径 | llm 子系统 PromptAssetRepository 冻结 | §6.5.1a |
 | MEM-E07 | ContextAssembleRequest/Result 提升为 shared contracts | runtime/memory 接口在多子系统消费后稳定 | MEM-B01 解除 | §12.1 未决问题 1 |
 | MEM-E08 | token 估算替换为 tiktoken 或等价 tokenizer 绑定 | Build 阶段需要精确 token 预算 | MEM-D002 BudgetAllocator 落地 | §6.12.2 CandidateCollector |
 | MEM-E09 | MemoryConflictResolver 引入向量相似度辅助冲突检测（已完成，2026-06-15） | 已通过可选 `IEmbeddingAdapter` + `ConflictConfig.embedding_similarity_threshold` 收口跨语言 / 同义改写歧义路径 | MEM-D008 VectorMemory + MEM-D007 ConflictResolver | §6.12.3 |

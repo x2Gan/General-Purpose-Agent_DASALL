@@ -5,6 +5,7 @@
 #include <vector>
 
 #include "checkpoint/ReflectionLessonProjection.h"
+#include "IProgrammaticMemoryStore.h"
 #include "memory/ExperienceMemory.h"
 #include "memory/MemoryFact.h"
 #include "memory/SummaryMemory.h"
@@ -22,6 +23,11 @@ struct ExperienceCandidate {
   std::string extraction_source;
 };
 
+struct ProgrammaticMemoryCandidate {
+  ProgrammaticMemoryRecord record;
+  std::string extraction_source;
+};
+
 struct MemoryWritebackRequest {
   std::string request_id;
   std::string session_id;
@@ -30,6 +36,7 @@ struct MemoryWritebackRequest {
   std::optional<contracts::SummaryMemory> summary_candidate;
   std::vector<FactCandidate> fact_candidates;
   std::vector<ExperienceCandidate> experience_candidates;
+  std::vector<ProgrammaticMemoryCandidate> programmatic_candidates;
   std::optional<contracts::ReflectionLessonProjection> reflection_lesson;
   std::optional<std::string> side_effect_report_ref;
 };
