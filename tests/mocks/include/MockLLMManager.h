@@ -155,6 +155,12 @@ class MockLLMManager : public dasall::llm::ILLMManager {
     return generate(request);
   }
 
+  [[nodiscard]] std::optional<dasall::llm::prompt::PromptAssetMetadata>
+  lookup_prompt_asset_metadata(std::string_view prompt_release_id) const override {
+    (void)prompt_release_id;
+    return std::nullopt;
+  }
+
   bool abandon_call(std::string_view llm_call_id) override {
     ++abandon_call_count_;
     last_abandoned_call_id_ = std::string(llm_call_id);

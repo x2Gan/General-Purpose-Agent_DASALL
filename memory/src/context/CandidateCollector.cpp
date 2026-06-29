@@ -149,23 +149,19 @@ template <typename MetadataMap>
 }  // namespace
 
 CandidateCollector::CandidateCollector(IWorkingMemoryBoard& working_memory_board,
-                                       ISessionStore& session_store,
-                                       ISummaryStore& summary_store,
-                                       IFactStore& fact_store,
-                                       IExperienceStore& experience_store,
+                                       IMemoryStore& store,
                                        const MemoryConfig& config,
                                        VectorMemoryIndexAdapter* vector_index,
-                                       std::shared_ptr<const util::ITokenEstimator> token_estimator)
+                                       std::shared_ptr<const util::ITokenEstimator> token_estimator,
+                                       std::shared_ptr<std::mutex> writer_mutex)
     : working_memory_board_(working_memory_board),
-      session_store_(session_store),
-      summary_store_(summary_store),
-      fact_store_(fact_store),
-      experience_store_(experience_store),
+      store_(store),
       context_config_(config.context),
       vector_config_(config.vector),
       vector_index_(vector_index),
       token_estimator_(token_estimator != nullptr ? token_estimator
-                                                  : util::create_token_estimator(config)) {}
+                                                  : util::create_token_estimator(config)),
+      writer_mutex_(std::move(writer_mutex)) {}
 
 CandidateSet CandidateCollector::collect(const CandidateCollectRequest& request) {
   CandidateSet set;
@@ -186,7 +182,7 @@ CandidateSet CandidateCollector::collect(const CandidateCollectRequest& request)
   }
 
   try {
-    set.latest_summary = summary_store_.load_latest_summary(request.session_id);
+    set.latest_summary = store_.load_latest_summary(request.session_id);
   } catch (...) {
     append_warning(set.warnings, "summary_query_unavailable");
   }
@@ -223,7 +219,7 @@ CandidateSet CandidateCollector::collect(const CandidateCollectRequest& request)
 
 SessionLoadBundle CandidateCollector::load_session_context(
     const std::string& session_id) const {
-  return session_store_.load_session_bundle(SessionLoadRequest{
+  return store_.load_session_bundle(SessionLoadRequest{
       .session_id = session_id,
       .recent_turn_limit = std::max(1, context_config_.recent_turn_limit),
   });
@@ -239,7 +235,7 @@ std::vector<contracts::MemoryFact> CandidateCollector::query_relevant_facts(
     query.min_confidence = std::max(0, context_config_.fact_confidence_floor);
     query.exclude_superseded = true;
     query.limit = 50;
-    result = fact_store_.query_facts_by_user(*session_bundle.session.user_id, query);
+    result = store_.query_facts_by_user(*session_bundle.session.user_id, query);
   } else {
     if (!request.session_id.empty()) {
       query.session_id = request.session_id;
@@ -248,7 +244,7 @@ std::vector<contracts::MemoryFact> CandidateCollector::query_relevant_facts(
     query.min_confidence = std::max(0, context_config_.fact_confidence_floor);
     query.exclude_superseded = true;
     query.limit = 50;
-    result = fact_store_.query_facts(query);
+    result = store_.query_facts(query);
   }
 
   auto facts = std::move(result.facts);
@@ -298,11 +294,11 @@ CandidateCollector::query_relevant_experiences(
 
   query.exclude_expired = true;
   query.limit = 20;
-  auto result = experience_store_.query_experiences(query);
-    auto experiences = std::move(result.experiences);
-    std::stable_sort(experiences.begin(), experiences.end(), [this, &result](
-                                const contracts::ExperienceMemory& left,
-                                const contracts::ExperienceMemory& right) {
+  auto result = store_.query_experiences(query);
+  auto experiences = std::move(result.experiences);
+  std::stable_sort(experiences.begin(), experiences.end(), [this, &result](
+                       const contracts::ExperienceMemory& left,
+                       const contracts::ExperienceMemory& right) {
     const auto left_score = composite_score_or_fallback(
       context_config_.scoring,
       normalize_percent_score(left.effectiveness_score),
@@ -347,7 +343,12 @@ void CandidateCollector::touch_fact_access(
     return;
   }
 
-  const auto touch_result = fact_store_.touch_facts(fact_ids, current_time_millis());
+  std::unique_lock<std::mutex> writer_lock;
+  if (writer_mutex_) {
+    writer_lock = std::unique_lock<std::mutex>(*writer_mutex_);
+  }
+
+  const auto touch_result = store_.touch_facts(fact_ids, current_time_millis());
   if (!touch_result.ok) {
     append_warning(warnings, "fact_touch_unavailable");
   }
@@ -368,8 +369,13 @@ void CandidateCollector::touch_experience_access(
     return;
   }
 
+  std::unique_lock<std::mutex> writer_lock;
+  if (writer_mutex_) {
+    writer_lock = std::unique_lock<std::mutex>(*writer_mutex_);
+  }
+
   const auto touch_result =
-      experience_store_.touch_experiences(experience_ids, current_time_millis());
+      store_.touch_experiences(experience_ids, current_time_millis());
   if (!touch_result.ok) {
     append_warning(warnings, "experience_touch_unavailable");
   }

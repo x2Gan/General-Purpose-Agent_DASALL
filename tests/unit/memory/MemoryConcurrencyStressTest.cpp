@@ -75,6 +75,18 @@ void wait_until(Predicate&& predicate, int spin_limit) {
   return stream.str();
 }
 
+[[nodiscard]] std::string join_warnings(
+    const std::vector<std::string>& warnings) {
+  std::ostringstream stream;
+  for (std::size_t index = 0; index < warnings.size(); ++index) {
+    if (index != 0U) {
+      stream << ",";
+    }
+    stream << warnings[index];
+  }
+  return stream.str();
+}
+
 [[nodiscard]] dasall::memory::MemoryConfig make_sqlite_config(
     const std::filesystem::path& database_path) {
   dasall::memory::MemoryConfig config;
@@ -311,7 +323,8 @@ void test_memory_manager_handles_parallel_prepare_writeback_and_maintenance() {
           has_warning(report.warnings, "experience_retention_failed") ||
           has_warning(report.warnings, "quarantine_cleanup_failed")) {
         record_failure("run_maintenance surfaced a storage failure warning at iteration " +
-                       std::to_string(iteration));
+                       std::to_string(iteration) + " warnings=" +
+                       join_warnings(report.warnings));
       }
       maintenance_iterations.fetch_add(1, std::memory_order_acq_rel);
     }

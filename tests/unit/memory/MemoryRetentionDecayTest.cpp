@@ -216,7 +216,7 @@ void test_candidate_collector_prefers_hot_records_and_touches_access_metadata() 
 
   auto board = dasall::memory::create_working_memory_board();
   dasall::memory::CandidateCollector collector(
-      *board, *store, *store, *store, *store, config, nullptr);
+      *board, *store, config, nullptr);
 
   const auto set = collector.collect(dasall::memory::CandidateCollectRequest{
       .session_id = "session-decay-ranking",

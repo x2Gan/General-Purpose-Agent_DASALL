@@ -231,15 +231,15 @@ std::unique_ptr<IMemoryManager> create_memory_manager(
         config, *dependencies.store, dependencies.embedding_adapter.get());
     dependencies.store_writer_mutex = std::make_shared<std::mutex>();
     auto collector = std::make_unique<CandidateCollector>(
-        *dependencies.working_memory_board, *dependencies.store, *dependencies.store,
-        *dependencies.store, *dependencies.store, config,
-        dependencies.vector_index.get(), token_estimator);
+      *dependencies.working_memory_board, *dependencies.store, config,
+      dependencies.vector_index.get(), token_estimator,
+      dependencies.store_writer_mutex);
     auto allocator = std::make_unique<BudgetAllocator>(config, token_estimator);
     auto compressor = std::make_unique<CompressionCoordinator>(
         *dependencies.store, dependencies.summarizer.get(), token_estimator);
     auto hierarchy_coordinator =
       std::make_unique<HierarchicalSummarizationCoordinator>(
-        *dependencies.store, *dependencies.store, config,
+        *dependencies.store, config,
         dependencies.summarizer.get(), token_estimator);
     auto conflict_resolver = std::make_unique<MemoryConflictResolver>(
       *dependencies.store,
@@ -249,8 +249,6 @@ std::unique_ptr<IMemoryManager> create_memory_manager(
         std::move(collector), std::move(allocator), std::move(compressor),
         config, dependencies.observability, quality_probe, token_estimator);
     dependencies.writeback_coordinator = std::make_unique<WritebackCoordinator>(
-      *dependencies.store, *dependencies.store, *dependencies.store,
-      *dependencies.store,
       *dependencies.store, *dependencies.store, std::move(hierarchy_coordinator),
       std::move(conflict_resolver),
       *dependencies.working_memory_board, dependencies.vector_index.get(),

@@ -53,14 +53,12 @@ std::string summarize_child_page(const contracts::SummaryMemory& summary) {
 }  // namespace
 
 HierarchicalSummarizationCoordinator::HierarchicalSummarizationCoordinator(
-    ISessionStore& session_store,
-    ISummaryStore& summary_store,
+    IMemoryStore& store,
     const MemoryConfig& config,
     ISummarizer* summarizer,
     std::shared_ptr<const util::ITokenEstimator> token_estimator)
-    : session_store_(session_store),
-      summary_store_(summary_store),
-      compression_coordinator_(summary_store, summarizer, token_estimator),
+    : store_(store),
+      compression_coordinator_(store, summarizer, token_estimator),
       hierarchy_config_(config.compression.hierarchy) {}
 
 HierarchicalSummarizationResult
@@ -84,7 +82,7 @@ HierarchicalSummarizationCoordinator::promote_from_summary(
     return result;
   }
 
-  const auto source_summaries = summary_store_.load_unparented_summaries(
+  const auto source_summaries = store_.load_unparented_summaries(
       *summary.session_id, source_level, static_cast<std::size_t>(threshold));
   if (static_cast<int>(source_summaries.size()) < threshold) {
     return result;
@@ -125,7 +123,7 @@ int HierarchicalSummarizationCoordinator::threshold_for(
 
 std::optional<std::string> HierarchicalSummarizationCoordinator::resolve_user_id(
     const std::string& session_id) const {
-  const auto bundle = session_store_.load_session_bundle(
+  const auto bundle = store_.load_session_bundle(
       SessionLoadRequest{.session_id = session_id, .recent_turn_limit = 0});
   if (!bundle.session.user_id.has_value() || bundle.session.user_id->empty()) {
     return std::nullopt;
@@ -219,7 +217,7 @@ HierarchicalSummarizationCoordinator::promote_once(
                   std::string{"summary_owner_user:"} + *request.user_id);
   }
 
-  const auto upsert_result = summary_store_.upsert_summary(parent_summary);
+  const auto upsert_result = store_.upsert_summary(parent_summary);
   if (!upsert_result.ok) {
     append_unique(result.warnings, std::string{"hierarchy_parent_upsert_failed"});
     return result;
@@ -233,7 +231,7 @@ HierarchicalSummarizationCoordinator::promote_once(
     }
   }
 
-  const auto reparent_result = summary_store_.assign_summary_parent(
+  const auto reparent_result = store_.assign_summary_parent(
       child_summary_ids, *parent_summary.summary_id);
   if (!reparent_result.ok) {
     append_unique(result.warnings, std::string{"hierarchy_parent_assignment_failed"});

@@ -297,7 +297,7 @@ void append_warning_once(std::vector<std::string>& warnings,
 }  // namespace
 
 MemoryConflictResolver::MemoryConflictResolver(
-    IFactStore& store,
+  IMemoryStore& store,
     ConflictConfig config,
     IEmbeddingAdapter* embedding_adapter)
     : store_(store),

@@ -226,7 +226,7 @@ void test_writeback_coordinator_marks_partial_without_rolling_back_core_transact
   auto conflict_resolver =
       std::make_unique<dasall::memory::MemoryConflictResolver>(store);
   dasall::memory::WritebackCoordinator coordinator(
-      store, store, store, store, store, store,
+      store, store,
       nullptr,
       std::move(conflict_resolver), *working_board, &vector_index);
 

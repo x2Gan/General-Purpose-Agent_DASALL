@@ -5,7 +5,7 @@
 #include <vector>
 
 #include "config/MemoryConfig.h"
-#include "IFactStore.h"
+#include "IMemoryStore.h"
 #include "writeback/MemoryWritebackRequest.h"
 #include "writeback/WritebackResult.h"
 
@@ -24,7 +24,7 @@ struct ConflictResolutionPlan {
 class MemoryConflictResolver {
  public:
     explicit MemoryConflictResolver(
-            IFactStore& store,
+        IMemoryStore& store,
             ConflictConfig config = {},
             IEmbeddingAdapter* embedding_adapter = nullptr);
 
@@ -46,7 +46,7 @@ class MemoryConflictResolver {
       const contracts::MemoryFact& existing,
       const FactCandidate& candidate) const;
 
-    IFactStore& store_;
+    IMemoryStore& store_;
     ConflictConfig config_;
     IEmbeddingAdapter* embedding_adapter_ = nullptr;
 };

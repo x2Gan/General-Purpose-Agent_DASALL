@@ -83,7 +83,7 @@
 
 ### 3.1 已完整落地（抽样）
 
-- 公共接口与 supporting types：[memory/include/IMemoryManager.h](../../memory/include/IMemoryManager.h) / IContextOrchestrator / IMemoryStore / IStoreTransaction / ISummarizer / 6 个 mini-store interface / vector / working / writeback / config / context / error。
+- 公共接口与 supporting types：[memory/include/IMemoryManager.h](../../memory/include/IMemoryManager.h) / IContextOrchestrator / IMemoryStore / IStoreTransaction / ISummarizer / mini-store compatibility headers（`IFactStore` / `IExperienceStore` / `ISessionStore` / `ISummaryStore` / `IMaintenanceStore`）/ vector / working / writeback / config / context / error。
 - MemoryManager 生命周期与降级路径：[MemoryManager.cpp](../../memory/src/MemoryManager.cpp)（482 行）LifecycleState + memory_manager_not_running / *_unwired warnings。
 - MemoryManagerFactory DI 装配：[MemoryManagerFactory.cpp](../../memory/src/MemoryManagerFactory.cpp)（167 行）按 §6.6.1 装配。
 - ContextOrchestrator 11 槽位映射：[ContextOrchestrator.cpp](../../memory/src/context/ContextOrchestrator.cpp)（814 行）。
@@ -114,7 +114,7 @@
 | §4.1.1 / MemoryOS 对齐 遗忘曲线权重衰减 | 已通过 `last_accessed_at` / `hit_count`、指数衰减权重、access touch 与 decay purge 收口 fact / experience 热度治理 | 结构性缺口已清零；后续只继续在 012 上扩展多因子 scoring | GAP-P2-C 已闭合（2026-06-17） |
 | §4.1.1 / CrewAI 对齐 composite scoring | 已通过 [memory/include/config/MemoryConfig.h](../../memory/include/config/MemoryConfig.h) `ContextConfig::ScoringConfig`、[memory/src/config/MemoryConfigProjector.cpp](../../memory/src/config/MemoryConfigProjector.cpp) 权重投影、[memory/src/context/CandidateCollector.cpp](../../memory/src/context/CandidateCollector.cpp) `confidence + recency + hit_rate + source_weight` 组合评分与 confidence-only fallback 收口 | 结构性缺口已清零；后续只继续治理更高层 recall / quality 指标 | GAP-P2-D 已闭合（2026-06-18） |
 | §6.5.1a ProgrammaticMemory | 已通过 [memory/include/IProgrammaticMemoryStore.h](../../memory/include/IProgrammaticMemoryStore.h)、[sql/memory/V005__programmatic_assets.sql](../../sql/memory/V005__programmatic_assets.sql)、[memory/src/store/sqlite/SqliteMemoryStore.cpp](../../memory/src/store/sqlite/SqliteMemoryStore.cpp) 与 [runtime/src/PromptAssetWritebackProjector.cpp](../../runtime/src/PromptAssetWritebackProjector.cpp) 闭合 `asset_ref + digest + lease` 路径 | 风险已从“未实现”收敛为后续更高层 asset family 扩展 | GAP-P3-A（已闭合，2026-06-23） |
-| §6.6 接口数量 | `IFactStore` / `IExperienceStore` / `ISessionStore` / `ISummaryStore` / `IMaintenanceStore` / `ITransactionalStore` 6 个 mini-interface 全部由 `SqliteMemoryStore` 单类实现 | 与 §6.6 决策"逻辑职责保留 + 实现统一"一致，但接口数量略冗余 | GAP-P3-B（设计冗余清理） |
+| §6.6 接口数量 | 已通过 [memory/include/IMemoryStore.h](../../memory/include/IMemoryStore.h) 将 session / summary / fact / experience / maintenance 方法重新收口到单一 `IMemoryStore` façade，并把 [memory/include/IFactStore.h](../../memory/include/IFactStore.h) / [memory/include/IExperienceStore.h](../../memory/include/IExperienceStore.h) / [memory/include/ISessionStore.h](../../memory/include/ISessionStore.h) / [memory/include/ISummaryStore.h](../../memory/include/ISummaryStore.h) / [memory/include/IMaintenanceStore.h](../../memory/include/IMaintenanceStore.h) 降为 compatibility alias + supporting type headers；内部消费者已回到直接依赖 `IMemoryStore` | 结构性缺口已清零；后续仅在 shared contracts uplift 或 public ABI 清理阶段再评估是否移除兼容别名 | GAP-P3-B 已闭合（2026-06-25） |
 | 长跑 / 并发 / soak 证据 | 已通过 [tests/unit/memory/MemoryConcurrencyStressTest.cpp](../../tests/unit/memory/MemoryConcurrencyStressTest.cpp) 1k+ 轮 manager 并发压力、[tests/integration/memory/MemoryLongRunningSoakTest.cpp](../../tests/integration/memory/MemoryLongRunningSoakTest.cpp) 压缩长跑 soak，以及 [scripts/ci/memory_tsan_stress.sh](../../scripts/ci/memory_tsan_stress.sh) / [.github/workflows/ci.yml](../../.github/workflows/ci.yml) 的 `memory_tsan_stress` 复跑 | 结构性缺口已清零；后续只保留 installed / qemu 与更高层 release-soak 采样 | GAP-P0-C 已闭合（2026-06-02） |
 | installed package gate | 已有 `MemoryMaintenanceProofRunner.cpp` + `RuntimeInstalledProofRunner.cpp` 给到 daemon 侧，但**memory 维度的 installed-evidence 文档未集中归档** | 与 access / runtime 风格不完全对齐 | GAP-P1-C |
 
@@ -170,7 +170,7 @@
 | Composite scoring | `MemoryConfig.context.scoring` + `CandidateCollector` 已闭合 `confidence + recency + hit_rate + source_weight` 组合评分，并保留 confidence-only fallback | CrewAI multi-factor scoring | ✅ 已闭合（GAP-P2-D，2026-06-18） |
 
 **冗余 / 不合适的设计**：
-- 6 个 mini-store interface 全部由 `SqliteMemoryStore` 单实现，与 §6.6 决策一致但**接口数量冗余**（GAP-P3-B）。
+- 原 6 个 mini-store interface 冗余已于 2026-06-25 通过 `WP-MEM-GAP-015` 收口：当前只保留 compatibility alias，不再让内部组件依赖独立 mini-store 构造签名。
 - [memory/src/MemoryBuildSkeleton.cpp](../../memory/src/MemoryBuildSkeleton.cpp) 4 行历史 namespace 文件应清理（GAP-P3-D）。
 - 暂未发现冗余主循环 / 第二装配中心 / 重复持久化路径。
 - 无 placeholder 实现 / 假数据返回。
@@ -231,7 +231,7 @@
 ### 6.4 P3（运营 / 清理 / 演进）
 
 - **GAP-P3-A ProgrammaticMemory 持久化（MEM-E06）**（已闭合，2026-06-23）：已通过 llm public `PromptAssetMetadata` seam、[memory/include/IProgrammaticMemoryStore.h](../../memory/include/IProgrammaticMemoryStore.h)、[sql/memory/V005__programmatic_assets.sql](../../sql/memory/V005__programmatic_assets.sql) 与 runtime prompt-asset projection 落地 `asset_ref / content_digest / lease_expires_at` 持久化；Prompt 正文仍保持由 llm owner 管理，不复制到 memory。
-- **GAP-P3-B mini-store 接口收敛**：评估将 `IFactStore` / `IExperienceStore` / `ISessionStore` / `ISummaryStore` / `IMaintenanceStore` 合并到 `IMemoryStore`，消除冗余（仅当不影响测试 mock 时）。
+- **GAP-P3-B mini-store 接口收敛**（已闭合，2026-06-25）：[memory/include/IMemoryStore.h](../../memory/include/IMemoryStore.h) 已重新承载完整 store façade；[memory/include/IFactStore.h](../../memory/include/IFactStore.h) / [memory/include/IExperienceStore.h](../../memory/include/IExperienceStore.h) / [memory/include/ISessionStore.h](../../memory/include/ISessionStore.h) / [memory/include/ISummaryStore.h](../../memory/include/ISummaryStore.h) / [memory/include/IMaintenanceStore.h](../../memory/include/IMaintenanceStore.h) 已收口为 compatibility alias + supporting type headers；[memory/src/context/CandidateCollector.cpp](../../memory/src/context/CandidateCollector.cpp)、[memory/src/writeback/WritebackCoordinator.cpp](../../memory/src/writeback/WritebackCoordinator.cpp)、[memory/src/conflict/MemoryConflictResolver.cpp](../../memory/src/conflict/MemoryConflictResolver.cpp) 与 [memory/src/maintenance/MemoryMaintenanceWorker.cpp](../../memory/src/maintenance/MemoryMaintenanceWorker.cpp) 已直接依赖 `IMemoryStore`，新增 [tests/unit/memory/MemoryStoreInterfaceUnificationCompileTest.cpp](../../tests/unit/memory/MemoryStoreInterfaceUnificationCompileTest.cpp) 锁定新语义；同轮 memory-scoped 66 条 unit / integration / contract 回归已全绿。
 - **GAP-P3-C ContextAssembleRequest/Result 提升为 shared contracts（MEM-E07）**：仅当多消费者出现时触发。
 - **GAP-P3-D 历史遗留清理**：删除 [memory/src/MemoryBuildSkeleton.cpp](../../memory/src/MemoryBuildSkeleton.cpp)；评估 CMake 中残留引用。
 - **GAP-P3-E Long-running soak gate**：在 infra release-soak 套件内加 memory 维度采样（store latency / wal size / maintenance lag / writeback partial rate / vector recall@k）。
@@ -478,9 +478,22 @@
 
 #### WP-MEM-GAP-015 Mini-store 接口收敛（GAP-P3-B）
 
-- **代码目标**：评估将 `IFactStore` / `IExperienceStore` / `ISessionStore` / `ISummaryStore` / `IMaintenanceStore` 合并到 `IMemoryStore`；保留 `IStoreTransaction` 与 `ITransactionalStore`。
-- **测试目标**：现有 unit / integration / contract 全绿；`MemoryStoreInterfaceUnificationCompileTest`。
-- **阻塞 / 解阻**：评估对 mock 的影响（tests/mocks/include/FakeMemoryStore.h）；需保留行为隔离能力。
+- **状态**：已完成（2026-06-25）。
+- **代码结果**
+  - 已更新 [memory/include/IMemoryStore.h](../../memory/include/IMemoryStore.h)，将 session / summary / fact / experience / maintenance 方法重新收口为单一 `IMemoryStore` façade，同时继续保留 `IStoreTransaction` / `ITransactionalStore` 事务 seam。
+  - 已更新 [memory/include/IFactStore.h](../../memory/include/IFactStore.h)、[memory/include/IExperienceStore.h](../../memory/include/IExperienceStore.h)、[memory/include/ISessionStore.h](../../memory/include/ISessionStore.h)、[memory/include/ISummaryStore.h](../../memory/include/ISummaryStore.h)、[memory/include/IMaintenanceStore.h](../../memory/include/IMaintenanceStore.h)，把它们降为 compatibility alias + supporting type headers，不再各自承载独立虚接口。
+  - 已更新 [memory/src/context/CandidateCollector.h](../../memory/src/context/CandidateCollector.h) / [memory/src/context/CandidateCollector.cpp](../../memory/src/context/CandidateCollector.cpp)、[memory/src/writeback/CompressionCoordinator.h](../../memory/src/writeback/CompressionCoordinator.h) / [memory/src/writeback/CompressionCoordinator.cpp](../../memory/src/writeback/CompressionCoordinator.cpp)、[memory/src/writeback/HierarchicalSummarizationCoordinator.h](../../memory/src/writeback/HierarchicalSummarizationCoordinator.h) / [memory/src/writeback/HierarchicalSummarizationCoordinator.cpp](../../memory/src/writeback/HierarchicalSummarizationCoordinator.cpp)、[memory/src/conflict/MemoryConflictResolver.h](../../memory/src/conflict/MemoryConflictResolver.h) / [memory/src/conflict/MemoryConflictResolver.cpp](../../memory/src/conflict/MemoryConflictResolver.cpp)、[memory/src/writeback/WritebackCoordinator.h](../../memory/src/writeback/WritebackCoordinator.h) / [memory/src/writeback/WritebackCoordinator.cpp](../../memory/src/writeback/WritebackCoordinator.cpp)、[memory/src/maintenance/MemoryMaintenanceWorker.h](../../memory/src/maintenance/MemoryMaintenanceWorker.h) / [memory/src/maintenance/MemoryMaintenanceWorker.cpp](../../memory/src/maintenance/MemoryMaintenanceWorker.cpp)，统一回到直接依赖 `IMemoryStore` 的构造签名。
+  - 已更新 [memory/src/MemoryManagerFactory.cpp](../../memory/src/MemoryManagerFactory.cpp)，统一以单一 `IMemoryStore` wiring 组装内部组件，并把 `CandidateCollector` 的 access-touch 写路径接入 shared writer mutex；已同步更新 [memory/src/store/sqlite/SqliteMemoryStore.cpp](../../memory/src/store/sqlite/SqliteMemoryStore.cpp)，把 maintenance busy exhaustion 从 hard failure warning 收口为 `*_busy` warning，消除 `MemoryConcurrencyStressTest` 的稳定失败。
+  - 已新增 [tests/unit/memory/MemoryStoreInterfaceUnificationCompileTest.cpp](../../tests/unit/memory/MemoryStoreInterfaceUnificationCompileTest.cpp)，并更新 [tests/unit/memory/MemoryInterfaceCompileTest.cpp](../../tests/unit/memory/MemoryInterfaceCompileTest.cpp) 与 [tests/unit/memory/CMakeLists.txt](../../tests/unit/memory/CMakeLists.txt)，锁定 “mini-store compatibility alias == `IMemoryStore`” 与 “内部组件直接依赖单一 store façade” 的 compile-time 语义。
+  - 同轮 validation surfaced blocker-fix：`ILLMManager` 新增 `lookup_prompt_asset_metadata()` 后，[apps/runtime_support/src/RuntimeLiveDependencyComposition.cpp](../../apps/runtime_support/src/RuntimeLiveDependencyComposition.cpp) 内的 `ScriptedCognitionFirstLLMManager` 与 [tests/mocks/include/MockLLMManager.h](../../tests/mocks/include/MockLLMManager.h) 变成 abstract，阻断 memory-scoped 全量 build；本轮已通过最小 override 解阻，不扩任务边界。
+- **测试结果**
+  - 已同步更新 [tests/unit/memory/CandidateCollectorTest.cpp](../../tests/unit/memory/CandidateCollectorTest.cpp)、[tests/unit/memory/CandidateCollectorVectorOffTest.cpp](../../tests/unit/memory/CandidateCollectorVectorOffTest.cpp)、[tests/unit/memory/CandidateCollectorCompositeScoringTest.cpp](../../tests/unit/memory/CandidateCollectorCompositeScoringTest.cpp)、[tests/unit/memory/MemoryRetentionDecayTest.cpp](../../tests/unit/memory/MemoryRetentionDecayTest.cpp)、[tests/unit/memory/HierarchicalSummarizationCoordinatorTest.cpp](../../tests/unit/memory/HierarchicalSummarizationCoordinatorTest.cpp)、[tests/unit/memory/ContextOrchestratorTest.cpp](../../tests/unit/memory/ContextOrchestratorTest.cpp)、[tests/unit/memory/ContextOrchestratorDegradedTest.cpp](../../tests/unit/memory/ContextOrchestratorDegradedTest.cpp)、[tests/unit/memory/ContextOrchestratorEvidenceProjectionTest.cpp](../../tests/unit/memory/ContextOrchestratorEvidenceProjectionTest.cpp)、[tests/integration/memory/MemoryCrossSessionFactQueryTest.cpp](../../tests/integration/memory/MemoryCrossSessionFactQueryTest.cpp)、[tests/unit/memory/WritebackCoordinatorCoreTest.cpp](../../tests/unit/memory/WritebackCoordinatorCoreTest.cpp)、[tests/unit/memory/WritebackCoordinatorPartialTest.cpp](../../tests/unit/memory/WritebackCoordinatorPartialTest.cpp)、[tests/unit/memory/ConflictResolverDegradedTest.cpp](../../tests/unit/memory/ConflictResolverDegradedTest.cpp) 等直接受新构造签名影响的测试调用点与替身。
+  - `MemoryStoreInterfaceUnificationCompileTest` 现已专门验证 alias 收敛语义；`MemoryConcurrencyStressTest` 经 writer mutex 收口后重新通过，锁定 `prepare_context()` access-touch / writeback / maintenance 共用 writer serialization 的并发语义。
+- **验收证据**
+  - `Build_CMakeTools(buildTargets=[memory-scoped unit / integration / contract targets])`：通过；同轮首次构建暴露 `ScriptedCognitionFirstLLMManager` 与 `MockLLMManager` 缺失 `lookup_prompt_asset_metadata()` override，补齐 blocker-fix 后再次通过。
+  - `ctest --test-dir build/vscode-linux-ninja --output-on-failure -R '^(Memory.*|CandidateCollector.*|BudgetAllocator.*|CompressionCoordinator.*|ContextOrchestrator.*|ConflictResolverDegradedTest|FactConflictResolverTest|HierarchicalSummarizationCoordinatorTest|LLMBacked.*|SimpleLocalEmbeddingAdapterTest|Sqlite.*|TiktokenEstimatorAccuracyTest|VectorMemoryAdapterTest|WorkingMemory.*|TurnSessionSummaryMemoryContractTest|MemoryFactExperienceContractTest|ContextPacketFieldContractTest)$'`：通过，66/66。
+  - `ctest --test-dir build/vscode-linux-ninja --output-on-failure -R '^MemoryConcurrencyStressTest$'`：在 writer mutex / busy warning 收口后复验通过，1/1。
+- **阻塞 / 解阻**：已解阻。原任务说明中的 mock 风险未演化为设计 blocker；真正阻塞出口的是 validation 期间暴露的两个 `ILLMManager` test double 抽象化与 `prepare_context()` access-touch 未复用 writer mutex，这两处均已在同轮最小修复。
 
 #### WP-MEM-GAP-016 ContextAssembleRequest/Result 提升（GAP-P3-C / MEM-E07）
 
@@ -528,7 +541,7 @@ flowchart LR
 1. **剩余 P0**：WP-MEM-GAP-004 继续单独推进；WP-MEM-GAP-001 / -002 / -003 已于 2026-06-02 闭合。
 2. **第二批（P1）**：WP-MEM-GAP-005 / -006 / -007 / -008 已于 2026-06-03 全部闭合；P1 entry tasks 不再剩余未收口项。
 3. **第三批（P2 演进）**：WP-MEM-GAP-009 已于 2026-06-15 闭合，WP-MEM-GAP-010 与 WP-MEM-GAP-011 已于 2026-06-17 闭合，WP-MEM-GAP-012 与 WP-MEM-GAP-013 已于 2026-06-18 闭合；P2 entry tasks 已全部 Done。
-4. **第四批（P3 清理与运营）**：WP-MEM-GAP-014 已于 2026-06-23 闭合；后续聚焦 WP-MEM-GAP-015 / -016 / -017，`WP-MEM-GAP-018` 继续在 P0/P1 全部 Done 后执行。
+4. **第四批（P3 清理与运营）**：WP-MEM-GAP-014 已于 2026-06-23 闭合，WP-MEM-GAP-015 已于 2026-06-25 闭合；后续聚焦 WP-MEM-GAP-016 / -017，`WP-MEM-GAP-018` 继续在 P0/P1 全部 Done 后执行。
 
 ---
 
@@ -601,7 +614,7 @@ memory 子系统已达到 **可生产部署 v1** 水位：架构 / 详设目标 
 | **V2** | **WP-MEM-GAP-020** | Memory 质量 SLO 与 recall@k / summary-faithfulness 指标（已完成 2026-06-18） |
 | **V2** | **WP-MEM-GAP-021** | Reflection → ExperienceMemory 反馈闭环显性化（已完成 2026-06-18） |
 | V3 | WP-MEM-GAP-014 | ProgrammaticMemory 持久化（MEM-E06） |
-| V3 | WP-MEM-GAP-015 | mini-store 接口收敛 |
+| V3 | WP-MEM-GAP-015 | mini-store 接口收敛（已完成 2026-06-25） |
 | V3 | WP-MEM-GAP-016 | ContextAssembleRequest/Result 提升（MEM-E07） |
 | V1（清理）| WP-MEM-GAP-017 | 历史遗留清理 |
 | V2（运营）| WP-MEM-GAP-018 | Long-running soak gate 增强 |

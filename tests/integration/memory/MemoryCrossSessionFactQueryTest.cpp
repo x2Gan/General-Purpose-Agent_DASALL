@@ -133,7 +133,7 @@ void test_memory_cross_session_fact_query_projects_user_level_facts() {
 
   auto working_board = dasall::memory::create_working_memory_board();
   auto collector = std::make_unique<dasall::memory::CandidateCollector>(
-      *working_board, *store, *store, *store, *store, config);
+      *working_board, *store, config);
   auto allocator = std::make_unique<dasall::memory::BudgetAllocator>(config);
   auto compressor = std::make_unique<dasall::memory::CompressionCoordinator>(*store);
   dasall::memory::ContextOrchestrator orchestrator(

@@ -262,34 +262,34 @@ void test_memory_store_supporting_interfaces_remain_public_and_aggregate_cleanly
      using dasall::tests::support::assert_true;
 
      static_assert(std::is_base_of_v<ITransactionalStore, IMemoryStore>,
-                                        "IMemoryStore should aggregate transactional access through a narrow interface");
-     static_assert(std::is_base_of_v<ISessionStore, IMemoryStore>,
-                                        "IMemoryStore should aggregate session access through a narrow interface");
-     static_assert(std::is_base_of_v<ISummaryStore, IMemoryStore>,
-                                        "IMemoryStore should aggregate summary access through a narrow interface");
+                                        "IMemoryStore should keep aggregating transactional access through a dedicated seam");
+     static_assert(std::is_same_v<ISessionStore, IMemoryStore>,
+                                        "session store compatibility should now resolve directly to IMemoryStore");
+     static_assert(std::is_same_v<ISummaryStore, IMemoryStore>,
+                                        "summary store compatibility should now resolve directly to IMemoryStore");
      static_assert(std::is_base_of_v<IProgrammaticMemoryStore, IMemoryStore>,
                                        "IMemoryStore should aggregate programmatic-asset access through a narrow interface");
-     static_assert(std::is_base_of_v<IFactStore, IMemoryStore>,
-                                        "IMemoryStore should aggregate fact access through a narrow interface");
-     static_assert(std::is_base_of_v<IExperienceStore, IMemoryStore>,
-                                        "IMemoryStore should aggregate experience access through a narrow interface");
-     static_assert(std::is_base_of_v<IMaintenanceStore, IMemoryStore>,
-                                        "IMemoryStore should aggregate maintenance access through a narrow interface");
-          static_assert(std::is_same_v<decltype(&IMaintenanceStore::run_wal_checkpoint),
-                                  void (IMaintenanceStore::*)(const MemoryConfig&, MaintenanceReport&)>,
-                                       "maintenance checkpoint should stay reachable via the abstract maintenance interface");
-          static_assert(std::is_same_v<decltype(&IMaintenanceStore::run_turn_retention),
-                                  int (IMaintenanceStore::*)(const MemoryConfig&, MaintenanceReport&)>,
-                                       "turn retention should stay reachable via the abstract maintenance interface");
-          static_assert(std::is_same_v<decltype(&IMaintenanceStore::run_fact_retention),
-                                  int (IMaintenanceStore::*)(const MemoryConfig&, MaintenanceReport&)>,
-                                       "fact retention should stay reachable via the abstract maintenance interface");
-          static_assert(std::is_same_v<decltype(&IMaintenanceStore::run_experience_retention),
-                                  int (IMaintenanceStore::*)(const MemoryConfig&, MaintenanceReport&)>,
-                                       "experience retention should stay reachable via the abstract maintenance interface");
-          static_assert(std::is_same_v<decltype(&IMaintenanceStore::run_quarantine_cleanup),
-                                  int (IMaintenanceStore::*)(const MemoryConfig&, MaintenanceReport&)>,
-                                       "quarantine cleanup should stay reachable via the abstract maintenance interface");
+     static_assert(std::is_same_v<IFactStore, IMemoryStore>,
+                                        "fact store compatibility should now resolve directly to IMemoryStore");
+     static_assert(std::is_same_v<IExperienceStore, IMemoryStore>,
+                                        "experience store compatibility should now resolve directly to IMemoryStore");
+     static_assert(std::is_same_v<IMaintenanceStore, IMemoryStore>,
+                                        "maintenance store compatibility should now resolve directly to IMemoryStore");
+          static_assert(std::is_same_v<decltype(&IMemoryStore::run_wal_checkpoint),
+                                  void (IMemoryStore::*)(const MemoryConfig&, MaintenanceReport&)>,
+                                       "maintenance checkpoint should stay reachable from IMemoryStore after interface unification");
+          static_assert(std::is_same_v<decltype(&IMemoryStore::run_turn_retention),
+                                  int (IMemoryStore::*)(const MemoryConfig&, MaintenanceReport&)>,
+                                       "turn retention should stay reachable from IMemoryStore after interface unification");
+          static_assert(std::is_same_v<decltype(&IMemoryStore::run_fact_retention),
+                                  int (IMemoryStore::*)(const MemoryConfig&, MaintenanceReport&)>,
+                                       "fact retention should stay reachable from IMemoryStore after interface unification");
+          static_assert(std::is_same_v<decltype(&IMemoryStore::run_experience_retention),
+                                  int (IMemoryStore::*)(const MemoryConfig&, MaintenanceReport&)>,
+                                       "experience retention should stay reachable from IMemoryStore after interface unification");
+          static_assert(std::is_same_v<decltype(&IMemoryStore::run_quarantine_cleanup),
+                                  int (IMemoryStore::*)(const MemoryConfig&, MaintenanceReport&)>,
+                                       "quarantine cleanup should stay reachable from IMemoryStore after interface unification");
           static_assert(std::is_same_v<decltype(&IProgrammaticMemoryStore::query_programmatic_assets),
                                        std::vector<ProgrammaticMemoryRecord> (IProgrammaticMemoryStore::*)(const ProgrammaticMemoryQuery&) const>,
                                             "programmatic asset query should stay reachable via the abstract programmatic-memory interface");
@@ -303,17 +303,17 @@ void test_memory_store_supporting_interfaces_remain_public_and_aggregate_cleanly
      assert_true(std::has_virtual_destructor_v<ITransactionalStore>,
                                    "transactional store interface should remain safely polymorphic");
      assert_true(std::has_virtual_destructor_v<ISessionStore>,
-                                   "session store interface should remain safely polymorphic");
+                                   "session store compatibility alias should remain safely polymorphic via IMemoryStore");
      assert_true(std::has_virtual_destructor_v<ISummaryStore>,
-                                   "summary store interface should remain safely polymorphic");
+                                   "summary store compatibility alias should remain safely polymorphic via IMemoryStore");
            assert_true(std::has_virtual_destructor_v<IProgrammaticMemoryStore>,
                                                                                       "programmatic-memory store interface should remain safely polymorphic");
      assert_true(std::has_virtual_destructor_v<IFactStore>,
-                                   "fact store interface should remain safely polymorphic");
+                                   "fact store compatibility alias should remain safely polymorphic via IMemoryStore");
      assert_true(std::has_virtual_destructor_v<IExperienceStore>,
-                                   "experience store interface should remain safely polymorphic");
+                                   "experience store compatibility alias should remain safely polymorphic via IMemoryStore");
      assert_true(std::has_virtual_destructor_v<IMaintenanceStore>,
-                                   "maintenance store interface should remain safely polymorphic");
+                                   "maintenance store compatibility alias should remain safely polymorphic via IMemoryStore");
 
            ProgrammaticMemoryRecord record{
                 .asset_ref = "prompt:responder@2026.06.23",
@@ -812,10 +812,7 @@ void test_memory_summarizer_interface_uses_module_local_summary_supporting_types
 void test_memory_store_interfaces_and_fake_cover_transactions_and_query_supporting_types() {
   using dasall::memory::ExperienceQuery;
   using dasall::memory::FactQuery;
-  using dasall::memory::IExperienceStore;
-  using dasall::memory::IFactStore;
   using dasall::memory::IMemoryStore;
-  using dasall::memory::ISessionStore;
   using dasall::memory::IStoreTransaction;
   using dasall::memory::ITransactionalStore;
   using dasall::memory::MemoryConfig;
@@ -828,13 +825,13 @@ void test_memory_store_interfaces_and_fake_cover_transactions_and_query_supporti
   using OpenSignature = std::optional<dasall::contracts::ResultCode> (IMemoryStore::*)(
        const MemoryConfig&);
   using BeginTransactionSignature = std::unique_ptr<IStoreTransaction> (ITransactionalStore::*)();
-  using LoadBundleSignature = dasall::memory::SessionLoadBundle (ISessionStore::*)(
+  using LoadBundleSignature = dasall::memory::SessionLoadBundle (IMemoryStore::*)(
        const SessionLoadRequest&) const;
-  using QueryFactsSignature = dasall::memory::FactQueryResult (IFactStore::*)(
+  using QueryFactsSignature = dasall::memory::FactQueryResult (IMemoryStore::*)(
        const FactQuery&) const;
-  using QueryFactsByUserSignature = dasall::memory::FactQueryResult (IFactStore::*)(
+  using QueryFactsByUserSignature = dasall::memory::FactQueryResult (IMemoryStore::*)(
        const std::string&, const FactQuery&) const;
-  using QueryExperiencesSignature = dasall::memory::ExperienceQueryResult (IExperienceStore::*)(
+  using QueryExperiencesSignature = dasall::memory::ExperienceQueryResult (IMemoryStore::*)(
        const ExperienceQuery&) const;
   using CommitSignature = std::optional<dasall::contracts::ResultCode> (IStoreTransaction::*)();
 
@@ -850,14 +847,14 @@ void test_memory_store_interfaces_and_fake_cover_transactions_and_query_supporti
                     "IMemoryStore::open should surface the optional ResultCode outcome pattern");
   static_assert(std::is_same_v<decltype(&ITransactionalStore::begin_immediate), BeginTransactionSignature>,
                     "ITransactionalStore::begin_immediate should return a RAII transaction handle");
-  static_assert(std::is_same_v<decltype(&ISessionStore::load_session_bundle), LoadBundleSignature>,
-                    "ISessionStore::load_session_bundle should consume the module-local session load request");
-  static_assert(std::is_same_v<decltype(&IFactStore::query_facts), QueryFactsSignature>,
-                    "IFactStore::query_facts should consume the module-local fact query surface");
-     static_assert(std::is_same_v<decltype(&IFactStore::query_facts_by_user), QueryFactsByUserSignature>,
-                                                  "IFactStore::query_facts_by_user should preserve the explicit user-scoped fact query surface");
-  static_assert(std::is_same_v<decltype(&IExperienceStore::query_experiences), QueryExperiencesSignature>,
-                    "IExperienceStore::query_experiences should consume the module-local experience query surface");
+     static_assert(std::is_same_v<decltype(&IMemoryStore::load_session_bundle), LoadBundleSignature>,
+                                                  "IMemoryStore::load_session_bundle should consume the module-local session load request");
+     static_assert(std::is_same_v<decltype(&IMemoryStore::query_facts), QueryFactsSignature>,
+                                                  "IMemoryStore::query_facts should consume the module-local fact query surface directly");
+           static_assert(std::is_same_v<decltype(&IMemoryStore::query_facts_by_user), QueryFactsByUserSignature>,
+                                                                                                                             "IMemoryStore::query_facts_by_user should preserve the explicit user-scoped fact query surface");
+     static_assert(std::is_same_v<decltype(&IMemoryStore::query_experiences), QueryExperiencesSignature>,
+                                                  "IMemoryStore::query_experiences should consume the module-local experience query surface directly");
   static_assert(std::is_same_v<decltype(&IStoreTransaction::commit), CommitSignature>,
                     "IStoreTransaction::commit should use the optional ResultCode outcome pattern");
 

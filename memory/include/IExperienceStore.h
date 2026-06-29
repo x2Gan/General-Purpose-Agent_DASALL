@@ -11,6 +11,8 @@
 
 namespace dasall::memory {
 
+class IMemoryStore;
+
 struct ExperienceQuery {
   std::optional<std::string> session_id;
   std::optional<std::string> user_id;
@@ -28,17 +30,6 @@ struct ExperienceQueryResult {
   int total_count = 0;
 };
 
-class IExperienceStore {
- public:
-  virtual ~IExperienceStore() = default;
-
-  [[nodiscard]] virtual ExperienceQueryResult query_experiences(
-      const ExperienceQuery& query) const = 0;
-    [[nodiscard]] virtual StoreResult touch_experiences(
-      const std::vector<std::string>& experience_ids,
-      std::int64_t accessed_at) = 0;
-  [[nodiscard]] virtual StoreResult insert_experience(
-      const contracts::ExperienceMemory& experience) = 0;
-};
+using IExperienceStore = IMemoryStore;
 
 }  // namespace dasall::memory

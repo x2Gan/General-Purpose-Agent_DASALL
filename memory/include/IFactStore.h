@@ -11,6 +11,8 @@
 
 namespace dasall::memory {
 
+class IMemoryStore;
+
 struct FactQuery {
   std::optional<std::string> session_id;
   std::optional<std::string> user_id;
@@ -28,21 +30,6 @@ struct FactQueryResult {
   int total_count = 0;
 };
 
-class IFactStore {
- public:
-  virtual ~IFactStore() = default;
-
-  [[nodiscard]] virtual FactQueryResult query_facts(const FactQuery& query) const = 0;
-  [[nodiscard]] virtual FactQueryResult query_facts_by_user(
-    const std::string& user_id,
-    const FactQuery& query) const = 0;
-  [[nodiscard]] virtual StoreResult touch_facts(
-      const std::vector<std::string>& fact_ids,
-      std::int64_t accessed_at) = 0;
-  [[nodiscard]] virtual StoreResult insert_fact(
-      const contracts::MemoryFact& fact) = 0;
-  [[nodiscard]] virtual StoreResult supersede_fact(
-      const std::string& old_fact_id, const std::string& new_fact_id) = 0;
-};
+using IFactStore = IMemoryStore;
 
 }  // namespace dasall::memory

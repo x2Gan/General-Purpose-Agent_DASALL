@@ -65,7 +65,7 @@ void test_hierarchical_summarization_promotes_dialog_summaries_to_topic_page() {
               "hierarchy test should seed the second dialog summary");
 
   dasall::memory::HierarchicalSummarizationCoordinator coordinator(
-      store, store, config);
+      store, config);
   const auto result = coordinator.promote_from_summary(second_summary);
 
   assert_true(result.promoted,
@@ -107,7 +107,7 @@ void test_hierarchical_summarization_requires_threshold_before_promoting() {
               "hierarchy threshold test should seed a single dialog summary");
 
   dasall::memory::HierarchicalSummarizationCoordinator coordinator(
-      store, store, config);
+      store, config);
   const auto result = coordinator.promote_from_summary(only_summary);
 
   assert_true(!result.promoted,

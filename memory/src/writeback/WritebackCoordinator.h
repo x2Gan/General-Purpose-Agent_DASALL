@@ -3,11 +3,7 @@
 #include <memory>
 #include <mutex>
 
-#include "IExperienceStore.h"
-#include "IFactStore.h"
-#include "IProgrammaticMemoryStore.h"
-#include "ISessionStore.h"
-#include "ISummaryStore.h"
+#include "IMemoryStore.h"
 #include "ITransactionalStore.h"
 #include "conflict/MemoryConflictResolver.h"
 #include "vector/VectorMemoryIndexAdapter.h"
@@ -28,11 +24,7 @@ class MemoryQualityProbe;
 class WritebackCoordinator {
  public:
   WritebackCoordinator(ITransactionalStore& transaction_store,
-                       ISessionStore& session_store,
-                       ISummaryStore& summary_store,
-                       IProgrammaticMemoryStore& programmatic_store,
-                       IFactStore& fact_store,
-                       IExperienceStore& experience_store,
+                       IMemoryStore& store,
                        std::unique_ptr<HierarchicalSummarizationCoordinator> hierarchy_coordinator,
                        std::unique_ptr<MemoryConflictResolver> conflict_resolver,
                        IWorkingMemoryBoard& working_memory_board,
@@ -59,11 +51,7 @@ class WritebackCoordinator {
                             const WritebackResult& result);
 
   ITransactionalStore& transaction_store_;
-  ISessionStore& session_store_;
-  ISummaryStore& summary_store_;
-  IProgrammaticMemoryStore& programmatic_store_;
-  IFactStore& fact_store_;
-  IExperienceStore& experience_store_;
+  IMemoryStore& store_;
   std::unique_ptr<HierarchicalSummarizationCoordinator> hierarchy_coordinator_;
   std::unique_ptr<MemoryConflictResolver> conflict_resolver_;
   IWorkingMemoryBoard& working_memory_board_;

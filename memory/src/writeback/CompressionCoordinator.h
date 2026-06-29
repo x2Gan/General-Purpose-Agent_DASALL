@@ -5,7 +5,7 @@
 #include <string>
 #include <vector>
 
-#include "ISummaryStore.h"
+#include "IMemoryStore.h"
 #include "ISummarizer.h"
 #include "memory/SummaryMemory.h"
 #include "memory/Turn.h"
@@ -37,7 +37,7 @@ struct CompressionOutput {
 
 class CompressionCoordinator {
  public:
-  explicit CompressionCoordinator(ISummaryStore& store,
+    explicit CompressionCoordinator(IMemoryStore& store,
                                   ISummarizer* summarizer = nullptr,
                                   std::shared_ptr<const util::ITokenEstimator> token_estimator = nullptr);
 
@@ -62,7 +62,7 @@ class CompressionCoordinator {
       const CompressionInput& input,
       const SummaryProjection& projection) const;
 
-  ISummaryStore& store_;
+    IMemoryStore& store_;
   ISummarizer* summarizer_ = nullptr;
     std::shared_ptr<const util::ITokenEstimator> token_estimator_;
 };

@@ -5,8 +5,7 @@
 #include <string>
 #include <vector>
 
-#include "ISessionStore.h"
-#include "ISummaryStore.h"
+#include "IMemoryStore.h"
 #include "ISummarizer.h"
 #include "config/MemoryConfig.h"
 #include "writeback/CompressionCoordinator.h"
@@ -29,8 +28,7 @@ struct HierarchicalSummarizationResult {
 class HierarchicalSummarizationCoordinator {
  public:
   HierarchicalSummarizationCoordinator(
-      ISessionStore& session_store,
-      ISummaryStore& summary_store,
+    IMemoryStore& store,
       const MemoryConfig& config,
       ISummarizer* summarizer = nullptr,
       std::shared_ptr<const util::ITokenEstimator> token_estimator = nullptr);
@@ -51,8 +49,7 @@ class HierarchicalSummarizationCoordinator {
   [[nodiscard]] HierarchicalSummarizationResult promote_once(
       const HierarchicalSummaryRequest& request);
 
-  ISessionStore& session_store_;
-  ISummaryStore& summary_store_;
+    IMemoryStore& store_;
   CompressionCoordinator compression_coordinator_;
     CompressionConfig::HierarchyConfig hierarchy_config_;
 };

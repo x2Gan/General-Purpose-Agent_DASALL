@@ -379,11 +379,7 @@ void append_unique_string(std::vector<std::string>& values,
 
 WritebackCoordinator::WritebackCoordinator(
     ITransactionalStore& transaction_store,
-    ISessionStore& session_store,
-    ISummaryStore& summary_store,
-  IProgrammaticMemoryStore& programmatic_store,
-    IFactStore& fact_store,
-    IExperienceStore& experience_store,
+    IMemoryStore& store,
   std::unique_ptr<HierarchicalSummarizationCoordinator> hierarchy_coordinator,
     std::unique_ptr<MemoryConflictResolver> conflict_resolver,
     IWorkingMemoryBoard& working_memory_board,
@@ -392,11 +388,7 @@ WritebackCoordinator::WritebackCoordinator(
     std::shared_ptr<observability::MemoryObservability> observability,
     std::shared_ptr<observability::MemoryQualityProbe> quality_probe)
     : transaction_store_(transaction_store),
-      session_store_(session_store),
-      summary_store_(summary_store),
-      programmatic_store_(programmatic_store),
-      fact_store_(fact_store),
-      experience_store_(experience_store),
+      store_(store),
       hierarchy_coordinator_(std::move(hierarchy_coordinator)),
       conflict_resolver_(std::move(conflict_resolver)),
       working_memory_board_(working_memory_board),
@@ -547,12 +539,11 @@ WritebackResult WritebackCoordinator::persist_core_transaction(
   for (int attempt = 0; attempt < kMaxCoreTransactionAttempts; ++attempt) {
     auto transaction = transaction_store_.begin_immediate();
 
-    const auto session_bundle =
-        session_store_.load_session_bundle(SessionLoadRequest{.session_id = request.session_id,
-                                                             .recent_turn_limit = 1});
+    const auto session_bundle = store_.load_session_bundle(
+        SessionLoadRequest{.session_id = request.session_id, .recent_turn_limit = 1});
     if (!session_bundle.session.session_id.has_value() ||
         session_bundle.session.session_id->empty()) {
-      const auto create_result = session_store_.create_session(build_session_record(request));
+      const auto create_result = store_.create_session(build_session_record(request));
       if (!create_result.ok) {
         transaction->rollback();
         if (is_retryable(create_result.result_code) &&
@@ -564,7 +555,7 @@ WritebackResult WritebackCoordinator::persist_core_transaction(
       }
     }
 
-    const auto append_result = session_store_.append_turn(request.turn);
+    const auto append_result = store_.append_turn(request.turn);
     if (!append_result.ok) {
       transaction->rollback();
       if (is_retryable(append_result.result_code) &&
@@ -575,7 +566,7 @@ WritebackResult WritebackCoordinator::persist_core_transaction(
                                       "writeback_core_transaction_failed");
     }
 
-    const auto update_result = session_store_.update_session_active(
+    const auto update_result = store_.update_session_active(
         request.session_id, request.turn.created_at.value_or(current_time_millis()));
     if (!update_result.ok) {
       transaction->rollback();
@@ -588,7 +579,7 @@ WritebackResult WritebackCoordinator::persist_core_transaction(
     }
 
     if (request.summary_candidate.has_value()) {
-      const auto summary_result = summary_store_.upsert_summary(*request.summary_candidate);
+      const auto summary_result = store_.upsert_summary(*request.summary_candidate);
       if (!summary_result.ok) {
         transaction->rollback();
         if (is_retryable(summary_result.result_code) &&
@@ -667,7 +658,7 @@ void WritebackCoordinator::persist_derived_data(
       continue;
     }
 
-    const auto insert_result = fact_store_.insert_fact(candidate.fact);
+    const auto insert_result = store_.insert_fact(candidate.fact);
     if (!insert_result.ok) {
       result.partial = true;
       append_warning_once(result.warnings, "partial_writeback_warning");
@@ -689,7 +680,7 @@ void WritebackCoordinator::persist_derived_data(
           continue;
         }
 
-        const auto supersede_result = fact_store_.supersede_fact(
+        const auto supersede_result = store_.supersede_fact(
             record.existing_fact_id,
             candidate.fact.fact_id.value_or(insert_result.persisted_id.value_or("")));
         if (!supersede_result.ok) {
@@ -705,7 +696,7 @@ void WritebackCoordinator::persist_derived_data(
   }
 
   for (const auto& candidate : request.experience_candidates) {
-    const auto insert_result = experience_store_.insert_experience(candidate.experience);
+    const auto insert_result = store_.insert_experience(candidate.experience);
     if (!insert_result.ok) {
       result.partial = true;
       append_warning_once(result.warnings, "partial_writeback_warning");
@@ -718,8 +709,7 @@ void WritebackCoordinator::persist_derived_data(
   }
 
   for (const auto& candidate : request.programmatic_candidates) {
-    const auto upsert_result =
-        programmatic_store_.upsert_programmatic_asset(candidate.record);
+    const auto upsert_result = store_.upsert_programmatic_asset(candidate.record);
     if (!upsert_result.ok) {
       result.partial = true;
       append_warning_once(result.warnings, "partial_writeback_warning");

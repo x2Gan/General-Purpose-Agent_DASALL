@@ -1391,6 +1391,21 @@ class ScriptedCognitionFirstLLMManager final : public llm::ILLMManager {
     return generate(request);
   }
 
+  [[nodiscard]] std::optional<llm::prompt::PromptAssetMetadata>
+  lookup_prompt_asset_metadata(std::string_view prompt_release_id) const override {
+    if (prompt_release_id != "runtime.cognition-first@v1") {
+      return std::nullopt;
+    }
+
+    return llm::prompt::PromptAssetMetadata{
+        .prompt_release_id = "runtime.cognition-first@v1",
+        .package_id = "runtime.cognition-first",
+        .content_hash = "sha256:runtime-cognition-first-evidence",
+        .source_layer = "runtime_support",
+        .source_uri = "prompt://runtime/cognition-first",
+    };
+  }
+
   bool abandon_call(std::string_view llm_call_id) override {
     return !llm_call_id.empty();
   }

@@ -1,3 +1,43 @@
+## 记录 #893
+
+- 日期：2026-06-25
+- 阶段：memory / mini-store interface unification closure
+- 任务：完成 WP-MEM-GAP-015“Mini-store 接口收敛（GAP-P3-B）”
+- 状态：已完成（single-store façade、compatibility alias、shared writer mutex touch path 与 memory-scoped 66/66 回归已闭合）
+
+### 执行前提
+
+1. [docs/deliverables/MEM-EVAL-2026-05-31-memory子系统落地评估与生产级缺口治理任务规划.md](../deliverables/MEM-EVAL-2026-05-31-memory子系统落地评估与生产级缺口治理任务规划.md) 已将 `WP-MEM-GAP-015` 固定为“评估将 `IFactStore` / `IExperienceStore` / `ISessionStore` / `ISummaryStore` / `IMaintenanceStore` 合并到 `IMemoryStore`，保留 `IStoreTransaction` 与 `ITransactionalStore`，并以 `MemoryStoreInterfaceUnificationCompileTest` 和全量 memory 回归验证”。
+2. [docs/architecture/DASALL_memory子系统详细设计.md](../architecture/DASALL_memory子系统详细设计.md) §6.6 一直把 Memory store 设计为单一 `IMemoryStore + SqliteMemoryStore` façade；本轮前的真实代码却仍保留五个 mini-store public seam，并让 `CandidateCollector` / `WritebackCoordinator` / `MemoryConflictResolver` / `MemoryMaintenanceWorker` 等内部组件依赖分裂的构造口径。
+3. 外部参考采用 Martin Fowler Repository pattern 与 SQLite transaction 文档：前者支持将 query / persistence logic 收口到单一 façade，后者强调单数据库同一时刻只允许一个 writer transaction，这直接支撑本轮在接口收敛同时把 access-touch 写路径重新纳入 shared writer mutex。
+
+### 改动
+
+1. 更新 [memory/include/IMemoryStore.h](../../memory/include/IMemoryStore.h)，把 session / summary / fact / experience / maintenance 方法重新收口为单一 store façade；继续保留 [memory/include/ITransactionalStore.h](../../memory/include/ITransactionalStore.h) / [memory/include/IStoreTransaction.h](../../memory/include/IStoreTransaction.h) 事务 seam。
+2. 更新 [memory/include/IFactStore.h](../../memory/include/IFactStore.h)、[memory/include/IExperienceStore.h](../../memory/include/IExperienceStore.h)、[memory/include/ISessionStore.h](../../memory/include/ISessionStore.h)、[memory/include/ISummaryStore.h](../../memory/include/ISummaryStore.h)、[memory/include/IMaintenanceStore.h](../../memory/include/IMaintenanceStore.h)，把它们降为 compatibility alias + supporting type headers，不再各自承载独立虚接口。
+3. 更新 [memory/src/context/CandidateCollector.h](../../memory/src/context/CandidateCollector.h) / [memory/src/context/CandidateCollector.cpp](../../memory/src/context/CandidateCollector.cpp)、[memory/src/writeback/CompressionCoordinator.h](../../memory/src/writeback/CompressionCoordinator.h) / [memory/src/writeback/CompressionCoordinator.cpp](../../memory/src/writeback/CompressionCoordinator.cpp)、[memory/src/writeback/HierarchicalSummarizationCoordinator.h](../../memory/src/writeback/HierarchicalSummarizationCoordinator.h) / [memory/src/writeback/HierarchicalSummarizationCoordinator.cpp](../../memory/src/writeback/HierarchicalSummarizationCoordinator.cpp)、[memory/src/conflict/MemoryConflictResolver.h](../../memory/src/conflict/MemoryConflictResolver.h) / [memory/src/conflict/MemoryConflictResolver.cpp](../../memory/src/conflict/MemoryConflictResolver.cpp)、[memory/src/writeback/WritebackCoordinator.h](../../memory/src/writeback/WritebackCoordinator.h) / [memory/src/writeback/WritebackCoordinator.cpp](../../memory/src/writeback/WritebackCoordinator.cpp)、[memory/src/maintenance/MemoryMaintenanceWorker.h](../../memory/src/maintenance/MemoryMaintenanceWorker.h) / [memory/src/maintenance/MemoryMaintenanceWorker.cpp](../../memory/src/maintenance/MemoryMaintenanceWorker.cpp)，把内部组件构造口径统一收敛回 `IMemoryStore&`。
+4. 更新 [memory/src/MemoryManagerFactory.cpp](../../memory/src/MemoryManagerFactory.cpp)，统一以单一 `IMemoryStore` 组装 CandidateCollector / hierarchy / conflict / writeback / maintenance；同时将 `CandidateCollector` 的 `touch_facts()` / `touch_experiences()` 写路径接入 shared writer mutex。
+5. 更新 [memory/src/store/sqlite/SqliteMemoryStore.cpp](../../memory/src/store/sqlite/SqliteMemoryStore.cpp)，把 maintenance retention / cleanup helper 的 `BEGIN IMMEDIATE` / `COMMIT` 返回码显式化，对 busy exhaustion 改发 `*_busy` warning，而不是误记成 `*_failed` hard failure；这与 writer mutex 收口一起解除了 `MemoryConcurrencyStressTest` 的稳定失败。
+6. 更新 [tests/unit/memory/MemoryInterfaceCompileTest.cpp](../../tests/unit/memory/MemoryInterfaceCompileTest.cpp)、新增 [tests/unit/memory/MemoryStoreInterfaceUnificationCompileTest.cpp](../../tests/unit/memory/MemoryStoreInterfaceUnificationCompileTest.cpp)，并同步更新 [tests/unit/memory/CMakeLists.txt](../../tests/unit/memory/CMakeLists.txt) 与直接受构造签名影响的 memory unit / integration tests，锁定 “mini-store compatibility alias == `IMemoryStore`” 与 “内部组件直接依赖单一 store façade” 的 compile / behavior 语义。
+7. 本轮 validation 还暴露同回合 blocker：`ILLMManager` 新增 `lookup_prompt_asset_metadata()` 后，[apps/runtime_support/src/RuntimeLiveDependencyComposition.cpp](../../apps/runtime_support/src/RuntimeLiveDependencyComposition.cpp) 内的 `ScriptedCognitionFirstLLMManager` 与 [tests/mocks/include/MockLLMManager.h](../../tests/mocks/include/MockLLMManager.h) 变成 abstract，阻断 memory-scoped 全量 build；已在同轮通过最小 override 解阻。
+8. 新增 [docs/todos/memory/deliverables/WP-MEM-GAP-015-mini-store-interface-unification-closeout.md](../todos/memory/deliverables/WP-MEM-GAP-015-mini-store-interface-unification-closeout.md)，并更新 [docs/deliverables/MEM-EVAL-2026-05-31-memory子系统落地评估与生产级缺口治理任务规划.md](../deliverables/MEM-EVAL-2026-05-31-memory子系统落地评估与生产级缺口治理任务规划.md) 与 [docs/todos/DASALL_子系统查漏补缺专项记录.md](../todos/DASALL_子系统查漏补缺专项记录.md) 回写 closeout 状态与剩余 P3 焦点。
+
+### 验证
+
+1. `Build_CMakeTools`：先后定向构建 interface / candidate collector / writeback / conflict / hierarchy / maintenance / cross-session fact query 等受影响 memory targets；结果通过。
+2. memory-scoped 全量 build：定向构建 memory unit / integration / contract targets，首轮暴露 `ScriptedCognitionFirstLLMManager` 与 `MockLLMManager` 缺失 `lookup_prompt_asset_metadata()` override；补齐 blocker-fix 后再次执行通过。
+3. `ctest --test-dir build/vscode-linux-ninja --output-on-failure -R '^(Memory.*|CandidateCollector.*|BudgetAllocator.*|CompressionCoordinator.*|ContextOrchestrator.*|ConflictResolverDegradedTest|FactConflictResolverTest|HierarchicalSummarizationCoordinatorTest|LLMBacked.*|SimpleLocalEmbeddingAdapterTest|Sqlite.*|TiktokenEstimatorAccuracyTest|VectorMemoryAdapterTest|WorkingMemory.*|TurnSessionSummaryMemoryContractTest|MemoryFactExperienceContractTest|ContextPacketFieldContractTest)$'`
+   - 结果：通过，66/66。
+4. `ctest --test-dir build/vscode-linux-ninja --output-on-failure -R '^MemoryConcurrencyStressTest$'`
+   - 结果：在 writer mutex / maintenance busy warning 收口后复验通过，1/1。
+5. `RunCtest_CMakeTools` 在本轮环境里持续返回泛化 `生成失败`，因此最终验收证据按 build-tree `ctest` 记账；该工具级异常未再阻断 memory-scoped 验收。
+
+### 结果
+
+1. `WP-MEM-GAP-015 / GAP-P3-B` 已闭合；Memory public store surface 重新对齐到详细设计 §6.6 的单一 `IMemoryStore` façade，mini-store headers 仅保留 compatibility alias 与 supporting type 容器。
+2. 测试替身没有退化：`FakeMemoryStore`、`DelegatingMemoryStore`、`ThrowingFactQueryStore`、`CommitFailingStore`、`DerivedFailureStore` 等 targeted doubles 仍能做精确 fault injection，不再需要额外 public mini-store 虚接口来承载行为隔离。
+3. 当前 memory 的 P3 焦点已从 `WP-MEM-GAP-015 / -016 / -017 / -018` 收窄为 `WP-MEM-GAP-016 / -017 / -018`；`WP-MEM-GAP-015` 不再是开放缺口。
+
 ## 记录 #892
 
 - 日期：2026-06-23

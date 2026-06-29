@@ -2,16 +2,14 @@
 
 #include <memory>
 #include <cstdint>
+#include <mutex>
 #include <optional>
 #include <string>
 #include <vector>
 
-#include "IExperienceStore.h"
-#include "IFactStore.h"
-#include "ISessionStore.h"
+#include "IMemoryStore.h"
 #include "config/MemoryConfig.h"
 #include "memory/SummaryMemory.h"
-#include "ISummaryStore.h"
 #include "vector/VectorMemoryIndexAdapter.h"
 #include "working/IWorkingMemoryBoard.h"
 
@@ -47,13 +45,11 @@ struct CandidateSet {
 class CandidateCollector {
  public:
   CandidateCollector(IWorkingMemoryBoard& working_memory_board,
-                     ISessionStore& session_store,
-                     ISummaryStore& summary_store,
-                     IFactStore& fact_store,
-                     IExperienceStore& experience_store,
+                     IMemoryStore& store,
                      const MemoryConfig& config,
                      VectorMemoryIndexAdapter* vector_index = nullptr,
-                     std::shared_ptr<const util::ITokenEstimator> token_estimator = nullptr);
+                     std::shared_ptr<const util::ITokenEstimator> token_estimator = nullptr,
+                     std::shared_ptr<std::mutex> writer_mutex = nullptr);
 
   [[nodiscard]] CandidateSet collect(const CandidateCollectRequest& request);
 
@@ -76,14 +72,12 @@ class CandidateCollector {
   [[nodiscard]] int estimate_tokens(const CandidateSet& set) const;
 
   IWorkingMemoryBoard& working_memory_board_;
-  ISessionStore& session_store_;
-  ISummaryStore& summary_store_;
-  IFactStore& fact_store_;
-  IExperienceStore& experience_store_;
+  IMemoryStore& store_;
   ContextConfig context_config_{};
   VectorConfig vector_config_{};
   VectorMemoryIndexAdapter* vector_index_ = nullptr;
   std::shared_ptr<const util::ITokenEstimator> token_estimator_;
+  std::shared_ptr<std::mutex> writer_mutex_;
 };
 
 }  // namespace dasall::memory

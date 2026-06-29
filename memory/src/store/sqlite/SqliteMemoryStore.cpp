@@ -102,17 +102,30 @@ void append_warning_once(std::vector<std::string>& warnings,
   return sqlite_status == SQLITE_BUSY || sqlite_status == SQLITE_LOCKED;
 }
 
-[[nodiscard]] bool begin_transaction(sqlite3* connection) {
-  return sqlite3_exec(connection, "BEGIN IMMEDIATE;", nullptr, nullptr, nullptr) ==
-         SQLITE_OK;
+[[nodiscard]] int begin_transaction(sqlite3* connection) {
+  return sqlite3_exec(connection, "BEGIN IMMEDIATE;", nullptr, nullptr, nullptr);
 }
 
-[[nodiscard]] bool commit_transaction(sqlite3* connection) {
-  return sqlite3_exec(connection, "COMMIT;", nullptr, nullptr, nullptr) == SQLITE_OK;
+[[nodiscard]] int commit_transaction(sqlite3* connection) {
+  return sqlite3_exec(connection, "COMMIT;", nullptr, nullptr, nullptr);
 }
 
 void rollback_transaction(sqlite3* connection) {
   (void)sqlite3_exec(connection, "ROLLBACK;", nullptr, nullptr, nullptr);
+}
+
+[[nodiscard]] std::string busy_warning_key(std::string_view failure_warning_key) {
+  std::string busy_key{failure_warning_key};
+  constexpr std::string_view failed_suffix = "_failed";
+  const auto suffix_position = busy_key.rfind(failed_suffix);
+  if (suffix_position != std::string::npos &&
+      suffix_position + failed_suffix.size() == busy_key.size()) {
+    busy_key.replace(suffix_position, failed_suffix.size(), "_busy");
+    return busy_key;
+  }
+
+  busy_key += "_busy";
+  return busy_key;
 }
 
 [[nodiscard]] std::vector<std::string> load_all_session_ids(sqlite3* connection) {
@@ -322,11 +335,15 @@ void rollback_transaction(sqlite3* connection) {
     int retry_limit,
     MaintenanceReport& report) {
   for (int attempt = 0; attempt < retry_limit; ++attempt) {
-    if (!begin_transaction(connection)) {
-      if (attempt + 1 < retry_limit) {
+    const int begin_status = begin_transaction(connection);
+    if (begin_status != SQLITE_OK) {
+      if (is_busy_code(begin_status) && attempt + 1 < retry_limit) {
         continue;
       }
-      append_warning_once(report.warnings, "turn_retention_transaction_failed");
+      append_warning_once(report.warnings,
+                          is_busy_code(begin_status)
+                              ? "turn_retention_busy"
+                              : "turn_retention_transaction_failed");
       return false;
     }
 
@@ -365,12 +382,16 @@ void rollback_transaction(sqlite3* connection) {
       return false;
     }
 
-    if (!commit_transaction(connection)) {
+    const int commit_status = commit_transaction(connection);
+    if (commit_status != SQLITE_OK) {
       rollback_transaction(connection);
-      if (attempt + 1 < retry_limit) {
+      if (is_busy_code(commit_status) && attempt + 1 < retry_limit) {
         continue;
       }
-      append_warning_once(report.warnings, "turn_retention_commit_failed");
+      append_warning_once(report.warnings,
+                          is_busy_code(commit_status)
+                              ? "turn_retention_busy"
+                              : "turn_retention_commit_failed");
       return false;
     }
 
@@ -470,11 +491,15 @@ void rollback_transaction(sqlite3* connection) {
   }
 
   for (int attempt = 0; attempt < retry_limit; ++attempt) {
-    if (!begin_transaction(connection)) {
-      if (attempt + 1 < retry_limit) {
+    const int begin_status = begin_transaction(connection);
+    if (begin_status != SQLITE_OK) {
+      if (is_busy_code(begin_status) && attempt + 1 < retry_limit) {
         continue;
       }
-      append_warning_once(warnings, warning_key);
+      append_warning_once(warnings,
+                          is_busy_code(begin_status)
+                              ? busy_warning_key(warning_key)
+                              : std::string{warning_key});
       return false;
     }
 
@@ -509,12 +534,16 @@ void rollback_transaction(sqlite3* connection) {
       return false;
     }
 
-    if (!commit_transaction(connection)) {
+    const int commit_status = commit_transaction(connection);
+    if (commit_status != SQLITE_OK) {
       rollback_transaction(connection);
-      if (attempt + 1 < retry_limit) {
+      if (is_busy_code(commit_status) && attempt + 1 < retry_limit) {
         continue;
       }
-      append_warning_once(warnings, warning_key);
+      append_warning_once(warnings,
+                          is_busy_code(commit_status)
+                              ? busy_warning_key(warning_key)
+                              : std::string{warning_key});
       return false;
     }
 
@@ -536,12 +565,15 @@ void rollback_transaction(sqlite3* connection) {
   }
 
   for (int attempt = 0; attempt < retry_limit; ++attempt) {
-    if (!begin_transaction(connection)) {
-      if (attempt + 1 < retry_limit) {
+    const int begin_status = begin_transaction(connection);
+    if (begin_status != SQLITE_OK) {
+      if (is_busy_code(begin_status) && attempt + 1 < retry_limit) {
         continue;
       }
       return StoreResult::failure(
-          map_memory_error(MemoryError::StorageBusy).result_code,
+          is_busy_code(begin_status)
+              ? map_memory_error(MemoryError::StorageBusy).result_code
+              : map_memory_error(MemoryError::StorageUnavailable).result_code,
           std::move(failure_message));
     }
 
@@ -580,13 +612,16 @@ void rollback_transaction(sqlite3* connection) {
           std::move(failure_message));
     }
 
-    if (!commit_transaction(connection)) {
+    const int commit_status = commit_transaction(connection);
+    if (commit_status != SQLITE_OK) {
       rollback_transaction(connection);
-      if (attempt + 1 < retry_limit) {
+      if (is_busy_code(commit_status) && attempt + 1 < retry_limit) {
         continue;
       }
       return StoreResult::failure(
-          map_memory_error(MemoryError::StorageBusy).result_code,
+          is_busy_code(commit_status)
+              ? map_memory_error(MemoryError::StorageBusy).result_code
+              : map_memory_error(MemoryError::StorageUnavailable).result_code,
           std::move(failure_message));
     }
 
@@ -603,11 +638,15 @@ void rollback_transaction(sqlite3* connection) {
                                              int retry_limit,
                                              std::vector<std::string>& warnings) {
   for (int attempt = 0; attempt < retry_limit; ++attempt) {
-    if (!begin_transaction(connection)) {
-      if (attempt + 1 < retry_limit) {
+    const int begin_status = begin_transaction(connection);
+    if (begin_status != SQLITE_OK) {
+      if (is_busy_code(begin_status) && attempt + 1 < retry_limit) {
         continue;
       }
-      append_warning_once(warnings, "quarantine_cleanup_failed");
+      append_warning_once(warnings,
+                          is_busy_code(begin_status)
+                              ? "quarantine_cleanup_busy"
+                              : "quarantine_cleanup_failed");
       return 0;
     }
 
@@ -634,12 +673,16 @@ void rollback_transaction(sqlite3* connection) {
       return 0;
     }
 
-    if (!commit_transaction(connection)) {
+    const int commit_status = commit_transaction(connection);
+    if (commit_status != SQLITE_OK) {
       rollback_transaction(connection);
-      if (attempt + 1 < retry_limit) {
+      if (is_busy_code(commit_status) && attempt + 1 < retry_limit) {
         continue;
       }
-      append_warning_once(warnings, "quarantine_cleanup_failed");
+      append_warning_once(warnings,
+                          is_busy_code(commit_status)
+                              ? "quarantine_cleanup_busy"
+                              : "quarantine_cleanup_failed");
       return 0;
     }
 

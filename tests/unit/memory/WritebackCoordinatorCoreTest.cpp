@@ -352,7 +352,7 @@ void test_writeback_coordinator_persists_core_transaction_and_updates_working_bo
   auto conflict_resolver =
       std::make_unique<dasall::memory::MemoryConflictResolver>(*store);
   dasall::memory::WritebackCoordinator coordinator(
-      *store, *store, *store, *store, *store, *store,
+      *store, *store,
       nullptr,
       std::move(conflict_resolver), *working_board, &vector_index);
 
@@ -426,7 +426,7 @@ void test_writeback_coordinator_rolls_back_when_commit_fails() {
   auto conflict_resolver =
       std::make_unique<dasall::memory::MemoryConflictResolver>(store);
   dasall::memory::WritebackCoordinator coordinator(
-      store, store, store, store, store, store,
+      store, store,
       nullptr,
       std::move(conflict_resolver), *working_board);
 

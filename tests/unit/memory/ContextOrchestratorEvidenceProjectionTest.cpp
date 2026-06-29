@@ -55,7 +55,7 @@ void test_context_orchestrator_preserves_parallel_evidence_views() {
   config.context.compression_trigger_ratio = 0.95;
 
   auto collector = std::make_unique<dasall::memory::CandidateCollector>(
-      *working_board, store, store, store, store, config);
+      *working_board, store, config);
   auto allocator = std::make_unique<dasall::memory::BudgetAllocator>(config);
   auto compressor = std::make_unique<dasall::memory::CompressionCoordinator>(store);
   dasall::memory::ContextOrchestrator orchestrator(

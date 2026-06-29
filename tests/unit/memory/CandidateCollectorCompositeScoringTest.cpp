@@ -139,9 +139,6 @@ dasall::memory::CandidateSet collect_candidates(bool composite_enabled) {
   dasall::memory::CandidateCollector collector(
       *board,
       store,
-      store,
-      store,
-      store,
       make_memory_config(composite_enabled),
       nullptr);
 

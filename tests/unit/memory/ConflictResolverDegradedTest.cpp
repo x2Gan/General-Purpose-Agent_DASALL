@@ -106,6 +106,22 @@ class ThrowingFactQueryStore final : public dasall::memory::IMemoryStore {
     return delegate_.insert_experience(experience);
   }
 
+  [[nodiscard]] std::vector<dasall::memory::ProgrammaticMemoryRecord>
+  query_programmatic_assets(
+      const dasall::memory::ProgrammaticMemoryQuery& query) const override {
+    return delegate_.query_programmatic_assets(query);
+  }
+
+  [[nodiscard]] dasall::memory::StoreResult upsert_programmatic_asset(
+      const dasall::memory::ProgrammaticMemoryRecord& record) override {
+    return delegate_.upsert_programmatic_asset(record);
+  }
+
+  [[nodiscard]] dasall::memory::StoreResult renew_programmatic_asset_lease(
+      const dasall::memory::ProgrammaticMemoryLease& lease) override {
+    return delegate_.renew_programmatic_asset_lease(lease);
+  }
+
   [[nodiscard]] std::int64_t count_turns(const std::string& session_id) const override {
     return delegate_.count_turns(session_id);
   }

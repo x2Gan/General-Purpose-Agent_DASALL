@@ -5,7 +5,7 @@
 #include <mutex>
 #include <thread>
 
-#include "IMaintenanceStore.h"
+#include "IMemoryStore.h"
 #include "MaintenanceReport.h"
 #include "MaintenanceRequest.h"
 #include "config/MemoryConfig.h"
@@ -21,7 +21,7 @@ class MemoryObservability;
 
 class MemoryMaintenanceWorker {
  public:
-  MemoryMaintenanceWorker(IMaintenanceStore& store,
+  MemoryMaintenanceWorker(IMemoryStore& store,
                           MemoryConfig config,
                           VectorMemoryIndexAdapter* vector_adapter = nullptr,
                           std::shared_ptr<std::mutex> writer_mutex = nullptr,
@@ -36,7 +36,7 @@ class MemoryMaintenanceWorker {
  private:
   void background_loop();
 
-  IMaintenanceStore& store_;
+  IMemoryStore& store_;
   MemoryConfig config_{};
   VectorMemoryIndexAdapter* vector_adapter_ = nullptr;
   std::shared_ptr<std::mutex> writer_mutex_;

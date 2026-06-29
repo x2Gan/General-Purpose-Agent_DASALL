@@ -98,7 +98,7 @@ void test_candidate_collector_skips_vector_search_when_vector_is_disabled() {
 
   TrackingVectorMemoryIndexAdapter vector_index;
   dasall::memory::CandidateCollector collector(
-      *board, store, store, store, store, config, &vector_index);
+      *board, store, config, &vector_index);
 
   const auto set = collector.collect(dasall::memory::CandidateCollectRequest{
       .session_id = "session-016-vector-off",
