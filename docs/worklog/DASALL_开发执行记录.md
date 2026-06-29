@@ -1,3 +1,45 @@
+## 记录 #894
+
+- 日期：2026-06-29
+- 阶段：memory / context-assemble shared-contract uplift closure
+- 任务：完成 WP-MEM-GAP-016“ContextAssembleRequest/Result 提升（GAP-P3-C / MEM-E07）”
+- 状态：已完成（shared request/result contracts、memory compatibility alias、focused contract/compile gates 与 MEM-B01 解阻已闭合）
+
+### 执行前提
+
+1. [docs/deliverables/MEM-EVAL-2026-05-31-memory子系统落地评估与生产级缺口治理任务规划.md](../deliverables/MEM-EVAL-2026-05-31-memory子系统落地评估与生产级缺口治理任务规划.md) 已将 `WP-MEM-GAP-016` 固定为“仅当多消费者出现时触发；将 `MemoryContextRequest` / `ContextAssemblyResult` 移入 `contracts/`”，且此前仍将该项标记为 hold。
+2. [docs/architecture/DASALL_memory子系统详细设计.md](../architecture/DASALL_memory子系统详细设计.md) §11.2 把 `MEM-B01` 定义为“`ContextAssembleRequest/Result` 尚未冻结为 shared contracts”，同时保留 `MEM-B02` 作为 `IMemoryStore` / `IContextOrchestrator` interface admission 的独立 blocker。
+3. 本轮启动时，工作区里已经存在 016 的代码脚手架变更：[contracts/include/context/ContextAssembleRequest.h](../../contracts/include/context/ContextAssembleRequest.h)、[contracts/include/context/ContextAssembleResult.h](../../contracts/include/context/ContextAssembleResult.h)、[memory/include/context/MemoryContextRequest.h](../../memory/include/context/MemoryContextRequest.h)、[memory/include/context/ContextAssemblyResult.h](../../memory/include/context/ContextAssemblyResult.h)、[tests/contract/context/ContextAssembleContractTest.cpp](../../tests/contract/context/ContextAssembleContractTest.cpp) 与 [tests/unit/memory/MemoryInterfaceCompileTest.cpp](../../tests/unit/memory/MemoryInterfaceCompileTest.cpp) 已部分落盘；本轮的主要工作是验证这条 uplift 方向与设计是否一致，并补齐 closeout / 总账 / worklog / contracts TODO 回写。
+4. 外部参考采用 Martin Fowler DTO pattern 与 protobuf.dev schema 演进 best practices：前者支持在稳定跨边界调用上沉淀独立 transfer object，后者强调 shared message 要保持加性兼容、避免 required-like hard evolution、并优先拆到独立文件。
+
+### 改动
+
+1. 确认并补齐 [contracts/include/context/ContextAssembleRequest.h](../../contracts/include/context/ContextAssembleRequest.h) 与 [contracts/include/context/ContextAssembleResult.h](../../contracts/include/context/ContextAssembleResult.h)，把 runtime <-> memory 边界已经稳定的 request/result supporting surface 固定到 shared contracts。
+2. 更新 [memory/include/context/MemoryContextRequest.h](../../memory/include/context/MemoryContextRequest.h) 与 [memory/include/context/ContextAssemblyResult.h](../../memory/include/context/ContextAssemblyResult.h)，将原 memory public supporting types 收口为对 shared contracts 的 compatibility alias，避免 runtime / tests 现有 include 路径被破坏。
+3. 更新 [tests/contract/CMakeLists.txt](../../tests/contract/CMakeLists.txt) 并新增 [tests/contract/context/ContextAssembleContractTest.cpp](../../tests/contract/context/ContextAssembleContractTest.cpp)，为 shared request/result 增加 focused contract gate，覆盖默认值、payload、warnings 与 degraded 语义。
+4. 更新 [tests/unit/memory/MemoryInterfaceCompileTest.cpp](../../tests/unit/memory/MemoryInterfaceCompileTest.cpp)，加入 shared headers include 与 `static_assert`，锁定 `memory::MemoryContextRequest == contracts::ContextAssembleRequest`、`memory::ContextAssemblyResult == contracts::ContextAssembleResult` 的 compile-time 兼容语义。
+5. 新增 [docs/todos/memory/deliverables/WP-MEM-GAP-016-context-assemble-shared-contracts-closeout.md](../todos/memory/deliverables/WP-MEM-GAP-016-context-assemble-shared-contracts-closeout.md)，并更新 [docs/architecture/DASALL_memory子系统详细设计.md](../architecture/DASALL_memory子系统详细设计.md)、[docs/deliverables/MEM-EVAL-2026-05-31-memory子系统落地评估与生产级缺口治理任务规划.md](../deliverables/MEM-EVAL-2026-05-31-memory子系统落地评估与生产级缺口治理任务规划.md)、[docs/todos/DASALL_子系统查漏补缺专项记录.md](../todos/DASALL_子系统查漏补缺专项记录.md) 与 [docs/todos/contracts/DASALL_contracts验收整改TODO.md](../todos/contracts/DASALL_contracts验收整改TODO.md)，把 `MEM-B01` / `MEM-E07`、P3 焦点与 contracts T010 的口径回写到与代码一致的状态。
+6. 本轮没有改动 [tests/contract/smoke/InterfaceCatalogContractTest.cpp](../../tests/contract/smoke/InterfaceCatalogContractTest.cpp) 的 interface catalog 断言；该测试继续保留 `IMemoryStore` / `IContextOrchestrator` 仍在 awaiting supporting contracts / shared interface review 的负向守卫，确保 supporting-object uplift 不会被误写成 interface admission 完成。
+
+### 验证
+
+1. `Build_CMakeTools(buildTargets=["dasall_contract_context_assemble_test","dasall_memory_interface_compile_unit_test"])`
+   - 结果：通过。
+2. `RunCtest_CMakeTools(tests=["ContextAssembleContractTest","MemoryInterfaceCompileTest"])`
+   - 结果：当前 VS Code CMake Tools 环境返回泛化 `生成失败`；由于没有提供可归因的断言或构建错误，本轮改用 build-tree 直接执行测试二进制记账。
+3. `./build/vscode-linux-ninja/tests/contract/dasall_contract_context_assemble_test`
+   - 结果：通过，`ContextAssembleContractTest: 4 passed, 0 failed`。
+4. `./build/vscode-linux-ninja/tests/unit/memory/dasall_memory_interface_compile_unit_test && printf '%s\n' 'MemoryInterfaceCompileTest: PASS'`
+   - 结果：通过，显式输出 `MemoryInterfaceCompileTest: PASS`。
+5. `./build/vscode-linux-ninja/tests/contract/dasall_contract_interface_catalog_test`
+   - 结果：通过，`6 passed, 0 failed`；证明本轮没有误把 `IMemoryStore` / `IContextOrchestrator` 一并放进 shared interface admission。
+
+### 结果
+
+1. `WP-MEM-GAP-016 / GAP-P3-C / MEM-E07` 已闭合；`ContextAssembleRequest/Result` 现已进入 shared contracts，并通过 compatibility alias 保持 memory public include 向后兼容。
+2. `MEM-B01` 已解除；`MEM-B02` 的剩余影响收敛为 future `IMemoryStore` / `IContextOrchestrator` shared interface admission 评审，不再阻塞 request/result supporting object uplift。
+3. 当前 memory 的 P3 焦点已从 `WP-MEM-GAP-016 / -017 / -018` 收窄为 `WP-MEM-GAP-017 / -018`；若继续推进，应先做 `MemoryBuildSkeleton.cpp` 历史遗留清理，再进入 release-soak 采样增强。
+
 ## 记录 #893
 
 - 日期：2026-06-25

@@ -1694,6 +1694,14 @@ dasall_register_contract_test(
   context
 )
 
+# context group (WP-MEM-GAP-016-B)
+dasall_register_contract_test(
+  dasall_contract_context_assemble_test
+  ContextAssembleContractTest
+  context/ContextAssembleContractTest.cpp
+  context
+)
+
 # checkpoint group (WP03-T012-B)
 dasall_register_contract_test(
   dasall_contract_checkpoint_test

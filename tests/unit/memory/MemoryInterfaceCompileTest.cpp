@@ -20,6 +20,8 @@
 #include "MaintenanceReport.h"
 #include "MaintenanceRequest.h"
 #include "config/MemoryConfig.h"
+#include "context/ContextAssembleRequest.h"
+#include "context/ContextAssembleResult.h"
 #include "context/ContextAssemblyResult.h"
 #include "context/MemoryContextRequest.h"
 #include "error/MemoryError.h"
@@ -111,11 +113,18 @@ void test_memory_module_is_no_longer_placeholder_only() {
 }
 
 void test_memory_context_supporting_types_compile_and_expose_expected_defaults() {
+     using dasall::contracts::ContextAssembleRequest;
+     using dasall::contracts::ContextAssembleResult;
   using dasall::memory::ContextAssemblyResult;
      using dasall::memory::ContextConfig;
   using dasall::memory::MemoryContextRequest;
   using dasall::tests::support::assert_equal;
   using dasall::tests::support::assert_true;
+
+     static_assert(std::is_same_v<MemoryContextRequest, ContextAssembleRequest>,
+                                        "MemoryContextRequest should remain a compatibility alias of the shared ContextAssembleRequest");
+     static_assert(std::is_same_v<ContextAssemblyResult, ContextAssembleResult>,
+                                        "ContextAssemblyResult should remain a compatibility alias of the shared ContextAssembleResult");
 
   static_assert(std::is_same_v<decltype(MemoryContextRequest{}.visible_tools),
                                std::vector<std::string>>,
@@ -743,7 +752,7 @@ void test_working_memory_board_interface_surface_compiles_with_snapshot_round_tr
        static_assert(std::is_same_v<decltype(&IMemoryManager::run_maintenance), MaintenanceSignature>,
                          "IMemoryManager::run_maintenance should preserve the maintenance facade signature");
        static_assert(std::is_same_v<decltype(&IContextOrchestrator::assemble), AssembleSignature>,
-                         "IContextOrchestrator::assemble should consume the module-local context request/result pair");
+                         "IContextOrchestrator::assemble should consume the shared context request/result surface through memory compatibility aliases");
      }
 
 void test_memory_summarizer_interface_uses_module_local_summary_supporting_types() {

@@ -2310,7 +2310,7 @@ Smoke 覆盖：MemoryManagerSmokeTest 验证 init → prepare_context → write_
 
 | Blocker ID | 阻塞项 | 当前影响 | 解阻条件 | 回退策略 |
 |---|---|---|---|---|
-| MEM-B01 | ContextAssembleRequest/Result 尚未冻结为 shared contracts | 无法把 IContextOrchestrator 推入 contracts admission | 相关 supporting objects 在 runtime/memory 设计评审后稳定 | 保持 module-local supporting types |
+| MEM-B01 | 已解除：ContextAssembleRequest/Result 已冻结为 shared contracts（2026-06-29） | request/result supporting contracts 不再阻塞 future interface review；当前剩余 admission blocker 收敛为 MEM-B02 | 保持 runtime/memory supporting objects 多消费者稳定，并继续通过 compatibility alias 维持旧 include 路径 | 若后续 shared field 需要破坏式演进，则先在 contracts 侧 additive 演进并保留 memory alias，不回退到各自独立定义 |
 | MEM-B02 | IMemoryStore / IContextOrchestrator 在 WP05-T012 中为 Postpone | 无法宣称其为 shared interface | supporting contracts 收敛并完成 admission 复评 | 先作为 memory/include public interface 使用 |
 | MEM-B03 | 已解除：v1 已冻结为 `sqlite-vss` 主选、`none` 强制回退、`hnswlib` 显式 opt-in | VectorMemory 可以进入 profile / maintenance / gate 设计，不再阻塞默认链路定义 | 保持 `sqlite-vss -> none` 默认顺序，并把 `hnswlib` 限定为后续单独评审项 | 若扩展打包或 ABI 校验失败，则回退到 `none`，不得隐式切到 `hnswlib` |
 | MEM-B04 | SQLite 版本基线未在工程依赖中锁定 | WAL 并发与 checkpoint 可靠性存在风险 | 工程侧明确 sqlite >= 3.51.3 或回补版本 | edge_minimal 回退到 DELETE journal 或禁用后台 checkpoint |
@@ -2333,7 +2333,7 @@ Smoke 覆盖：MemoryManagerSmokeTest 验证 init → prepare_context → write_
 
 ### 12.1 未决问题
 
-1. ContextAssembleRequest/Result 未来是否需要 shared contract 化，还是继续留在 memory/include 足够。
+1. 在 ContextAssembleRequest/Result 已 shared contract 化后，IContextOrchestrator 是否仍需等待单独 interface admission，还是继续保持 memory/include public interface。
 2. open_questions 是否需要在后续版本进入 SummaryMemory 结构化字段，还是继续停留在 WorkingMemoryProjection + summary_text。
 3. VectorMemory 是否由 memory 单独负责全部 backend 生命周期，还是仅提供基础存储给 knowledge 调用。
 4. ProgrammaticMemory 后续是否需要从当前 prompt asset family 扩展到 skill/tool asset family，还是继续保持仅 prompt asset 的最小持久化面。
@@ -2358,6 +2358,6 @@ Smoke 覆盖：MemoryManagerSmokeTest 验证 init → prepare_context → write_
 | MEM-E04 | IEmbeddingAdapter 外部 embedding service 注入 | VectorMemory 需要高质量语义搜索 | MEM-D008 VectorMemory 基线 | §6.3.2 |
 | MEM-E05 | 跨 session 事实共享（user-level FactQuery，已完成 2026-06-17） | 已通过显式 `query_facts_by_user(...)` seam、`idx_facts_user_id` 与 `ContextOrchestrator` user-level facts 装配闭合多 session 用户偏好召回 | MEM-D007 Fact 仓储稳定 | §6.12.5 FactQuery |
 | MEM-E06 | ProgrammaticMemory 独立持久化（已完成，2026-06-23） | 已通过 llm public metadata seam、`IProgrammaticMemoryStore`、V005 `programmatic_assets` 与 runtime prompt asset projection 闭合 `asset_ref/content_digest/lease` 路径 | llm 子系统 PromptAssetRepository 冻结 | §6.5.1a |
-| MEM-E07 | ContextAssembleRequest/Result 提升为 shared contracts | runtime/memory 接口在多子系统消费后稳定 | MEM-B01 解除 | §12.1 未决问题 1 |
+| MEM-E07 | ContextAssembleRequest/Result 提升为 shared contracts（已完成，2026-06-29） | 已通过 `contracts/include/context/ContextAssembleRequest.h`、`ContextAssembleResult.h`、memory compatibility alias 与 focused contract/compile gates 完成 uplift | 无；future interface admission 继续由 MEM-B02 评审 | §12.1 未决问题 1 |
 | MEM-E08 | token 估算替换为 tiktoken 或等价 tokenizer 绑定 | Build 阶段需要精确 token 预算 | MEM-D002 BudgetAllocator 落地 | §6.12.2 CandidateCollector |
 | MEM-E09 | MemoryConflictResolver 引入向量相似度辅助冲突检测（已完成，2026-06-15） | 已通过可选 `IEmbeddingAdapter` + `ConflictConfig.embedding_similarity_threshold` 收口跨语言 / 同义改写歧义路径 | MEM-D008 VectorMemory + MEM-D007 ConflictResolver | §6.12.3 |
