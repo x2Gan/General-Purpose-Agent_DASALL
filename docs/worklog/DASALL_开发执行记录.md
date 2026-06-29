@@ -1,3 +1,41 @@
+## 记录 #895
+
+- 日期：2026-06-29
+- 阶段：memory / historical artifact cleanup closure
+- 任务：完成 WP-MEM-GAP-017“历史遗留清理（GAP-P3-D）”
+- 状态：已完成（`MemoryBuildSkeleton.cpp` 删除、historical cleanup guard 新增、memory 当前态文档已回写）
+
+### 执行前提
+
+1. [docs/deliverables/MEM-EVAL-2026-05-31-memory子系统落地评估与生产级缺口治理任务规划.md](../deliverables/MEM-EVAL-2026-05-31-memory%E5%AD%90%E7%B3%BB%E7%BB%9F%E8%90%BD%E5%9C%B0%E8%AF%84%E4%BC%B0%E4%B8%8E%E7%94%9F%E4%BA%A7%E7%BA%A7%E7%BC%BA%E5%8F%A3%E6%B2%BB%E7%90%86%E4%BB%BB%E5%8A%A1%E8%A7%84%E5%88%92.md) 已将 `WP-MEM-GAP-017` 固定为“删除 `MemoryBuildSkeleton.cpp` 与 CMake 中残留引用；评估 placeholder.cpp 类历史文件”，且此前仍处于 open 状态。
+2. [tests/unit/memory/MemoryInterfaceCompileTest.cpp](../../tests/unit/memory/MemoryInterfaceCompileTest.cpp) 在本轮前仍显式断言 `MemoryBuildSkeleton.cpp` 必须存在，说明 compile-surface gate 还把历史 bootstrap 锚点当当前事实。
+3. 外部参考采用 Martin Fowler Remove Dead Code 与 Refactoring.Guru Speculative Generality：已经不再提供行为价值的空锚点文件应被删除，而不是继续保留在当前代码路径中。
+
+### 改动
+
+1. 更新 [memory/CMakeLists.txt](../../memory/CMakeLists.txt)，移除 `src/MemoryBuildSkeleton.cpp`，并把 `DASALL_MEMORY_SKELETON_SOURCES` 收口为 `DASALL_MEMORY_LIBRARY_SOURCES`，避免当前构建图继续带着 skeleton-only 语义。
+2. 删除 [memory/src/MemoryBuildSkeleton.cpp](../../memory/src/MemoryBuildSkeleton.cpp) 这个 4 行历史 namespace build anchor。
+3. 更新 [tests/unit/memory/MemoryInterfaceCompileTest.cpp](../../tests/unit/memory/MemoryInterfaceCompileTest.cpp)，将 “module 不再 placeholder-only” 的正例锚点改为真实实现源 `MemoryManager.cpp`。
+4. 新增 [tests/unit/memory/MemoryHistoricalArtifactRemovedTest.cpp](../../tests/unit/memory/MemoryHistoricalArtifactRemovedTest.cpp) 并更新 [tests/unit/memory/CMakeLists.txt](../../tests/unit/memory/CMakeLists.txt)，以 grep 风格锁定 `memory/src` 与 `memory/CMakeLists.txt` 中不存在 `MemoryBuildSkeleton.cpp`、`placeholder.cpp` 与 `keep_library_non_empty` 残留。
+5. 新增 [docs/todos/memory/deliverables/WP-MEM-GAP-017-historical-artifact-cleanup-closeout.md](../todos/memory/deliverables/WP-MEM-GAP-017-historical-artifact-cleanup-closeout.md)，并同步更新 [docs/todos/memory/DASALL_memory子系统专项TODO.md](../todos/memory/DASALL_memory%E5%AD%90%E7%B3%BB%E7%BB%9F%E4%B8%93%E9%A1%B9TODO.md)、[docs/todos/DASALL_子系统查漏补缺专项记录.md](../todos/DASALL_%E5%AD%90%E7%B3%BB%E7%BB%9F%E6%9F%A5%E6%BC%8F%E8%A1%A5%E7%BC%BA%E4%B8%93%E9%A1%B9%E8%AE%B0%E5%BD%95.md) 与 [docs/deliverables/MEM-EVAL-2026-05-31-memory子系统落地评估与生产级缺口治理任务规划.md](../deliverables/MEM-EVAL-2026-05-31-memory%E5%AD%90%E7%B3%BB%E7%BB%9F%E8%90%BD%E5%9C%B0%E8%AF%84%E4%BC%B0%E4%B8%8E%E7%94%9F%E4%BA%A7%E7%BA%A7%E7%BC%BA%E5%8F%A3%E6%B2%BB%E7%90%86%E4%BB%BB%E5%8A%A1%E8%A7%84%E5%88%92.md)，把 017 闭合与当前仅剩 `WP-MEM-GAP-018` 的焦点状态回写到文档链。
+
+### 验证
+
+1. `Build_CMakeTools(buildTargets=["dasall_memory","dasall_memory_interface_compile_unit_test","dasall_memory_historical_artifact_removed_unit_test"])`
+   - 结果：通过。
+2. `RunCtest_CMakeTools(tests=["MemoryHistoricalArtifactRemovedTest","MemoryInterfaceCompileTest"])`
+   - 结果：当前 VS Code CMake Tools 环境继续返回泛化 `生成失败`；已记录为工具层测试执行问题，而非 discoverability 问题。
+3. `ListTests_CMakeTools` 后配合 `rg -o "MemoryHistoricalArtifactRemovedTest|MemoryInterfaceCompileTest" .../content.txt`
+   - 结果：两条 focused unit tests 均已 discoverable。
+4. `./build/vscode-linux-ninja/tests/unit/memory/dasall_memory_historical_artifact_removed_unit_test && ./build/vscode-linux-ninja/tests/unit/memory/dasall_memory_interface_compile_unit_test`
+   - 结果：通过；命令零输出返回。
+
+### 结果
+
+1. `WP-MEM-GAP-017 / GAP-P3-D` 已闭合；memory 当前构建图不再依赖 `MemoryBuildSkeleton.cpp` 这类历史 skeleton-only 锚点。
+2. `MemoryHistoricalArtifactRemovedTest` 已把 memory 子树的 skeleton/placeholder 残留回退固定为 focused unit guard。
+3. 当前 memory 的 P3 焦点已从 `WP-MEM-GAP-017 / -018` 收窄为 `WP-MEM-GAP-018`；后续应直接进入 release-soak / 运营采样增强。
+
 ## 记录 #894
 
 - 日期：2026-06-29

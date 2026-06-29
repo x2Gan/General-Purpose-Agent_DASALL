@@ -103,11 +103,11 @@ void test_memory_module_is_no_longer_placeholder_only() {
   using dasall::tests::support::assert_true;
 
   const fs::path source_root{DASALL_MEMORY_SOURCE_DIR};
-  const fs::path build_anchor = source_root / "MemoryBuildSkeleton.cpp";
+     const fs::path manager_source = source_root / "MemoryManager.cpp";
   const fs::path legacy_placeholder = source_root / "placeholder.cpp";
 
-  assert_true(fs::is_regular_file(build_anchor),
-              "memory module should expose a tracked build skeleton source instead of a single placeholder file");
+     assert_true(fs::is_regular_file(manager_source),
+                                   "memory module should expose real implementation sources instead of relying on a build skeleton anchor");
   assert_true(!fs::exists(legacy_placeholder),
               "memory module should no longer rely on the legacy placeholder.cpp translation unit");
 }

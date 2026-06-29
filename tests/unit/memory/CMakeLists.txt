@@ -2,6 +2,10 @@ add_executable(dasall_memory_interface_compile_unit_test
 	MemoryInterfaceCompileTest.cpp
 )
 
+add_executable(dasall_memory_historical_artifact_removed_unit_test
+	MemoryHistoricalArtifactRemovedTest.cpp
+)
+
 add_executable(dasall_memory_store_interface_unification_compile_unit_test
 	MemoryStoreInterfaceUnificationCompileTest.cpp
 )
@@ -193,6 +197,11 @@ add_executable(dasall_memory_boundary_guard_compliance_unit_test
 target_link_libraries(dasall_memory_interface_compile_unit_test
 	PRIVATE
 		dasall_memory
+		dasall_test_support
+)
+
+target_link_libraries(dasall_memory_historical_artifact_removed_unit_test
+	PRIVATE
 		dasall_test_support
 )
 
@@ -773,6 +782,11 @@ target_compile_definitions(dasall_memory_interface_compile_unit_test
 		DASALL_MEMORY_SOURCE_DIR="${CMAKE_SOURCE_DIR}/memory/src"
 )
 
+target_compile_definitions(dasall_memory_historical_artifact_removed_unit_test
+	PRIVATE
+		DASALL_REPO_ROOT="${PROJECT_SOURCE_DIR}"
+)
+
 target_compile_definitions(dasall_memory_store_interface_unification_compile_unit_test
 	PRIVATE
 		DASALL_MEMORY_PUBLIC_INCLUDE_DIR="${CMAKE_SOURCE_DIR}/memory/include"
@@ -815,6 +829,7 @@ target_compile_definitions(dasall_memory_boundary_guard_compliance_unit_test
 )
 
 dasall_apply_common_options(dasall_memory_interface_compile_unit_test)
+dasall_apply_common_options(dasall_memory_historical_artifact_removed_unit_test)
 dasall_apply_common_options(dasall_memory_store_interface_unification_compile_unit_test)
 dasall_apply_common_options(dasall_memory_evidence_projection_compile_unit_test)
 dasall_apply_common_options(dasall_vector_memory_adapter_unit_test)
@@ -860,6 +875,9 @@ dasall_apply_common_options(dasall_memory_boundary_guard_compliance_unit_test)
 
 add_test(NAME MemoryInterfaceCompileTest COMMAND dasall_memory_interface_compile_unit_test)
 set_tests_properties(MemoryInterfaceCompileTest PROPERTIES LABELS "unit;memory")
+
+add_test(NAME MemoryHistoricalArtifactRemovedTest COMMAND dasall_memory_historical_artifact_removed_unit_test)
+set_tests_properties(MemoryHistoricalArtifactRemovedTest PROPERTIES LABELS "unit;memory")
 
 add_test(NAME MemoryStoreInterfaceUnificationCompileTest COMMAND dasall_memory_store_interface_unification_compile_unit_test)
 set_tests_properties(MemoryStoreInterfaceUnificationCompileTest PROPERTIES LABELS "unit;memory")
@@ -1004,6 +1022,7 @@ set_tests_properties(MemoryBoundaryGuardComplianceTest PROPERTIES LABELS "unit;m
 
 set(DASALL_MEMORY_UNIT_TEST_EXECUTABLE_TARGETS
 	dasall_memory_interface_compile_unit_test
+	dasall_memory_historical_artifact_removed_unit_test
 	dasall_memory_store_interface_unification_compile_unit_test
 	dasall_memory_evidence_projection_compile_unit_test
 	dasall_vector_memory_adapter_unit_test

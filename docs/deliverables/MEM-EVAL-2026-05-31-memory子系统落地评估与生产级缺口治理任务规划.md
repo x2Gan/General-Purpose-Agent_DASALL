@@ -40,7 +40,7 @@
 | 错误语义 5 类（StorageBusy/SchemaMismatch/ValidationRejected/StorageUnavailable/ConfigInvalid） | [memory/include/error/MemoryError.h](../../memory/include/error/MemoryError.h) + map_memory_error / map_memory_errno | **达成** |
 | 可观测性（log/metric/audit/trace） | [memory/src/observability/MemoryObservability.cpp](../../memory/src/observability/MemoryObservability.cpp) 482 行；`MemoryProductionLoggingIntegrationTest` / `MemoryObservabilityBridgeTest` 端到端覆盖 | **达成**（生产侧 sink 已直连，**比 runtime 子系统更完整**） |
 | 业务链贯通（Runtime ↔ Memory ↔ SQLite ↔ Vector ↔ Profile ↔ Observability） | unary、resume、recovery、context-assemble、writeback、maintenance、failure-injection、checkpoint-busy、profile-compat、production-logging 等 11 条集成测全部存在 | **可贯通** |
-| 真实落地 vs 桩 | 无空壳实现；`memory/src/MemoryBuildSkeleton.cpp` 仅 4 行历史 namespace 文件可清理；所有主要组件均含真实业务体（store 1493 / orchestrator 814 / writeback 693 / vector backend 713 / observability 482 / manager 482 / schema migrator 406 / row mappers 408 / conflict resolver 371 / compression coordinator 320 / budget allocator 313 / detached vector factory 280 / candidate collector 246 / working board 244） | **无虚假实现** |
+| 真实落地 vs 桩 | 无空壳实现；`WP-MEM-GAP-017` 已删除 `memory/src/MemoryBuildSkeleton.cpp` 历史 build anchor，所有主要组件均含真实业务体（store 1493 / orchestrator 814 / writeback 693 / vector backend 713 / observability 482 / manager 482 / schema migrator 406 / row mappers 408 / conflict resolver 371 / compression coordinator 320 / budget allocator 313 / detached vector factory 280 / candidate collector 246 / working board 244） | **无虚假实现** |
 | 距离生产级 GA | 仍欠：installed gate 绿色记录、更高层质量 SLO / soak 量化 | **未到生产级** |
 
 总体结论：memory 已完成**架构 / 接口 / 持久化 / 上下文装配 / 写回 / 维护 / 观测性**的真实落地，与 runtime 同处"骨架达成、深度需补"水位；区别于 runtime 缺口的"信号外送 / 跨版本 / 并发证据"，memory 当前剩余缺口集中在**质量层（feedback loop 与更高层 soak / judge 量化）与运营层（installed / soak 证据）**。GA 前仍需继续收敛剩余 P0 项。
@@ -127,7 +127,7 @@
 | MEM-B06 knowledge → memory 外部证据投影 v1 实现 | 设计已冻结 `external_evidence` 为 `vector<string>`；CandidateCollector 已消费；**runtime 侧的统一文本投影 v1 在跨子系统层尚未挂入** | 与 knowledge / runtime 协作项 | GAP-P1-D |
 | §11.2 灰度策略阶段 3：desktop_full 默认开启 sqlite-vss | 已通过 [profiles/desktop_full/runtime_policy.yaml](../../profiles/desktop_full/runtime_policy.yaml) `memory_vector: true`、[memory/src/config/MemoryConfigProjector.cpp](../../memory/src/config/MemoryConfigProjector.cpp) 的 manifest 投影，以及 [apps/runtime_support/src/RuntimeLiveDependencyComposition.cpp](../../apps/runtime_support/src/RuntimeLiveDependencyComposition.cpp) 的 sqlite-vss 资产缺失 fail-closed 路径收口 | 结构性缺口已清零；后续只继续治理更高层 recall / quality 指标 | GAP-P2-E 已闭合（2026-06-18） |
 | §6.20 / §10.2 hnswlib 显式 opt-in | 设计已冻结，代码未实现该 backend | 设计后置，无独立缺口 | （不列入本规划） |
-| `memory/src/MemoryBuildSkeleton.cpp` | 4 行历史 namespace 文件 | 可清理 | GAP-P3-D |
+| 历史 build anchor 清理 | 已删除 `memory/src/MemoryBuildSkeleton.cpp`，并新增 `MemoryHistoricalArtifactRemovedTest` 锁定 `memory/src` / `memory/CMakeLists.txt` 无 skeleton/placeholder 残留 | 结构性缺口已清零；后续只保留 soak gate 运营采样 | GAP-P3-D 已闭合（2026-06-29） |
 
 ---
 
@@ -171,7 +171,7 @@
 
 **冗余 / 不合适的设计**：
 - 原 6 个 mini-store interface 冗余已于 2026-06-25 通过 `WP-MEM-GAP-015` 收口：当前只保留 compatibility alias，不再让内部组件依赖独立 mini-store 构造签名。
-- [memory/src/MemoryBuildSkeleton.cpp](../../memory/src/MemoryBuildSkeleton.cpp) 4 行历史 namespace 文件应清理（GAP-P3-D）。
+- `WP-MEM-GAP-017` 已于 2026-06-29 删除 `MemoryBuildSkeleton.cpp` 历史 build anchor，并以 `MemoryHistoricalArtifactRemovedTest` 锁定残留回退（GAP-P3-D）。
 - 暂未发现冗余主循环 / 第二装配中心 / 重复持久化路径。
 - 无 placeholder 实现 / 假数据返回。
 
@@ -233,7 +233,7 @@
 - **GAP-P3-A ProgrammaticMemory 持久化（MEM-E06）**（已闭合，2026-06-23）：已通过 llm public `PromptAssetMetadata` seam、[memory/include/IProgrammaticMemoryStore.h](../../memory/include/IProgrammaticMemoryStore.h)、[sql/memory/V005__programmatic_assets.sql](../../sql/memory/V005__programmatic_assets.sql) 与 runtime prompt-asset projection 落地 `asset_ref / content_digest / lease_expires_at` 持久化；Prompt 正文仍保持由 llm owner 管理，不复制到 memory。
 - **GAP-P3-B mini-store 接口收敛**（已闭合，2026-06-25）：[memory/include/IMemoryStore.h](../../memory/include/IMemoryStore.h) 已重新承载完整 store façade；[memory/include/IFactStore.h](../../memory/include/IFactStore.h) / [memory/include/IExperienceStore.h](../../memory/include/IExperienceStore.h) / [memory/include/ISessionStore.h](../../memory/include/ISessionStore.h) / [memory/include/ISummaryStore.h](../../memory/include/ISummaryStore.h) / [memory/include/IMaintenanceStore.h](../../memory/include/IMaintenanceStore.h) 已收口为 compatibility alias + supporting type headers；[memory/src/context/CandidateCollector.cpp](../../memory/src/context/CandidateCollector.cpp)、[memory/src/writeback/WritebackCoordinator.cpp](../../memory/src/writeback/WritebackCoordinator.cpp)、[memory/src/conflict/MemoryConflictResolver.cpp](../../memory/src/conflict/MemoryConflictResolver.cpp) 与 [memory/src/maintenance/MemoryMaintenanceWorker.cpp](../../memory/src/maintenance/MemoryMaintenanceWorker.cpp) 已直接依赖 `IMemoryStore`，新增 [tests/unit/memory/MemoryStoreInterfaceUnificationCompileTest.cpp](../../tests/unit/memory/MemoryStoreInterfaceUnificationCompileTest.cpp) 锁定新语义；同轮 memory-scoped 66 条 unit / integration / contract 回归已全绿。
 - **GAP-P3-C ContextAssembleRequest/Result 提升为 shared contracts（MEM-E07）**（已闭合，2026-06-29）：已新增 [contracts/include/context/ContextAssembleRequest.h](../../contracts/include/context/ContextAssembleRequest.h) 与 [contracts/include/context/ContextAssembleResult.h](../../contracts/include/context/ContextAssembleResult.h)，并将 [memory/include/context/MemoryContextRequest.h](../../memory/include/context/MemoryContextRequest.h) / [memory/include/context/ContextAssemblyResult.h](../../memory/include/context/ContextAssemblyResult.h) 收口为 compatibility alias；新增 [tests/contract/context/ContextAssembleContractTest.cpp](../../tests/contract/context/ContextAssembleContractTest.cpp) 并更新 [tests/contract/CMakeLists.txt](../../tests/contract/CMakeLists.txt)，同时扩展 [tests/unit/memory/MemoryInterfaceCompileTest.cpp](../../tests/unit/memory/MemoryInterfaceCompileTest.cpp) 以锁定 shared contract 与 memory alias 的同型语义；`Build_CMakeTools(buildTargets=["dasall_contract_context_assemble_test","dasall_memory_interface_compile_unit_test"])` 通过，`RunCtest_CMakeTools` 当前环境返回泛化 `生成失败`，故本轮改用 build-tree 二进制直跑 `ContextAssembleContractTest` / `MemoryInterfaceCompileTest` 与 `InterfaceCatalogContractTest` 复验通过，且 `MEM-B01` 已解除、`MEM-B02` 继续仅阻塞 future shared interface admission。
-- **GAP-P3-D 历史遗留清理**：删除 [memory/src/MemoryBuildSkeleton.cpp](../../memory/src/MemoryBuildSkeleton.cpp)；评估 CMake 中残留引用。
+- **GAP-P3-D 历史遗留清理**（已闭合，2026-06-29）：已删除 [memory/src/MemoryBuildSkeleton.cpp](../../memory/src/MemoryBuildSkeleton.cpp) 并清理 [memory/CMakeLists.txt](../../memory/CMakeLists.txt) 残留引用；新增 [tests/unit/memory/MemoryHistoricalArtifactRemovedTest.cpp](../../tests/unit/memory/MemoryHistoricalArtifactRemovedTest.cpp) 锁定 skeleton/placeholder 残留回退。
 - **GAP-P3-E Long-running soak gate**：在 infra release-soak 套件内加 memory 维度采样（store latency / wal size / maintenance lag / writeback partial rate / vector recall@k）。
 
 ---
@@ -512,10 +512,17 @@
 
 #### WP-MEM-GAP-017 历史遗留清理（GAP-P3-D）
 
-- **代码目标**：删除 [memory/src/MemoryBuildSkeleton.cpp](../../memory/src/MemoryBuildSkeleton.cpp) 与 CMake 中残留引用；评估 placeholder.cpp 类历史文件。
-- **测试目标**：现有 memory unit / integration 全绿；`MemoryHistoricalArtifactRemovedTest`（grep 断言）。
-- **验收命令**：`ctest --test-dir build-ci -R "Memory" --output-on-failure`。
-- **阻塞 / 解阻**：无。
+- **状态**：已完成（2026-06-29）。
+- **代码结果**
+  - 已更新 [memory/CMakeLists.txt](../../memory/CMakeLists.txt)，移除 `src/MemoryBuildSkeleton.cpp`，并将 source 列表语义从 skeleton sources 收口为 library sources。
+  - 已删除 [memory/src/MemoryBuildSkeleton.cpp](../../memory/src/MemoryBuildSkeleton.cpp) 这个 4 行历史 namespace build anchor。
+  - 已更新 [tests/unit/memory/MemoryInterfaceCompileTest.cpp](../../tests/unit/memory/MemoryInterfaceCompileTest.cpp)，将“module 不再 placeholder-only”的正例锚点改为真实实现源 `MemoryManager.cpp`。
+  - 已新增 [tests/unit/memory/MemoryHistoricalArtifactRemovedTest.cpp](../../tests/unit/memory/MemoryHistoricalArtifactRemovedTest.cpp) 并更新 [tests/unit/memory/CMakeLists.txt](../../tests/unit/memory/CMakeLists.txt)，以 grep 风格锁定 `memory/src` 与 `memory/CMakeLists.txt` 中不存在 `MemoryBuildSkeleton.cpp`、`placeholder.cpp` 与 `keep_library_non_empty` 残留。
+- **测试结果**
+  - `Build_CMakeTools(buildTargets=["dasall_memory","dasall_memory_interface_compile_unit_test","dasall_memory_historical_artifact_removed_unit_test"])`：通过。
+  - `RunCtest_CMakeTools(tests=["MemoryHistoricalArtifactRemovedTest","MemoryInterfaceCompileTest"])`：当前环境继续返回泛化 `生成失败`；经 `ListTests_CMakeTools` 复核，两条 focused tests 均已 discoverable，因此回退到 build-tree 二进制直跑记账。
+  - `./build/vscode-linux-ninja/tests/unit/memory/dasall_memory_historical_artifact_removed_unit_test && ./build/vscode-linux-ninja/tests/unit/memory/dasall_memory_interface_compile_unit_test`：通过，命令零输出返回。
+- **阻塞 / 解阻**：无功能 blocker；仅记录当前 VS Code CMake Tools test execution 层的泛化 `生成失败`，不影响 focused build 与 build-tree 直跑验收。
 
 #### WP-MEM-GAP-018 Long-running soak gate 增强（GAP-P3-E）
 
@@ -551,7 +558,7 @@ flowchart LR
 1. **剩余 P0**：WP-MEM-GAP-004 继续单独推进；WP-MEM-GAP-001 / -002 / -003 已于 2026-06-02 闭合。
 2. **第二批（P1）**：WP-MEM-GAP-005 / -006 / -007 / -008 已于 2026-06-03 全部闭合；P1 entry tasks 不再剩余未收口项。
 3. **第三批（P2 演进）**：WP-MEM-GAP-009 已于 2026-06-15 闭合，WP-MEM-GAP-010 与 WP-MEM-GAP-011 已于 2026-06-17 闭合，WP-MEM-GAP-012 与 WP-MEM-GAP-013 已于 2026-06-18 闭合；P2 entry tasks 已全部 Done。
-4. **第四批（P3 清理与运营）**：WP-MEM-GAP-014 已于 2026-06-23 闭合，WP-MEM-GAP-015 已于 2026-06-25 闭合，WP-MEM-GAP-016 已于 2026-06-29 闭合；后续聚焦 WP-MEM-GAP-017，`WP-MEM-GAP-018` 继续在 P0/P1 全部 Done 后执行。
+4. **第四批（P3 清理与运营）**：WP-MEM-GAP-014 已于 2026-06-23 闭合，WP-MEM-GAP-015 已于 2026-06-25 闭合，WP-MEM-GAP-016 与 WP-MEM-GAP-017 已于 2026-06-29 闭合；后续聚焦 `WP-MEM-GAP-018`。
 
 ---
 
@@ -587,7 +594,7 @@ memory 子系统已达到 **可生产部署 v1** 水位：架构 / 详设目标 
 1. **质量层**：`GAP-P0-A` 与 `GAP-P0-B` 已于 2026-06-02 闭合，`GAP-P1-A` 已于 2026-06-03 把 token 估算收口到 `cl100k_base` 兼容实现，`GAP-P2-A` 已于 2026-06-15 闭合，`GAP-P2-B` 与 `GAP-P2-C` 已于 2026-06-17 闭合，`GAP-P2-D`、`GAP-P2-E`、`WP-MEM-GAP-019`、`WP-MEM-GAP-020` 与 `WP-MEM-GAP-021` 已于 2026-06-18 闭合；当前剩余质量层工作收敛为把本轮 quality / feedback loop 证据嵌入更高层 soak / release evidence。
 2. **运营层**：并发 / 长跑 / TSAN 压力门（GAP-P0-C）已于 2026-06-02 通过 build-tree + TSAN 证据闭合；`GAP-P1-B` 已于 2026-06-03 完成 daemon-owned MaintenanceTicker 挂载；当前剩余运营焦点收敛为 installed gate（GAP-P0-D）的更高层绿色记录与 soak 采样（GAP-P3-E）。
 
-其余 P2 / P3 缺口（MEM-E02..E09）为设计文档已显式声明的演进项，不属于实现缺陷。GA 收敛优先级建议：**剩余 P0 一项 → soak / installed 运营证据 → P3 选择性（当前收敛为 WP-MEM-GAP-017 / -018）**。
+其余 P2 / P3 缺口（MEM-E02..E09）为设计文档已显式声明的演进项，不属于实现缺陷。GA 收敛优先级建议：**剩余 P0 一项 → soak / installed 运营证据 → P3 选择性（当前收敛为 WP-MEM-GAP-018）**。
 
 ---
 
@@ -626,7 +633,7 @@ memory 子系统已达到 **可生产部署 v1** 水位：架构 / 详设目标 
 | V3 | WP-MEM-GAP-014 | ProgrammaticMemory 持久化（MEM-E06） |
 | V3 | WP-MEM-GAP-015 | mini-store 接口收敛（已完成 2026-06-25） |
 | V3 | WP-MEM-GAP-016 | ContextAssembleRequest/Result 提升（MEM-E07，已完成 2026-06-29） |
-| V1（清理）| WP-MEM-GAP-017 | 历史遗留清理 |
+| V1（清理）| WP-MEM-GAP-017 | 历史遗留清理（已完成 2026-06-29） |
 | V2（运营）| WP-MEM-GAP-018 | Long-running soak gate 增强 |
 
 ### 12.3 V2 专项任务（追加）

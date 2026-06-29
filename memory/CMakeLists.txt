@@ -236,8 +236,7 @@ set(DASALL_MEMORY_PUBLIC_INCLUDE_SUBDIRECTORIES
   writeback
 )
 
-set(DASALL_MEMORY_SKELETON_SOURCES
-  src/MemoryBuildSkeleton.cpp
+set(DASALL_MEMORY_LIBRARY_SOURCES
   src/MemoryManager.cpp
   src/MemoryManagerFactory.cpp
   src/config/MemoryConfigProjector.cpp
@@ -272,9 +271,9 @@ foreach(subdirectory IN LISTS DASALL_MEMORY_PUBLIC_INCLUDE_SUBDIRECTORIES)
   endif()
 endforeach()
 
-foreach(source_file IN LISTS DASALL_MEMORY_SKELETON_SOURCES)
+foreach(source_file IN LISTS DASALL_MEMORY_LIBRARY_SOURCES)
   if(NOT EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/${source_file})
-    message(FATAL_ERROR "dasall_memory skeleton source is missing: ${source_file}")
+    message(FATAL_ERROR "dasall_memory source is missing: ${source_file}")
   endif()
 endforeach()
 
@@ -282,7 +281,7 @@ add_library(dasall_memory STATIC)
 
 target_sources(dasall_memory
   PRIVATE
-    ${DASALL_MEMORY_SKELETON_SOURCES}
+    ${DASALL_MEMORY_LIBRARY_SOURCES}
 )
 
 target_compile_features(dasall_memory PUBLIC cxx_std_20)
