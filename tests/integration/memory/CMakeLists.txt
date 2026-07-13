@@ -159,6 +159,20 @@ dasall_add_memory_integration_test(
   "integration;memory;stress"
 )
 
+dasall_add_memory_integration_test(
+  dasall_memory_release_soak_probe_integration_test
+  MemoryReleaseSoakProbeTest
+  MemoryReleaseSoakProbeTest.cpp
+  "integration;memory;stress;release-soak"
+)
+
+dasall_add_memory_integration_test(
+  dasall_memory_release_soak_wiring_integration_test
+  MemoryReleaseSoakWiringTest
+  MemoryReleaseSoakWiringTest.cpp
+  "integration;memory;release-soak"
+)
+
 target_link_libraries(dasall_memory_context_assemble_integration_test
   PRIVATE
     dasall_sqlite3
@@ -283,6 +297,14 @@ target_link_libraries(dasall_memory_long_running_soak_integration_test
     dasall_sqlite3
 )
 
+target_link_libraries(dasall_memory_release_soak_probe_integration_test
+  PRIVATE
+    dasall_apps_runtime_support
+    dasall_llm
+    dasall_infra
+    dasall_sqlite3
+)
+
 target_include_directories(dasall_memory_writeback_integration_test
   PRIVATE
     ${CMAKE_SOURCE_DIR}/memory/src
@@ -371,6 +393,15 @@ target_include_directories(dasall_memory_long_running_soak_integration_test
     ${CMAKE_SOURCE_DIR}/memory/src
 )
 
+target_include_directories(dasall_memory_release_soak_probe_integration_test
+  PRIVATE
+    ${CMAKE_SOURCE_DIR}/apps/runtime_support/src
+    ${CMAKE_SOURCE_DIR}/infra/include
+    ${CMAKE_SOURCE_DIR}/infra/src
+    ${CMAKE_SOURCE_DIR}/memory/src
+    ${CMAKE_SOURCE_DIR}/tests/mocks/include
+)
+
 add_custom_target(memory_installed_smoke
   COMMAND ${CMAKE_COMMAND} -E chdir ${CMAKE_BINARY_DIR} ${CMAKE_CTEST_COMMAND} --output-on-failure -R "^MemoryInstalledSmokeTest$"
   DEPENDS dasall_memory_installed_smoke_integration_test
@@ -446,7 +477,13 @@ target_compile_definitions(dasall_memory_long_running_soak_integration_test
     DASALL_SQL_MEMORY_DIR="${CMAKE_SOURCE_DIR}/sql/memory"
 )
 
+target_compile_definitions(dasall_memory_release_soak_probe_integration_test
+  PRIVATE
+    DASALL_SQL_MEMORY_DIR="${CMAKE_SOURCE_DIR}/sql/memory"
+)
+
 set_tests_properties(MemoryLongRunningSoakTest PROPERTIES TIMEOUT 180)
+set_tests_properties(MemoryReleaseSoakProbeTest PROPERTIES TIMEOUT 180)
 
 if(NOT DASALL_MEMORY_INTEGRATION_TEST_EXECUTABLE_TARGETS)
   message(FATAL_ERROR "memory integration registration requires at least one test target")

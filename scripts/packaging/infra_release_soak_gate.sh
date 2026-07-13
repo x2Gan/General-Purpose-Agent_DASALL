@@ -220,6 +220,21 @@ run_binary_check() {
   fi
 }
 
+run_memory_release_soak_probe() {
+  binary_path=${BUILD_DIR}/tests/integration/memory/dasall_memory_release_soak_probe_integration_test
+
+  [ -x "$binary_path" ] || fail "missing MemoryReleaseSoakProbeTest binary: ${binary_path}"
+  log 'running MemoryReleaseSoakProbeTest'
+  if "$binary_path" --artifact-dir "$ARTIFACT_DIR" > "$ARTIFACT_DIR/memory-release-soak.log" 2>&1; then
+    :
+  else
+    fail "MemoryReleaseSoakProbeTest failed; see $ARTIFACT_DIR/memory-release-soak.log"
+  fi
+
+  [ -f "$ARTIFACT_DIR/memory-release-soak-summary.json" ] || \
+    fail 'MemoryReleaseSoakProbeTest did not materialize memory-release-soak-summary.json'
+}
+
 write_summary() {
   python3 - "$ARTIFACT_DIR" "$BUILD_DIR" "$ITERATIONS" "$PROFILE_ID" "$PACKAGE_SMOKE_ARTIFACT_DIR" <<'PY'
 import json
@@ -231,6 +246,14 @@ build_dir = sys.argv[2]
 iterations = int(sys.argv[3])
 profile_id = sys.argv[4]
 package_smoke_dir = sys.argv[5]
+memory_release_soak_summary_path = artifact_dir / 'memory-release-soak-summary.json'
+
+if not memory_release_soak_summary_path.exists():
+  raise SystemExit('missing memory-release-soak-summary.json')
+
+memory_release_soak_summary = json.loads(
+  memory_release_soak_summary_path.read_text(encoding='ascii')
+)
 
 summary = {
     'effective_profile_id': profile_id,
@@ -252,16 +275,25 @@ summary = {
         'diagnostics_integration': 'diagnostics-integration.log',
         'health_wiring': 'health-wiring.log',
         'health_cadence': 'health-cadence.log',
+      'memory_release_soak_probe': 'memory-release-soak.log',
         'secret_failure_injection': 'secret-failure.log',
         'plugin_safe_unload': 'plugin-safe-unload.log',
         'metrics_failure_injection': 'metrics-failure.log',
     },
+    'memory_release_soak_summary_artifact': 'memory-release-soak-summary.json',
+    'memory_release_soak_summary': memory_release_soak_summary,
     'covered_slices': [
         'diagnostics_retained_snapshot',
         'installed_readiness_positive',
         'installed_diag_health_positive',
         'health_probe_wiring',
         'health_cadence_projection',
+      'memory_store_latency',
+      'memory_wal_size',
+      'memory_maintenance_lag',
+      'memory_writeback_partial_rate',
+      'memory_vector_recall_at_k',
+      'memory_summary_fallback_rate',
         'secret_backend_unavailable',
         'secret_audit_sink_failure',
         'plugin_safe_unload',
@@ -339,6 +371,7 @@ run_binary_check diagnostics-smoke tests/integration/infra/dasall_infra_diagnost
 run_binary_check diagnostics-integration tests/integration/infra/dasall_infra_diagnostics_integration_test 'InfraDiagnosticsIntegrationTest'
 run_binary_check health-wiring tests/integration/infra/health/dasall_health_wiring_integration_test 'HealthWiringIntegrationTest'
 run_binary_check health-cadence tests/integration/infra/health/dasall_infra_health_cadence_integration_test 'InfraHealthCadenceIntegrationTest'
+run_memory_release_soak_probe
 run_binary_check secret-failure tests/integration/infra/secret/dasall_secret_failure_injection_integration_test 'SecretFailureInjectionTest'
 run_binary_check plugin-safe-unload tests/unit/infra/plugin/dasall_plugin_lifecycle_state_unit_test 'PluginLifecycleStateTest'
 run_binary_check metrics-failure tests/integration/infra/metrics/dasall_metrics_failure_injection_integration_test 'MetricsFailureInjectionTest'

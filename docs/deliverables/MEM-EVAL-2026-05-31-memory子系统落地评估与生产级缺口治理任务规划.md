@@ -526,8 +526,19 @@
 
 #### WP-MEM-GAP-018 Long-running soak gate 增强（GAP-P3-E）
 
-- **代码目标**：在 infra release-soak 套件内加 memory 维度采样（store latency / wal size / maintenance lag / writeback partial rate / vector recall@k / summary fallback rate）；soak 报告归档。
-- **阻塞 / 解阻**：GAP-P0-C、GAP-P1-B、GAP-P0-A、GAP-P0-B 已闭合；后续只保留更高层 soak 指标设计与 release 环境采样联动。
+- **状态**：已完成（2026-07-13）；authoritative local installed release-soak 已取得绿色记录。
+- **代码结果**
+  - 已新增 [tests/integration/memory/MemoryReleaseSoakProbeTest.cpp](../../tests/integration/memory/MemoryReleaseSoakProbeTest.cpp) 与 [tests/integration/memory/CMakeLists.txt](../../tests/integration/memory/CMakeLists.txt) 注册项，固定输出 `memory-release-soak-summary.json`，覆盖 `store_latency_ms`、`wal_size_bytes.max`、`maintenance_lag_ms`、`writeback_partial_rate`、`summary_fallback_rate`、`vector_recall_at_k` 与 `retrieval_recall_at_k`。
+  - 已新增 [tests/integration/memory/MemoryReleaseSoakWiringTest.cpp](../../tests/integration/memory/MemoryReleaseSoakWiringTest.cpp)，锁定 [scripts/packaging/infra_release_soak_gate.sh](../../scripts/packaging/infra_release_soak_gate.sh)、[.github/workflows/release-package-gate.yml](../../.github/workflows/release-package-gate.yml)、[scripts/packaging/README.md](../../scripts/packaging/README.md) 与 memory integration CMake 的接线不回退。
+  - 已更新 [scripts/packaging/infra_release_soak_gate.sh](../../scripts/packaging/infra_release_soak_gate.sh)，在 infra owner harness 内执行 `MemoryReleaseSoakProbeTest`，并把 `memory-release-soak-summary.json` 嵌入 `infra-release-soak-summary.json` 的 `memory_release_soak_summary` 字段。
+  - 已更新 [.github/workflows/release-package-gate.yml](../../.github/workflows/release-package-gate.yml) 与 [scripts/packaging/README.md](../../scripts/packaging/README.md)，把 release-runner local focused build、artifact 归档矩阵与功能说明扩展为包含 Memory soak summary。
+- **验证证据**
+  - `cmake -S . -B build-ci && cmake --build build-ci --target dasall_memory_release_soak_probe_integration_test && ./build-ci/tests/integration/memory/dasall_memory_release_soak_probe_integration_test --artifact-dir /tmp/dasall-mem-gap-018-probe`：通过，生成 `memory-release-soak-summary.json`。
+  - `sh -n scripts/packaging/infra_release_soak_gate.sh`：通过。
+  - `cmake -S . -B build-ci && cmake --build build-ci --target dasall_memory_release_soak_wiring_integration_test && ./build-ci/tests/integration/memory/dasall_memory_release_soak_wiring_integration_test`：通过。
+  - `cmake --build build-ci --target dasall_infra_diagnostics_smoke_integration_test dasall_infra_diagnostics_integration_test dasall_health_wiring_integration_test dasall_infra_health_cadence_integration_test dasall_memory_release_soak_probe_integration_test dasall_secret_failure_injection_integration_test dasall_plugin_lifecycle_state_unit_test dasall_metrics_failure_injection_integration_test`：通过。
+  - `DASALL_INFRA_RELEASE_SOAK_ITERATIONS=10 bash scripts/packaging/infra_release_soak_gate.sh --artifact-dir /tmp/dasall-mem-gap-018-soak-current --build-dir build-ci`：通过；完成 10 次 installed readiness / diagnostics iteration、全部 focused binary slices 与 Memory probe，并归档 `infra-release-soak-summary.json` / `memory-release-soak-summary.json`。artifact 记录 320 次 writeback、`store_latency_ms.p95=9.104`、`wal_size_bytes.max=86552`（ceiling 2097152）、40 次 maintenance 的 `maintenance_lag_ms.p95=12.301` 与 `vector_recall_at_k.semantic_adapter=1.0`。
+- **阻塞 / 解阻**：已解阻。普通用户不可遍历 `/run/dasall` 是服务 socket 目录权限边界；gate 按既有 `run_root` authoritative 路径执行，当前环境下 readiness / diagnostics 与完整 release-soak 均已通过。
 
 ---
 
@@ -558,7 +569,7 @@ flowchart LR
 1. **剩余 P0**：WP-MEM-GAP-004 继续单独推进；WP-MEM-GAP-001 / -002 / -003 已于 2026-06-02 闭合。
 2. **第二批（P1）**：WP-MEM-GAP-005 / -006 / -007 / -008 已于 2026-06-03 全部闭合；P1 entry tasks 不再剩余未收口项。
 3. **第三批（P2 演进）**：WP-MEM-GAP-009 已于 2026-06-15 闭合，WP-MEM-GAP-010 与 WP-MEM-GAP-011 已于 2026-06-17 闭合，WP-MEM-GAP-012 与 WP-MEM-GAP-013 已于 2026-06-18 闭合；P2 entry tasks 已全部 Done。
-4. **第四批（P3 清理与运营）**：WP-MEM-GAP-014 已于 2026-06-23 闭合，WP-MEM-GAP-015 已于 2026-06-25 闭合，WP-MEM-GAP-016 与 WP-MEM-GAP-017 已于 2026-06-29 闭合；后续聚焦 `WP-MEM-GAP-018`。
+4. **第四批（P3 清理与运营）**：WP-MEM-GAP-014 已于 2026-06-23 闭合，WP-MEM-GAP-015 已于 2026-06-25 闭合，WP-MEM-GAP-016 与 WP-MEM-GAP-017 已于 2026-06-29 闭合，`WP-MEM-GAP-018` 已于 2026-07-13 取得 authoritative local release-soak 绿色记录；当前该批次全部闭合。
 
 ---
 
@@ -591,8 +602,8 @@ flowchart LR
 memory 子系统已达到 **可生产部署 v1** 水位：架构 / 详设目标 100% 落地、无虚假实现、业务链贯通、ADR 边界守门、可观测性 sink 直连、profile 兼容齐备。
 
 距离 **GA 生产级** 的真实缺口集中在两个象限：
-1. **质量层**：`GAP-P0-A` 与 `GAP-P0-B` 已于 2026-06-02 闭合，`GAP-P1-A` 已于 2026-06-03 把 token 估算收口到 `cl100k_base` 兼容实现，`GAP-P2-A` 已于 2026-06-15 闭合，`GAP-P2-B` 与 `GAP-P2-C` 已于 2026-06-17 闭合，`GAP-P2-D`、`GAP-P2-E`、`WP-MEM-GAP-019`、`WP-MEM-GAP-020` 与 `WP-MEM-GAP-021` 已于 2026-06-18 闭合；当前剩余质量层工作收敛为把本轮 quality / feedback loop 证据嵌入更高层 soak / release evidence。
-2. **运营层**：并发 / 长跑 / TSAN 压力门（GAP-P0-C）已于 2026-06-02 通过 build-tree + TSAN 证据闭合；`GAP-P1-B` 已于 2026-06-03 完成 daemon-owned MaintenanceTicker 挂载；当前剩余运营焦点收敛为 installed gate（GAP-P0-D）的更高层绿色记录与 soak 采样（GAP-P3-E）。
+1. **质量层**：`GAP-P0-A` 与 `GAP-P0-B` 已于 2026-06-02 闭合，`GAP-P1-A` 已于 2026-06-03 把 token 估算收口到 `cl100k_base` 兼容实现，`GAP-P2-A` 已于 2026-06-15 闭合，`GAP-P2-B` 与 `GAP-P2-C` 已于 2026-06-17 闭合，`GAP-P2-D`、`GAP-P2-E`、`WP-MEM-GAP-019`、`WP-MEM-GAP-020` 与 `WP-MEM-GAP-021` 已于 2026-06-18 闭合；quality / feedback loop 指标现已嵌入 authoritative release-soak evidence。
+2. **运营层**：并发 / 长跑 / TSAN 压力门（GAP-P0-C）已于 2026-06-02 通过 build-tree + TSAN 证据闭合；`GAP-P1-B` 已于 2026-06-03 完成 daemon-owned MaintenanceTicker 挂载；`GAP-P3-E` 已于 2026-07-13 通过 installed local release-soak 取得绿色采样记录。
 
 其余 P2 / P3 缺口（MEM-E02..E09）为设计文档已显式声明的演进项，不属于实现缺陷。GA 收敛优先级建议：**剩余 P0 一项 → soak / installed 运营证据 → P3 选择性（当前收敛为 WP-MEM-GAP-018）**。
 
@@ -729,5 +740,5 @@ flowchart TB
 1. V1 GA 收敛后（P0 + P1 全绿、installed gate 上线、production composition 已注入 LLM Summarizer + Embedding）才启动 V2。
 2. **V2 第一波并行**：`WP-MEM-GAP-019` 已于 2026-06-18 闭合，`WP-MEM-GAP-011` 已于 2026-06-17 闭合；该波次当前已全部收口，不再作为 open wave 保留。
 3. **V2 第二波**：`WP-MEM-GAP-012` 与 `WP-MEM-GAP-013` 已于 2026-06-18 闭合；该波次已完成，后续进入质量量化与 feedback loop 收口。
-4. **V2 第三波（质量量化）**：`WP-MEM-GAP-020` 与 `WP-MEM-GAP-021` 已于 2026-06-18 闭合；当前第三波剩余收敛项为 `WP-MEM-GAP-018`（soak gate 增强）。
-5. `WP-MEM-GAP-018` 后续应直接消费本轮新增的 quality metrics baseline 与 reflection feedback loop evidence，把 recall / faithfulness / partial / fallback / lesson recall 指标嵌入长跑证据，而不是再单独设计第二套质量口径。
+4. **V2 第三波（质量量化）**：`WP-MEM-GAP-020` 与 `WP-MEM-GAP-021` 已于 2026-06-18 闭合；`WP-MEM-GAP-018` 已于 2026-07-13 完成 authoritative local release-soak 复验，第三波已全部收口。
+5. `WP-MEM-GAP-018` 已直接消费现有 quality metrics baseline，把 recall / partial / fallback 指标嵌入长跑证据；release-soak 绿色记录已归档，后续只需按同一 command / artifact contract 例行复验。

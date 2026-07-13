@@ -138,7 +138,7 @@ jobs:
           soak_log="${DASALL_RELEASE_GATE_INFRA_SOAK_LOG}"
 
           {
-            printf '### cmake --build %s --target dasall_infra_diagnostics_smoke_integration_test dasall_infra_diagnostics_integration_test dasall_health_wiring_integration_test dasall_infra_health_cadence_integration_test dasall_secret_failure_injection_integration_test dasall_plugin_lifecycle_state_unit_test dasall_metrics_failure_injection_integration_test\n' "${DASALL_BUILD_DIR}"
+            printf '### cmake --build %s --target dasall_infra_diagnostics_smoke_integration_test dasall_infra_diagnostics_integration_test dasall_health_wiring_integration_test dasall_infra_health_cadence_integration_test dasall_memory_release_soak_probe_integration_test dasall_secret_failure_injection_integration_test dasall_plugin_lifecycle_state_unit_test dasall_metrics_failure_injection_integration_test\n' "${DASALL_BUILD_DIR}"
           } > "${soak_log}"
 
           cmake --build "${DASALL_BUILD_DIR}" --target \
@@ -146,6 +146,7 @@ jobs:
             dasall_infra_diagnostics_integration_test \
             dasall_health_wiring_integration_test \
             dasall_infra_health_cadence_integration_test \
+            dasall_memory_release_soak_probe_integration_test \
             dasall_secret_failure_injection_integration_test \
             dasall_plugin_lifecycle_state_unit_test \
             dasall_metrics_failure_injection_integration_test >> "${soak_log}" 2>&1

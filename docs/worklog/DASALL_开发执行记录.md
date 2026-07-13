@@ -1,3 +1,44 @@
+## 记录 #896
+
+- 日期：2026-07-13
+- 阶段：memory / release-soak metrics closure
+- 任务：推进 WP-MEM-GAP-018“Long-running soak gate 增强（GAP-P3-E）”
+- 状态：已完成；authoritative local installed release-soak 已取得绿色记录
+
+### 执行前提
+
+1. [docs/deliverables/MEM-EVAL-2026-05-31-memory子系统落地评估与生产级缺口治理任务规划.md](../deliverables/MEM-EVAL-2026-05-31-memory%E5%AD%90%E7%B3%BB%E7%BB%9F%E8%90%BD%E5%9C%B0%E8%AF%84%E4%BC%B0%E4%B8%8E%E7%94%9F%E4%BA%A7%E7%BA%A7%E7%BC%BA%E5%8F%A3%E6%B2%BB%E7%90%86%E4%BB%BB%E5%8A%A1%E8%A7%84%E5%88%92.md) 已将 `WP-MEM-GAP-018` 固定为“在 infra release-soak 套件内加 memory 维度采样（store latency / wal size / maintenance lag / writeback partial rate / vector recall@k / summary fallback rate）”。
+2. [docs/todos/memory/deliverables/WP-MEM-GAP-020-memory-quality-slo-closeout.md](../todos/memory/deliverables/WP-MEM-GAP-020-memory-quality-slo-closeout.md) 已冻结 `writeback_partial_rate` / `compression_fallback_rate` 的 rolling rate 语义，并明确后续 soak gate 应直接消费现有 quality metric identity。
+3. [scripts/packaging/infra_release_soak_gate.sh](../../scripts/packaging/infra_release_soak_gate.sh) 与 [docs/todos/infrastructure/deliverables/INF-FIX-006-infra-release-soak-gate收口.md](../todos/infrastructure/deliverables/INF-FIX-006-infra-release-soak-gate%E6%94%B6%E5%8F%A3.md) 已固定 infra owner local soak harness；本轮只允许在同一 harness 内追加 Memory summary，不另起第二套 release workflow。
+
+### 改动
+
+1. 新增 [tests/integration/memory/MemoryReleaseSoakProbeTest.cpp](../../tests/integration/memory/MemoryReleaseSoakProbeTest.cpp)，直接产出 `memory-release-soak-summary.json`，固定 `store_latency_ms`、`wal_size_bytes.max`、`maintenance_lag_ms`、`writeback_partial_rate`、`summary_fallback_rate`、`vector_recall_at_k` 与 `retrieval_recall_at_k`。
+2. 更新 [tests/integration/memory/CMakeLists.txt](../../tests/integration/memory/CMakeLists.txt)，注册 `dasall_memory_release_soak_probe_integration_test` / `MemoryReleaseSoakProbeTest`，并补齐 `runtime_support`、`llm`、`infra`、`sqlite3` 依赖和 `DASALL_SQL_MEMORY_DIR` compile definition。
+3. 新增 [tests/integration/memory/MemoryReleaseSoakWiringTest.cpp](../../tests/integration/memory/MemoryReleaseSoakWiringTest.cpp) 并更新 [tests/integration/memory/CMakeLists.txt](../../tests/integration/memory/CMakeLists.txt)，锁定 memory integration CMake、[scripts/packaging/infra_release_soak_gate.sh](../../scripts/packaging/infra_release_soak_gate.sh)、[.github/workflows/release-package-gate.yml](../../.github/workflows/release-package-gate.yml) 与 [scripts/packaging/README.md](../../scripts/packaging/README.md) 的接线不回退。
+4. 更新 [scripts/packaging/infra_release_soak_gate.sh](../../scripts/packaging/infra_release_soak_gate.sh)，新增 `run_memory_release_soak_probe()` 并将 `memory-release-soak-summary.json` 嵌入 `infra-release-soak-summary.json` 的 `memory_release_soak_summary` 字段，同时归档 `memory-release-soak.log`。
+5. 更新 [.github/workflows/release-package-gate.yml](../../.github/workflows/release-package-gate.yml) 与 [scripts/packaging/README.md](../../scripts/packaging/README.md)，把 release-runner local focused build 与 artifact contract 扩展为包含 `dasall_memory_release_soak_probe_integration_test` 和 `memory-release-soak-summary.json`。
+6. 新增 [docs/todos/memory/deliverables/WP-MEM-GAP-018-release-soak-metrics-closeout.md](../todos/memory/deliverables/WP-MEM-GAP-018-release-soak-metrics-closeout.md)，并同步更新 [docs/deliverables/MEM-EVAL-2026-05-31-memory子系统落地评估与生产级缺口治理任务规划.md](../deliverables/MEM-EVAL-2026-05-31-memory%E5%AD%90%E7%B3%BB%E7%BB%9F%E8%90%BD%E5%9C%B0%E8%AF%84%E4%BC%B0%E4%B8%8E%E7%94%9F%E4%BA%A7%E7%BA%A7%E7%BC%BA%E5%8F%A3%E6%B2%BB%E7%90%86%E4%BB%BB%E5%8A%A1%E8%A7%84%E5%88%92.md) 与 [docs/todos/DASALL_子系统查漏补缺专项记录.md](../todos/DASALL_%E5%AD%90%E7%B3%BB%E7%BB%9F%E6%9F%A5%E6%BC%8F%E8%A1%A5%E7%BC%BA%E4%B8%93%E9%A1%B9%E8%AE%B0%E5%BD%95.md)，回写本轮实现结果与 blocker 口径。
+
+### 验证
+
+1. `cmake -S . -B build-ci && cmake --build build-ci --target dasall_memory_release_soak_probe_integration_test && ./build-ci/tests/integration/memory/dasall_memory_release_soak_probe_integration_test --artifact-dir /tmp/dasall-mem-gap-018-probe`
+   - 结果：通过；生成 `memory-release-soak-summary.json`，字段包含 `store_latency_ms`、`wal_size_bytes.max`、`maintenance_lag_ms`、`writeback_partial_rate`、`summary_fallback_rate`、`vector_recall_at_k` 与 `retrieval_recall_at_k`。
+2. `sh -n scripts/packaging/infra_release_soak_gate.sh`
+   - 结果：通过。
+3. `cmake -S . -B build-ci && cmake --build build-ci --target dasall_memory_release_soak_wiring_integration_test && ./build-ci/tests/integration/memory/dasall_memory_release_soak_wiring_integration_test`
+   - 结果：通过；新增 target、脚本、workflow 与 README 接线全部命中。
+4. `cmake --build build-ci --target dasall_infra_diagnostics_smoke_integration_test dasall_infra_diagnostics_integration_test dasall_health_wiring_integration_test dasall_infra_health_cadence_integration_test dasall_memory_release_soak_probe_integration_test dasall_secret_failure_injection_integration_test dasall_plugin_lifecycle_state_unit_test dasall_metrics_failure_injection_integration_test`
+   - 结果：通过；增强后的 local infra soak focused build 列表完整可构建。
+5. `DASALL_INFRA_RELEASE_SOAK_ITERATIONS=10 bash scripts/packaging/infra_release_soak_gate.sh --artifact-dir /tmp/dasall-mem-gap-018-soak-current --build-dir build-ci`
+   - 结果：通过。gate 使用既有 `run_root` 路径完成 10 次 installed readiness / diagnostics iteration、全部 focused binaries 和 `MemoryReleaseSoakProbeTest`，生成 `infra-release-soak-summary.json` / `memory-release-soak-summary.json`；后者记录 `store_latency_ms.p95=9.104`、`wal_size_bytes.max=86552`、`maintenance_lag_ms.p95=12.301` 与 `vector_recall_at_k.semantic_adapter=1.0`。
+
+### 结果
+
+1. `WP-MEM-GAP-018 / GAP-P3-E` 已闭合：release-runner local infra soak 现具备 Memory owner 的 soak summary artifact contract 和绿色 authoritative local evidence。
+2. direct probe、focused build、wiring guard 与完整 gate 已证明本轮新增的 summary schema、script merge 点、workflow artifact wiring 和 installed release-soak 均成立。
+3. 普通用户不能遍历 `/run/dasall` 是服务 socket 目录的既有权限边界；gate 的 `run_root` 运行路径正常，无 runtime readiness blocker。
+
 ## 记录 #895
 
 - 日期：2026-06-29
