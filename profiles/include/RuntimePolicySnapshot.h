@@ -140,6 +140,15 @@ struct ExecutionPolicy {
   }
 };
 
+struct RuntimeSinkPolicy {
+  bool fail_closed_on_audit_failure = false;
+  bool drop_on_metrics_failure = true;
+
+  [[nodiscard]] bool has_consistent_values() const {
+    return true;
+  }
+};
+
 struct OpsPolicy {
   struct OptionalBackendPolicy {
     std::string metrics_exporter_type = "noop";
@@ -187,7 +196,8 @@ class RuntimePolicySnapshot {
                         OpsPolicy ops_policy,
                         std::uint32_t worker_threads = 1U,
                         bool multi_agent_enabled = false,
-                        MemoryMaintenancePolicy memory_maintenance_policy = {})
+                        MemoryMaintenancePolicy memory_maintenance_policy = {},
+                        RuntimeSinkPolicy runtime_sink_policy = {})
       : generation_(generation),
         effective_profile_id_(std::move(effective_profile_id)),
         runtime_budget_(std::move(runtime_budget)),
@@ -201,7 +211,8 @@ class RuntimePolicySnapshot {
         ops_policy_(std::move(ops_policy)),
         worker_threads_(worker_threads),
         multi_agent_enabled_(multi_agent_enabled),
-        memory_maintenance_policy_(std::move(memory_maintenance_policy)) {}
+        memory_maintenance_policy_(std::move(memory_maintenance_policy)),
+        runtime_sink_policy_(std::move(runtime_sink_policy)) {}
 
   [[nodiscard]] std::uint64_t generation() const {
     return generation_;
@@ -247,6 +258,10 @@ class RuntimePolicySnapshot {
     return ops_policy_;
   }
 
+  [[nodiscard]] const RuntimeSinkPolicy& runtime_sink_policy() const {
+    return runtime_sink_policy_;
+  }
+
   [[nodiscard]] std::uint32_t worker_threads() const {
     return worker_threads_;
   }
@@ -269,6 +284,7 @@ class RuntimePolicySnapshot {
            capability_cache_policy_.has_consistent_values() &&
            degrade_policy_.has_consistent_values() && timeout_policy_.has_consistent_values() &&
            execution_policy_.has_consistent_values() && ops_policy_.has_consistent_values() &&
+           runtime_sink_policy_.has_consistent_values() &&
            worker_threads_ > 0U && memory_maintenance_policy_.has_consistent_values();
   }
 
@@ -287,6 +303,7 @@ class RuntimePolicySnapshot {
   std::uint32_t worker_threads_;
   bool multi_agent_enabled_;
   MemoryMaintenancePolicy memory_maintenance_policy_;
+  RuntimeSinkPolicy runtime_sink_policy_;
 };
 
 }  // namespace dasall::profiles

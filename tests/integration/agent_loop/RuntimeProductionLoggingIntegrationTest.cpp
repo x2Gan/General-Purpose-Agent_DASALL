@@ -1,3 +1,5 @@
+#include <algorithm>
+#include <chrono>
 #include <exception>
 #include <filesystem>
 #include <fstream>
@@ -6,10 +8,12 @@
 #include <string>
 #include <system_error>
 
+#include "AgentFacade.h"
 #include "ProfileCatalog.h"
 #include "RuntimeDependencySet.h"
 #include "RuntimeLiveDependencyComposition.h"
 #include "RuntimePolicyProvider.h"
+#include "audit/IAuditLogger.h"
 #include "budget/BudgetDecision.h"
 #include "checkpoint/RecoveryOutcome.h"
 #include "logging/LoggingFacade.h"
@@ -113,8 +117,20 @@ void test_runtime_live_composition_persists_redacted_control_plane_events() {
   assert_true(composition.dependency_set != nullptr &&
                   composition.dependency_set->runtime_event_bus != nullptr &&
                   composition.dependency_set->runtime_telemetry_bridge != nullptr &&
-                  composition.dependency_set->logger != nullptr,
-              "runtime production logging integration should expose logger, event bus, and telemetry bridge from live composition");
+                  composition.dependency_set->logger != nullptr &&
+                  composition.dependency_set->audit_logger != nullptr,
+              "runtime production logging integration should expose logger, audit sink, event bus, and telemetry bridge from live composition");
+
+  dasall::runtime::AgentFacade facade;
+  const auto init_result = facade.init(dasall::runtime::AgentInitRequest{
+      .runtime_instance_id = kCompositionOwner,
+      .profile_id = snapshot->effective_profile_id(),
+      .policy_snapshot = snapshot,
+      .dependency_set = composition.dependency_set,
+      .cold_start = true,
+  });
+  assert_true(init_result.accepted,
+              "runtime production logging integration should accept facade init before dispatching telemetry through the default sink subscribers");
 
   const auto logger =
       std::dynamic_pointer_cast<LoggingFacade>(composition.dependency_set->logger);
@@ -173,6 +189,32 @@ void test_runtime_live_composition_persists_redacted_control_plane_events() {
               "runtime production logging integration should keep the last runtime event inspectable");
   assert_true(logger->last_dispatched_event().attrs.at("event_name") == "runtime.safe_mode",
               "runtime production logging integration should keep runtime.safe_mode as the last dispatched control-plane log event");
+
+    const auto export_window_end = std::chrono::duration_cast<std::chrono::milliseconds>(
+                                                                         std::chrono::system_clock::now().time_since_epoch())
+                                                                         .count() +
+                                                                 60000;
+    const auto export_window_start = export_window_end - 120000;
+    const auto audit_export = composition.dependency_set->audit_logger->export_audit(
+            dasall::infra::ExportQuery{
+                    .start_ts = export_window_start,
+                    .end_ts = export_window_end,
+            });
+    assert_true(audit_export.records.size() >= 3U,
+                            "runtime production logging integration should persist the audit-marked runtime control-plane events into the audit sink without dropping the runtime budget, recovery, or safe-mode actions");
+    assert_true(std::any_of(audit_export.records.begin(), audit_export.records.end(),
+                                                    [](const dasall::infra::AuditEvent& event) {
+                                                        return event.action == "budget_reject";
+                                                    }) &&
+                                    std::any_of(audit_export.records.begin(), audit_export.records.end(),
+                                                            [](const dasall::infra::AuditEvent& event) {
+                                                                return event.action == "recovery_reject";
+                                                            }) &&
+                                    std::any_of(audit_export.records.begin(), audit_export.records.end(),
+                                                            [](const dasall::infra::AuditEvent& event) {
+                                                                return event.action == "safe_mode_entered";
+                                                            }),
+                            "runtime production logging integration should export budget, recovery, and safe-mode audit actions after facade-installed sink forwarding");
 
   const auto runtime_log_text = read_text(runtime_log_path);
   assert_true(runtime_log_text.find("runtime.transition") != std::string::npos &&

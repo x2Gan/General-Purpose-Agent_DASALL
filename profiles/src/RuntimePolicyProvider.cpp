@@ -197,6 +197,12 @@ template <typename T>
   const auto ops_remote_diagnostics_enabled =
       get_bool(parsed_yaml.scalar_values, "ops_policy.remote_diagnostics_enabled");
   const auto ops_upgrade_strategy = get_string(parsed_yaml.scalar_values, "ops_policy.upgrade_strategy");
+  const auto sink_fail_closed_on_audit_failure =
+      get_bool(parsed_yaml.scalar_values,
+               "ops_policy.runtime_sink.fail_closed_on_audit_failure");
+  const auto sink_drop_on_metrics_failure =
+      get_bool(parsed_yaml.scalar_values,
+               "ops_policy.runtime_sink.drop_on_metrics_failure");
   const auto metrics_exporter_type =
       get_string(parsed_yaml.scalar_values, "infra.metrics.exporter.type");
   const auto metrics_exporter_package_asset =
@@ -228,7 +234,9 @@ template <typename T>
       !execution_requires_confirmation.has_value() || !execution_safe_mode.has_value() ||
       !execution_audit_level.has_value() || !ops_log_level.has_value() ||
       !ops_metrics_granularity.has_value() || !ops_trace_sample_ratio.has_value() ||
-                        !ops_remote_diagnostics_enabled.has_value() || !ops_upgrade_strategy.has_value() ||
+    !ops_remote_diagnostics_enabled.has_value() || !ops_upgrade_strategy.has_value() ||
+    !sink_fail_closed_on_audit_failure.has_value() ||
+    !sink_drop_on_metrics_failure.has_value() ||
             !metrics_exporter_type.has_value() || !metrics_exporter_package_asset.has_value() ||
             !trace_exporter_type.has_value() || !trace_exporter_package_asset.has_value() ||
             !secret_backend_type.has_value() || !secret_backend_package_asset.has_value()) {
@@ -357,6 +365,10 @@ template <typename T>
           .jitter_ms = *memory_maintenance_jitter_ms,
           .retention_ms = *memory_maintenance_retention_ms,
           .checkpoint_strategy = *memory_maintenance_checkpoint_strategy,
+      },
+      RuntimeSinkPolicy{
+          .fail_closed_on_audit_failure = *sink_fail_closed_on_audit_failure,
+          .drop_on_metrics_failure = *sink_drop_on_metrics_failure,
       },
   };
 

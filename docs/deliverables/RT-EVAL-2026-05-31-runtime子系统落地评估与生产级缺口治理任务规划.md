@@ -153,7 +153,7 @@
 
 ### 6.1 P0（GA 阻塞，必须先收敛）
 
-- **GAP-P0-A audit/metrics 强制 sink**：在 AgentFacade.init 内挂 default subscriber，把 telemetry record（recovery_reject / safe_mode_entered / high_risk_confirmation / budget_reject / checkpoint_save_failure 等）强制转发给 `infra::audit::IAuditLogger` 与 `infra::metrics::IMetricsProvider`；提供 fail-closed 与 fail-open 两档策略；新增集成测验证不可静默丢失。证据：runtime/ 全文 `grep audit_logger->|metrics_provider->` 当前为零。
+- **GAP-P0-A audit/metrics 强制 sink**（已闭合，2026-07-16）：`AgentFacade::init()` 现已挂 default runtime sink subscriber，把 `runtime.recovery.reject` / `runtime.safe_mode` / `runtime.budget.reject` 等关键 control-plane 事件强制转发给 `infra::audit::IAuditLogger` 与 `infra::metrics::IMetricsProvider`；`RuntimeSinkPolicy{ fail_closed_on_audit_failure, drop_on_metrics_failure }` 已由 `RuntimePolicySnapshot` 投影，focused unit + production logging integration 已覆盖不可静默丢失语义。closeout：`docs/todos/runtime/deliverables/WP-RT-GAP-001-audit-metrics-sink-closeout.md`。
 - **GAP-P0-B 持久化生产化**：production profile 切到 SQLite WAL（沿用 memory 子系统已选定后端）；保留 desktop/edge 的文件 KV 作为 fallback；引入 fsync barrier。证据：[CheckpointManager.cpp](../../runtime/src/checkpoint/CheckpointManager.cpp) / [SessionManager.cpp](../../runtime/src/session/SessionManager.cpp) 当前为 hex 文件。
 - **GAP-P0-C 并发压力门 RT-GATE-08**：补 `RuntimeConcurrencyStressTest`（main loop + recovery + checkpoint persist 三线程，1k 轮无死锁、无事件丢失、锁顺序违例可检测），输出生产级证据。
 - **GAP-P0-D checkpoint schema_version 强制校验**：在 `CheckpointManager::load` 中显式比较 `rt.schema_version` / `rt.fsm_state_enum_version` / `rt.budget_schema_version`，不兼容时返回 `RT_E_412_RESUME_REJECTED`；新增专属拒绝路径集成测。
@@ -191,7 +191,7 @@
 
 ### 7.1 P0 任务
 
-#### WP-RT-GAP-001 Audit / Metrics 强制 sink（GAP-P0-A）
+#### WP-RT-GAP-001 Audit / Metrics 强制 sink（GAP-P0-A，Done 2026-07-16）
 
 - **代码目标**
   - 在 [AgentFacade.cpp](../../runtime/src/AgentFacade.cpp) `init()` 中挂 `RuntimeAuditSinkSubscriber` 与 `RuntimeMetricsSinkSubscriber`，订阅 RuntimeEventBus 上的关键事件类（recovery_reject / safe_mode_entered / budget_reject / checkpoint_save_failure / high_risk_confirmation）并强制转发给 `infra::audit::IAuditLogger` / `infra::metrics::IMetricsProvider`。
@@ -202,6 +202,9 @@
 - **验收命令**
   - `ctest --test-dir build-ci -R "RuntimeAuditSink|RuntimeMetricsSink|RuntimeSinkFailClosed|RuntimeProductionLogging" --output-on-failure`
 - **阻塞 / 解阻**：依赖 infra.audit / infra.metrics public interface 已冻结（已满足）。
+- **Closeout**
+  - 代码已在 `profiles/include/RuntimePolicySnapshot.h`、`profiles/src/RuntimePolicyProvider.cpp`、`runtime/src/AgentFacade.cpp`、`tests/unit/runtime/RuntimeSinkForwardingTest.cpp` 与 `tests/integration/agent_loop/RuntimeProductionLoggingIntegrationTest.cpp` 落盘；详见 `docs/todos/runtime/deliverables/WP-RT-GAP-001-audit-metrics-sink-closeout.md`。
+  - `ctest --test-dir build-ci -R "RuntimeAuditSink|RuntimeMetricsSink|RuntimeSinkFailClosed|RuntimeProductionLogging" --output-on-failure` 已通过，4/4 绿色。
 
 #### WP-RT-GAP-002 Production SQLite 持久化后端（GAP-P0-B）
 

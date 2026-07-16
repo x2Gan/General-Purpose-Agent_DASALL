@@ -232,3 +232,6 @@ ops_policy:
 	trace_sample_ratio: 0.15
 	remote_diagnostics_enabled: true
 	upgrade_strategy: rolling
+	runtime_sink:
+		fail_closed_on_audit_failure: true
+		drop_on_metrics_failure: false

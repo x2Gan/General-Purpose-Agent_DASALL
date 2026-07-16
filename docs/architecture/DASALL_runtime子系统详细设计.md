@@ -686,6 +686,12 @@ Recovery Context 规则：
 | 追踪 | orchestrator round span、tool call child span、llm call child span、checkpoint persist span、recovery evaluate span | 能关联 trace_id / parent span |
 | 审计 | high-risk confirmation、recovery rejection、compensation approved/denied、safe failure result、profile generation used | 不可静默丢失 |
 
+补充约束：
+
+1. `AgentFacade::init()` 必须在 live `RuntimeEventBus` 上安装默认 sink subscriber，把 `runtime.recovery.reject`、`runtime.safe_mode`、`runtime.budget.reject`、`runtime.checkpoint.save_failure`、`runtime.high_risk.confirmation` 这组 runtime control-plane 关键事件强制转发到 infra audit / metrics owner，不允许只停留在 module-local telemetry record 或 event queue。
+2. `RuntimePolicySnapshot` 必须投影 `RuntimeSinkPolicy{ fail_closed_on_audit_failure, drop_on_metrics_failure }`；当 profile 要求 fail-closed 时，缺失 audit sink、metrics sink 或 live event bus 都必须在 init/readiness 阶段显式拒绝，而不是在运行中静默降级。
+3. metrics 侧的默认最小事实是同步 `Counter` 型事件计数；当前 runtime 以 `runtime_control_plane_event_total` 记录关键 control-plane 事件总数，并复用现有 metrics label allowlist 约束 `module/stage/profile/outcome/error_code`。
+
 ### 6.13 与相邻模块调用关系
 
 | 相邻模块 | Runtime 发起调用 | Runtime 接收结果 | 依赖方向结论 |
@@ -1217,6 +1223,7 @@ CheckpointManager 的任务拆分建议优先顺序：
 2. `knowledge`、`llm` 对“系统能否继续运行”是 `optional`，但对“是否可以声明 default unary ready”是 `required`；缺失时只能进入显式 `degraded`，不得继续宣称 default-ready。
 3. `tools` 若被 profile 显式关闭，只能通过 runtime-owned `null adapter` 保持 seam 完整；调用方不得以 `nullptr` 绕过组合根语义。
 4. `RuntimeDependencySet::has_live_unary_ports()` 只允许表达“核心 required ports 已具备”的最小判断，不能继续被解释为 default unary ready；default-ready 与 degraded-ready 需要在后续 Build 中拆成更细粒度的 readiness surface。
+5. `audit_logger`、`metrics_provider` 与 `runtime_event_bus` 的 required/optional 语义由 `RuntimeSinkPolicy` 决定：`fail_closed_on_audit_failure=true` 时 audit sink 必须进入 required；`drop_on_metrics_failure=false` 时 metrics sink 与 live event bus 也必须进入 required；其余组合只能以显式 `degraded` 输出，不得静默吞掉 observability owner 缺口。
 
 对应的 default unary matrix 摘要如下：
 

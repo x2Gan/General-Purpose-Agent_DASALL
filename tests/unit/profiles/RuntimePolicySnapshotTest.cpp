@@ -111,6 +111,9 @@ void test_runtime_policy_snapshot_exposes_read_only_policy_fields() {
               "runtime policy snapshot should preserve model route map");
   assert_true(snapshot.timeout_policy().workflow.timeout_ms == 2500,
               "runtime policy snapshot should preserve workflow timeout policy");
+    assert_true(!snapshot.runtime_sink_policy().fail_closed_on_audit_failure &&
+                                    snapshot.runtime_sink_policy().drop_on_metrics_failure,
+                            "runtime policy snapshot should keep the backward-compatible default runtime sink policy when no explicit projection is provided");
     assert_true(snapshot.memory_maintenance_policy().interval_ms == 45000,
                             "runtime policy snapshot should preserve memory maintenance cadence policy");
 }
@@ -128,6 +131,9 @@ void test_runtime_policy_snapshot_interface_is_const_only() {
   static_assert(std::is_same_v<decltype(std::declval<const RuntimePolicySnapshot&>().ops_policy()),
                                const dasall::profiles::OpsPolicy&>,
                 "ops_policy getter should expose const reference only");
+    static_assert(std::is_same_v<decltype(std::declval<const RuntimePolicySnapshot&>().runtime_sink_policy()),
+                                                             const dasall::profiles::RuntimeSinkPolicy&>,
+                                "runtime_sink_policy getter should expose const reference only");
     static_assert(
             std::is_same_v<decltype(std::declval<const RuntimePolicySnapshot&>().memory_maintenance_policy()),
                                          const dasall::profiles::MemoryMaintenancePolicy&>,

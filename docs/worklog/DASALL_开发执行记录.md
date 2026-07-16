@@ -1,3 +1,44 @@
+## 记录 #897
+
+- 日期：2026-07-16
+- 阶段：runtime / audit-metrics mandatory sink closure
+- 任务：完成 WP-RT-GAP-001“Audit / Metrics 强制 sink（GAP-P0-A）”
+- 状态：已完成（sink policy projection、AgentFacade default sink subscriber、focused unit/integration evidence 与文档链回写已闭合）
+
+### 执行前提
+
+1. [docs/deliverables/RT-EVAL-2026-05-31-runtime子系统落地评估与生产级缺口治理任务规划.md](../deliverables/RT-EVAL-2026-05-31-runtime%E5%AD%90%E7%B3%BB%E7%BB%9F%E8%90%BD%E5%9C%B0%E8%AF%84%E4%BC%B0%E4%B8%8E%E7%94%9F%E4%BA%A7%E7%BA%A7%E7%BC%BA%E5%8F%A3%E6%B2%BB%E7%90%86%E4%BB%BB%E5%8A%A1%E8%A7%84%E5%88%92.md) 已将 `WP-RT-GAP-001` 固定为“在 AgentFacade.init 上安装 audit/metrics default sink subscriber，并由 RuntimePolicySnapshot 投影 fail-closed / fail-open 语义”。
+2. 代码复核表明此前 `RuntimeTelemetryBridge` 只把 audit-marked 事件写入 module-local record 与 `RuntimeEventBus`，`runtime/*` 内没有任何 `audit_logger->...` / `metrics_provider->...` 直连。
+3. `infra::audit::IAuditLogger` 与 `infra::metrics::IMetricsProvider` public interface 已冻结，不存在需要先解组的前置 BLOCK 任务。
+
+### 改动
+
+1. 更新 [profiles/include/RuntimePolicySnapshot.h](../profiles/include/RuntimePolicySnapshot.h)、[profiles/src/RuntimePolicyProvider.cpp](../profiles/src/RuntimePolicyProvider.cpp) 与五份 profile `runtime_policy.yaml`，新增 `RuntimeSinkPolicy{ fail_closed_on_audit_failure, drop_on_metrics_failure }` 并显式投影 production-like 与 minimal profile 的差异语义。
+2. 更新 [runtime/src/AgentFacade.cpp](../runtime/src/AgentFacade.cpp)，在 `init()` 阶段把 audit/metrics/event-bus 缺口折叠为 required/optional readiness，并在初始化成功后自动安装 runtime audit sink subscriber 与 metrics sink subscriber；`stop()` 时解除订阅。
+3. 新增 [tests/unit/runtime/RuntimeSinkForwardingTest.cpp](../tests/unit/runtime/RuntimeSinkForwardingTest.cpp) 并更新 [tests/unit/runtime/CMakeLists.txt](../tests/unit/runtime/CMakeLists.txt)，落地 `RuntimeAuditSinkForwardingTest`、`RuntimeMetricsSinkForwardingTest`、`RuntimeSinkFailClosedTest`。
+4. 更新 [tests/integration/agent_loop/RuntimeProductionLoggingIntegrationTest.cpp](../tests/integration/agent_loop/RuntimeProductionLoggingIntegrationTest.cpp)，在 live composition 下先走 `AgentFacade.init()` 安装 default sink subscriber，再断言 audit-marked runtime events 已进入 live audit sink。
+5. 更新 [tests/unit/profiles/RuntimePolicySnapshotTest.cpp](../tests/unit/profiles/RuntimePolicySnapshotTest.cpp) 与 [tests/unit/profiles/RuntimePolicyProviderTest.cpp](../tests/unit/profiles/RuntimePolicyProviderTest.cpp)，锁定 sink policy 默认值与 YAML 投影不回退。
+6. 新增 [docs/todos/runtime/deliverables/WP-RT-GAP-001-audit-metrics-sink-closeout.md](../todos/runtime/deliverables/WP-RT-GAP-001-audit-metrics-sink-closeout.md)，并同步更新 [docs/architecture/DASALL_runtime子系统详细设计.md](../architecture/DASALL_runtime%E5%AD%90%E7%B3%BB%E7%BB%9F%E8%AF%A6%E7%BB%86%E8%AE%BE%E8%AE%A1.md)、[docs/deliverables/RT-EVAL-2026-05-31-runtime子系统落地评估与生产级缺口治理任务规划.md](../deliverables/RT-EVAL-2026-05-31-runtime%E5%AD%90%E7%B3%BB%E7%BB%9F%E8%90%BD%E5%9C%B0%E8%AF%84%E4%BC%B0%E4%B8%8E%E7%94%9F%E4%BA%A7%E7%BA%A7%E7%BC%BA%E5%8F%A3%E6%B2%BB%E7%90%86%E4%BB%BB%E5%8A%A1%E8%A7%84%E5%88%92.md)、[docs/todos/runtime/DASALL_runtime子系统专项TODO.md](../todos/runtime/DASALL_runtime%E5%AD%90%E7%B3%BB%E7%BB%9F%E4%B8%93%E9%A1%B9TODO.md) 与 [docs/todos/DASALL_子系统查漏补缺专项记录.md](../todos/DASALL_%E5%AD%90%E7%B3%BB%E7%BB%9F%E6%9F%A5%E6%BC%8F%E8%A1%A5%E7%BC%BA%E4%B8%93%E9%A1%B9%E8%AE%B0%E5%BD%95.md)。
+
+### 验证
+
+1. `cmake --build build-ci --target dasall_runtime_sink_forwarding_unit_test`
+   - 结果：通过。
+2. `ctest --test-dir build-ci -R "RuntimeAuditSink|RuntimeMetricsSink|RuntimeSinkFailClosed" --output-on-failure`
+   - 结果：通过，3/3。
+3. `ctest --test-dir build-ci -R "RuntimePolicySnapshot|RuntimePolicyProvider" --output-on-failure`
+   - 结果：通过，2/2。
+4. `cmake --build build-ci --target dasall_runtime_production_logging_integration_test && ctest --test-dir build-ci -R "RuntimeProductionLogging" --output-on-failure`
+   - 结果：通过，1/1。
+5. `ctest --test-dir build-ci -R "RuntimeAuditSink|RuntimeMetricsSink|RuntimeSinkFailClosed|RuntimeProductionLogging" --output-on-failure`
+   - 结果：通过，4/4；与任务规划文档中的验收正则一致。
+
+### 结果
+
+1. `WP-RT-GAP-001 / GAP-P0-A` 已闭合：runtime control-plane 关键事件现已默认进入 infra audit / metrics owner，不再只停留在 module-local telemetry record / event queue。
+2. `RuntimeSinkPolicy` 已成为 profile 投影的一部分，runtime init 现在能把 audit/metrics/event-bus 缺口显式折叠为 fail-closed 或 degraded，而不是静默退化。
+3. 剩余 runtime 高优先级缺口继续收敛在更高层 durable store、concurrency stress、installed/qemu/soak 证据，不再包含本轮的 mandatory sink 接线问题。
+
 ## 记录 #896
 
 - 日期：2026-07-13

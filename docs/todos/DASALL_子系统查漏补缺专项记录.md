@@ -1293,6 +1293,7 @@ Capability Services 子系统的当前实现覆盖度已经很高，主体功能
 2. installed `dasall run` 当前证明 memory context -> production LLM direct path -> memory writeback / checkpoint / session 的 L4 local 主功能；`pkg_smoke_install.sh --explicit-start-check` 现已额外固定 `runtime-installed-proof.json` 与 `runtime-proof.json`，把 installed tool-positive、waiting checkpoint、recovery-positive 与 recovery-negative binding reject 作为独立 owner 收口，不再与 direct path 混写。
 3. runtime owner 内的 durable checkpoint / session / resume gate 已有 focused evidence，但 app-binary / installed / release replay 证据仍须分层记录。
 4. timeout / cancellation 与 production observability / health hot path 已有 focused evidence；L3 app-binary cognition-positive owner 与 L4 installed runtime full-path owner 已闭合，剩余待收口项收敛为 scheduler model、knowledge degraded semantics 与更高层 release/soak evidence。
+5. audit / metrics mandatory sink 已由 runtime owner 收口：`AgentFacade::init()` 会安装 default sink subscriber，缺失 mandatory audit/metrics sink 时直接 fail-closed；build-tree focused evidence 已覆盖 audit forwarding、metrics forwarding、init fail-closed 与 production logging integration audit persistence。
 
 ### 10.3 缺口清单
 
@@ -1306,6 +1307,7 @@ Capability Services 子系统的当前实现覆盖度已经很高，主体功能
 | RT-GAP-006 | 已闭合 | Knowledge unavailable / optional degraded semantics 已由 runtime owner 统一输出 | 2026-05-21 已为 `AgentInitResult` 固化 `projected_readiness`、`missing_optional_ports`、`degraded_reasons`；`AgentFacade` degraded run 现统一发 `runtime_readiness:degraded`、`runtime_degraded_reason:optional_port_gap`、`runtime_missing_optional:*` 与 `knowledge_unavailable` / `llm_unavailable`；daemon ping/readiness 同轮透传 `runtime_optional_port_gap` 与 per-port degraded reasons | optional backend 缺失不再在 runtime owner 面上被误判为 fatal 或误报 ready，required/optional port gap 与 installed knowledge probe 边界保持分账 | 2026-05-21 已由 `RT-FIX-007` 完成；后续 only 跟踪 runtime_support 的 installed positive knowledge probe 与更高层 runtime evidence |
 | RT-GAP-007 | 已闭合 | runtime v1 synchronous scheduler semantics 已显式固定 | 2026-05-21 已在 `AgentOrchestrator` 的 `AgentResult` / checkpoint 统一追加 `runtime_execution_model:v1_sync_inline`、`runtime_scheduler_effective_max_workers:1` 与对应 checkpoint tags；`AgentOrchestratorControllerAssemblyTest` 与 `RuntimeUnaryFixtureIntegrationTest` 已锁定 direct path / tool round 都是单 worker 内联执行，而不是隐式后台 worker | scheduler 类型不再被误读为已具后台线程池、maintenance worker 或 recovery thread；v1 口径现明确为同步 gate + inline dispatch，未来若引入真正 async/bulkhead 需另立任务 | 2026-05-21 已由 `RT-FIX-008` 完成；后续只保留 runtime_support 的 installed positive knowledge probe 与更高层 release-runner / soak evidence |
 | RT-GAP-008 | 已闭合 | app-binary / installed / release-handoff Runtime full path 证据已分层 | 2026-05-21 已由 `Gate-INT-10` / `DaemonBinaryUnarySmokeTest` 保持 L3 app-binary cognition-positive owner；`pkg_smoke_install.sh --explicit-start-check` 同轮落盘 `runtime-installed-proof.json` / `runtime-proof.json`，分别记录 direct LLM `llm.origin`、`runtime_path:tool_positive`、`runtime_path:recovery_positive`、`waiting_status=PartiallyCompleted` 与 recovery-negative binding reject | BC-05 / BC-06 / BC-11 / BC-15 不再互相冒充，也不再把单次 installed `run` 误写成 full path 证据 | 2026-05-21 已由 `RT-FIX-006` 完成；qemu / release runner 继续作为 packaging gate handoff contract，后续只补当轮 release rerun 与更高层 soak/chaos 证据 |
+| RT-GAP-009 | 已闭合 | runtime audit / metrics mandatory sink 已强制接线 | 2026-07-16 已在 `profiles/include/RuntimePolicySnapshot.h` / `profiles/src/RuntimePolicyProvider.cpp` 引入 `RuntimeSinkPolicy`，并在 `runtime/src/AgentFacade.cpp` 按 policy 把 audit/metrics/event-bus 缺口折叠为 required/optional readiness；`RuntimeAuditSinkForwardingTest`、`RuntimeMetricsSinkForwardingTest`、`RuntimeSinkFailClosedTest` 与 `RuntimeProductionLoggingIntegrationTest` 已覆盖 live forwarding 与 fail-closed | runtime control-plane 关键事件不再只停留在 module-local telemetry record / event queue，production-like profile 会对 mandatory sink 缺失立即拒绝初始化 | 2026-07-16 已由 `WP-RT-GAP-001 / GAP-P0-A` 完成；更高层 installed / qemu / soak observability 证据继续留给后续 release / runtime 工作包 |
 
 ### 10.4 补缺任务建议
 
@@ -1332,7 +1334,7 @@ rg -n "required-live-baseline|has_production_llm_direct_path|llm_manager->genera
 
 ### 10.6 当前章节结论
 
-Runtime 当前缺的不是控制面骨架，也不再是 path evidence 分层、durable checkpoint / resume gate、deadline / cancellation 主链、production observability / health、optional degraded semantics、scheduler / background worker 口径或 L3/L4 full-path evidence；当前 v1 执行模型已明确为单 worker inline runtime。后续优先顺序收敛为 runtime_support 的 installed positive knowledge probe，再推进 packaging / release 环境中的更高层 runtime evidence。
+Runtime 当前缺的不是控制面骨架，也不再是 path evidence 分层、durable checkpoint / resume gate、deadline / cancellation 主链、production observability / health、mandatory audit/metrics sink、optional degraded semantics、scheduler / background worker 口径或 L3/L4 full-path evidence；当前 v1 执行模型已明确为单 worker inline runtime。后续优先顺序收敛为 runtime_support 的 installed positive knowledge probe，再推进 packaging / release 环境中的更高层 runtime evidence。
 
 ### 10.7 runtime_support / app live composition 共享组合根补充
 

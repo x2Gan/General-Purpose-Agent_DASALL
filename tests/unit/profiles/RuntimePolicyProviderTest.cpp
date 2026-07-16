@@ -60,6 +60,9 @@ void test_runtime_policy_provider_loads_snapshot_for_valid_profile() {
   assert_equal(std::string("file"),
                load_result.snapshot->ops_policy().optional_backends.secret_backend_type,
                "loaded snapshot should preserve the secret backend selected by the runtime policy asset");
+  assert_true(load_result.snapshot->runtime_sink_policy().fail_closed_on_audit_failure &&
+                  !load_result.snapshot->runtime_sink_policy().drop_on_metrics_failure,
+              "loaded snapshot should project the explicit production runtime sink policy from the profile asset");
   assert_true(load_result.snapshot->memory_maintenance_policy().enabled,
               "loaded snapshot should preserve memory maintenance enablement");
   assert_equal(60000,

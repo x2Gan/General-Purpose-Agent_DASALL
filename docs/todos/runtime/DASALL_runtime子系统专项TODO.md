@@ -5,6 +5,8 @@
 适用范围：runtime/
 当前结论：runtime 详设已具备执行基线，但原专项 TODO 在 gate 分层、checkpoint replay、health/maintenance、smoke 证据语义上仍存在执行硬度缺口。本轮补强后将计划收敛为 31 项任务、12 道质量门，并显式区分 runtime-local fixture gate 与 true cross-module integration gate。
 
+2026-07-16 补充 closeout：`WP-RT-GAP-001 / GAP-P0-A` 已完成。`AgentFacade::init()` 现会按 `RuntimeSinkPolicy` 安装 runtime audit / metrics default sink subscriber，并在 mandatory sink 缺失时 fail-closed；focused evidence 见 `docs/todos/runtime/deliverables/WP-RT-GAP-001-audit-metrics-sink-closeout.md`，验收命令为 `ctest --test-dir build-ci -R "RuntimeAuditSink|RuntimeMetricsSink|RuntimeSinkFailClosed|RuntimeProductionLogging" --output-on-failure`。
+
 ## 1. 文档头
 
 输入依据：

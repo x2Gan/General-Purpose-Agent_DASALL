@@ -1,7 +1,10 @@
 #include "AgentFacade.h"
 
 #include <algorithm>
+#include <array>
 #include <chrono>
+#include <mutex>
+#include <stdexcept>
 #include <string_view>
 #include <utility>
 
@@ -9,8 +12,14 @@
 #include "IResponseBuilder.h"
 #include "AgentOrchestrator.h"
 #include "RuntimeDependencySet.h"
+#include "audit/AuditTypes.h"
+#include "audit/IAuditLogger.h"
 #include "error/ResultCode.h"
 #include "logging/RuntimeStructuredLogUtils.h"
+#include "metrics/IMeter.h"
+#include "metrics/IMetricsProvider.h"
+#include "metrics/MetricTypes.h"
+#include "telemetry/RuntimeEventBus.h"
 
 namespace dasall::runtime {
     namespace {
@@ -300,6 +309,401 @@ namespace dasall::runtime {
             return joined;
         }
 
+        class RuntimeAuditSinkSubscriber;
+        class RuntimeMetricsSinkSubscriber;
+
+        struct RuntimeSinkAttachment {
+            std::vector<RuntimeEventSubscription> subscriptions;
+            std::shared_ptr<RuntimeAuditSinkSubscriber> audit_subscriber;
+            std::shared_ptr<RuntimeMetricsSinkSubscriber> metrics_subscriber;
+        };
+
+        constexpr std::array<std::string_view, 10> kRuntimeSinkEventFilters{
+            "runtime.recovery.reject",
+            "recovery_reject",
+            "runtime.safe_mode",
+            "safe_mode_entered",
+            "runtime.budget.reject",
+            "budget_reject",
+            "runtime.checkpoint.save_failure",
+            "checkpoint_save_failure",
+            "runtime.high_risk.confirmation",
+            "high_risk_confirmation",
+        };
+
+        [[nodiscard]] std::string runtime_sink_event_stage(const std::string_view event_name) {
+            if (event_name == "runtime.recovery.reject" || event_name == "recovery_reject") {
+                return "recovery_reject";
+            }
+            if (event_name == "runtime.safe_mode" || event_name == "safe_mode_entered") {
+                return "safe_mode_entered";
+            }
+            if (event_name == "runtime.budget.reject" || event_name == "budget_reject") {
+                return "budget_reject";
+            }
+            if (event_name == "runtime.checkpoint.save_failure" ||
+                event_name == "checkpoint_save_failure") {
+                return "checkpoint_save_failure";
+            }
+            if (event_name == "runtime.high_risk.confirmation" ||
+                event_name == "high_risk_confirmation") {
+                return "high_risk_confirmation";
+            }
+            return std::string(event_name);
+        }
+
+        [[nodiscard]] infra::AuditOutcome runtime_sink_audit_outcome(
+            const std::string_view event_name) {
+            const auto stage = runtime_sink_event_stage(event_name);
+            if (stage == "high_risk_confirmation") {
+                return infra::AuditOutcome::Succeeded;
+            }
+            if (stage == "checkpoint_save_failure") {
+                return infra::AuditOutcome::Failed;
+            }
+            if (stage == "safe_mode_entered") {
+                return infra::AuditOutcome::Escalated;
+            }
+            return infra::AuditOutcome::Rejected;
+        }
+
+        [[nodiscard]] infra::AuditEvidenceKind runtime_sink_evidence_kind(
+            const std::string_view event_name) {
+            const auto stage = runtime_sink_event_stage(event_name);
+            if (stage == "recovery_reject" || stage == "checkpoint_save_failure") {
+                return infra::AuditEvidenceKind::RecoveryOutcome;
+            }
+            return infra::AuditEvidenceKind::WorkerTask;
+        }
+
+        [[nodiscard]] std::string metric_outcome_label(const RuntimeEventEnvelope& event) {
+            const auto stage = runtime_sink_event_stage(event.event_name);
+            if (stage == "high_risk_confirmation") {
+                return "success";
+            }
+            if (stage == "safe_mode_entered" && event.severity == RuntimeEventSeverity::Warning) {
+                return "degraded";
+            }
+            return "failure";
+        }
+
+        [[nodiscard]] std::optional<std::string>
+        find_runtime_event_attribute(const RuntimeEventEnvelope& event, const std::string_view key) {
+            const auto attribute_it = std::find_if(
+                event.attributes.begin(), event.attributes.end(),
+                [&key](const RuntimeEventAttribute& attribute) { return attribute.key == key; });
+            if (attribute_it == event.attributes.end() || attribute_it->value.empty()) {
+                return std::nullopt;
+            }
+
+            return attribute_it->value;
+        }
+
+        [[nodiscard]] std::string runtime_sink_reference(const RuntimeEventEnvelope& event) {
+            const auto checkpoint_ref = find_runtime_event_attribute(event, "checkpoint_ref");
+            if (checkpoint_ref.has_value()) {
+                return *checkpoint_ref;
+            }
+            if (event.context.checkpoint_id.has_value() && !event.context.checkpoint_id->empty()) {
+                return *event.context.checkpoint_id;
+            }
+            if (event.context.turn_id.has_value() && !event.context.turn_id->empty()) {
+                return *event.context.turn_id;
+            }
+            if (event.context.request_id.has_value() && !event.context.request_id->empty()) {
+                return *event.context.request_id;
+            }
+
+            return event.event_name + "#" + std::to_string(event.sequence);
+        }
+
+        [[nodiscard]] std::string audit_context_component(
+            const std::optional<std::string>& value) {
+            return value.has_value() && !value->empty() ? *value
+                                                        : std::string(infra::kAuditContextUnknown);
+        }
+
+        [[nodiscard]] std::string runtime_error_code_label(
+            const std::optional<RuntimeErrorCode>& error_code) {
+            return error_code.has_value() ? std::to_string(static_cast<int>(*error_code))
+                                          : std::string();
+        }
+
+        class RuntimeAuditSinkSubscriber {
+          public:
+            RuntimeAuditSinkSubscriber(std::shared_ptr<infra::audit::IAuditLogger> audit_logger,
+                                       std::string runtime_instance_id)
+                : audit_logger_(std::move(audit_logger)),
+                  runtime_instance_id_(std::move(runtime_instance_id)) {}
+
+            void handle(const RuntimeEventEnvelope& event,
+                        const profiles::RuntimeSinkPolicy& sink_policy) const {
+                if (audit_logger_ == nullptr) {
+                    if (sink_policy.fail_closed_on_audit_failure) {
+                        throw std::runtime_error("runtime audit sink missing for event " +
+                                                 std::string(event.event_name));
+                    }
+                    return;
+                }
+
+                infra::AuditEvent audit_event;
+                audit_event.event_id = "runtime::" + event.event_name + "#" +
+                                       std::to_string(event.sequence);
+                audit_event.action = runtime_sink_event_stage(event.event_name);
+                audit_event.actor = runtime_instance_id_.empty() ? std::string("runtime")
+                                                                 : runtime_instance_id_;
+                audit_event.target = audit_event.actor;
+                audit_event.outcome = runtime_sink_audit_outcome(event.event_name);
+                audit_event.evidence_ref = infra::AuditEvidenceRef{
+                    .kind = runtime_sink_evidence_kind(event.event_name),
+                    .ref = runtime_sink_reference(event),
+                };
+                if (event.error_code.has_value()) {
+                    audit_event.side_effects.push_back("runtime_error_code=" +
+                                                       runtime_error_code_label(event.error_code));
+                }
+                audit_event.timestamp = event.timestamp_ms > 0 ? event.timestamp_ms
+                                                               : current_time_ms();
+
+                const auto write_outcome = audit_logger_->write_audit(
+                    audit_event,
+                    infra::AuditContext{
+                        .request_id = audit_context_component(event.context.request_id),
+                        .session_id = audit_context_component(event.context.session_id),
+                        .trace_id = audit_context_component(event.context.trace_id),
+                        .task_id = audit_context_component(event.context.turn_id),
+                        .parent_task_id = audit_context_component(event.context.checkpoint_id),
+                        .lease_id = runtime_instance_id_.empty()
+                                        ? std::string(infra::kAuditContextUnknown)
+                                        : runtime_instance_id_,
+                        .worker_type = std::string("runtime_control_plane"),
+                    });
+                if (!write_outcome.is_success() && !write_outcome.is_degraded_success() &&
+                    sink_policy.fail_closed_on_audit_failure) {
+                    throw std::runtime_error("runtime audit sink rejected event " +
+                                             std::string(event.event_name));
+                }
+            }
+
+          private:
+            std::shared_ptr<infra::audit::IAuditLogger> audit_logger_;
+            std::string runtime_instance_id_;
+        };
+
+        class RuntimeMetricsSinkSubscriber {
+          public:
+            RuntimeMetricsSinkSubscriber(
+                std::shared_ptr<infra::metrics::IMetricsProvider> metrics_provider,
+                std::string runtime_instance_id, std::string profile_id)
+                : metrics_provider_(std::move(metrics_provider)),
+                  runtime_instance_id_(std::move(runtime_instance_id)),
+                  profile_id_(std::move(profile_id)) {}
+
+            void handle(const RuntimeEventEnvelope& event,
+                        const profiles::RuntimeSinkPolicy& sink_policy) {
+                auto meter = ensure_meter(sink_policy, event.event_name);
+                if (meter == nullptr) {
+                    return;
+                }
+
+                const auto status = meter->record(infra::metrics::MetricSample{
+                    .identity_ref = metric_identity(),
+                    .value = 1.0,
+                    .ts_unix_ms = event.timestamp_ms > 0 ? event.timestamp_ms : current_time_ms(),
+                    .labels = infra::metrics::MetricLabels{
+                        .module = "runtime",
+                        .stage = runtime_sink_event_stage(event.event_name),
+                        .profile = profile_id_.empty() ? std::string("runtime") : profile_id_,
+                        .outcome = metric_outcome_label(event),
+                        .error_code = runtime_error_code_label(event.error_code),
+                    },
+                });
+                if (!status.ok && !sink_policy.drop_on_metrics_failure) {
+                    throw std::runtime_error("runtime metrics sink failed for event " +
+                                             std::string(event.event_name));
+                }
+            }
+
+          private:
+            [[nodiscard]] static infra::metrics::MetricIdentity metric_identity() {
+                return infra::metrics::MetricIdentity{
+                    .name = "runtime_control_plane_event_total",
+                    .type = infra::metrics::MetricType::Counter,
+                    .unit = "1",
+                    .description = "Critical runtime control-plane events forwarded to metrics",
+                };
+            }
+
+            [[nodiscard]] std::shared_ptr<infra::metrics::IMeter>
+            ensure_meter(const profiles::RuntimeSinkPolicy& sink_policy,
+                         const std::string_view event_name) {
+                std::lock_guard<std::mutex> lock(meter_mutex_);
+                if (metrics_provider_ == nullptr) {
+                    if (!sink_policy.drop_on_metrics_failure) {
+                        throw std::runtime_error("runtime metrics sink missing for event " +
+                                                 std::string(event_name));
+                    }
+                    return nullptr;
+                }
+
+                if (meter_ == nullptr) {
+                    meter_ = metrics_provider_->get_meter(infra::metrics::MeterScope{
+                        .name = "runtime.control_plane",
+                        .version = "v1",
+                        .schema_url = "",
+                    });
+                    if (meter_ == nullptr) {
+                        if (!sink_policy.drop_on_metrics_failure) {
+                            throw std::runtime_error("runtime metrics sink could not acquire meter for event " +
+                                                     std::string(event_name));
+                        }
+                        return nullptr;
+                    }
+
+                    counter_handle_ = meter_->create_counter(metric_identity());
+                    if (!counter_handle_.has_value()) {
+                        if (!sink_policy.drop_on_metrics_failure) {
+                            throw std::runtime_error("runtime metrics sink could not register counter for event " +
+                                                     std::string(event_name));
+                        }
+                        meter_.reset();
+                        return nullptr;
+                    }
+                }
+
+                return meter_;
+            }
+
+            std::shared_ptr<infra::metrics::IMetricsProvider> metrics_provider_;
+            std::string runtime_instance_id_;
+            std::string profile_id_;
+            std::mutex meter_mutex_;
+            std::shared_ptr<infra::metrics::IMeter> meter_;
+            std::optional<infra::metrics::InstrumentHandle> counter_handle_;
+        };
+
+        void apply_runtime_sink_policy_readiness(
+            const profiles::RuntimePolicySnapshot& snapshot,
+            const RuntimeDependencySet& dependency_set, const bool runtime_local_stub_path,
+            RuntimeDependencyReadiness& readiness) {
+            if (runtime_local_stub_path) {
+                return;
+            }
+
+            const auto& sink_policy = snapshot.runtime_sink_policy();
+            const bool audit_required = sink_policy.fail_closed_on_audit_failure;
+            const bool metrics_required = !sink_policy.drop_on_metrics_failure;
+            const bool any_sink_expected = audit_required || metrics_required ||
+                                           dependency_set.audit_logger != nullptr ||
+                                           dependency_set.metrics_provider != nullptr;
+
+            if (dependency_set.audit_logger == nullptr) {
+                append_unique_value(audit_required ? readiness.missing_required_ports
+                                                  : readiness.missing_optional_ports,
+                                    "audit");
+            }
+            if (dependency_set.metrics_provider == nullptr) {
+                append_unique_value(metrics_required ? readiness.missing_required_ports
+                                                    : readiness.missing_optional_ports,
+                                    "metrics");
+            }
+            if (dependency_set.runtime_event_bus == nullptr && any_sink_expected) {
+                append_unique_value((audit_required || metrics_required)
+                                        ? readiness.missing_required_ports
+                                        : readiness.missing_optional_ports,
+                                    "runtime_event_bus");
+            }
+
+            readiness.has_required_ports = readiness.missing_required_ports.empty();
+            readiness.has_optional_ports = readiness.missing_optional_ports.empty();
+            readiness.degraded = readiness.has_required_ports && !readiness.has_optional_ports;
+        }
+
+        bool install_runtime_sink_subscribers(const AgentInitRequest& request,
+                                              const std::string& resolved_profile_id,
+                                              const bool runtime_local_stub_path,
+                                              AgentInitResult& result,
+                                              RuntimeSinkAttachment& attachment) {
+            attachment = RuntimeSinkAttachment{};
+            if (runtime_local_stub_path || request.dependency_set == nullptr ||
+                request.policy_snapshot == nullptr) {
+                return true;
+            }
+
+            const auto event_bus = request.dependency_set->runtime_event_bus;
+            if (event_bus == nullptr) {
+                append_diagnostic_fragment(result.diagnostics,
+                                           "runtime_sink_subscribers=skipped_no_event_bus");
+                return true;
+            }
+
+            const auto& sink_policy = request.policy_snapshot->runtime_sink_policy();
+            append_diagnostic_fragment(
+                result.diagnostics,
+                std::string("runtime_sink_policy=") +
+                    (sink_policy.fail_closed_on_audit_failure ? "audit_fail_closed"
+                                                              : "audit_best_effort") +
+                    "," +
+                    (sink_policy.drop_on_metrics_failure ? "metrics_drop"
+                                                         : "metrics_fail_closed"));
+
+            std::vector<std::string> installed_sinks;
+            if (request.dependency_set->audit_logger != nullptr) {
+                attachment.audit_subscriber = std::make_shared<RuntimeAuditSinkSubscriber>(
+                    request.dependency_set->audit_logger, request.runtime_instance_id);
+                for (const auto event_filter : kRuntimeSinkEventFilters) {
+                    attachment.subscriptions.push_back(event_bus->subscribe(
+                        std::string(event_filter),
+                        [subscriber = attachment.audit_subscriber,
+                         sink_policy](const RuntimeEventEnvelope& event) {
+                            subscriber->handle(event, sink_policy);
+                        },
+                        true));
+                }
+                installed_sinks.push_back("audit");
+            }
+
+            if (request.dependency_set->metrics_provider != nullptr) {
+                attachment.metrics_subscriber =
+                    std::make_shared<RuntimeMetricsSinkSubscriber>(
+                        request.dependency_set->metrics_provider,
+                        request.runtime_instance_id,
+                        resolved_profile_id);
+                for (const auto event_filter : kRuntimeSinkEventFilters) {
+                    attachment.subscriptions.push_back(event_bus->subscribe(
+                        std::string(event_filter),
+                        [subscriber = attachment.metrics_subscriber,
+                         sink_policy](const RuntimeEventEnvelope& event) {
+                            subscriber->handle(event, sink_policy);
+                        },
+                        true));
+                }
+                installed_sinks.push_back("metrics");
+            }
+
+            append_diagnostic_fragment(
+                result.diagnostics,
+                std::string("runtime_sink_subscribers=") +
+                    (installed_sinks.empty() ? std::string("none") : join_values(installed_sinks)));
+            return true;
+        }
+
+        void unsubscribe_runtime_sink_subscribers(const RuntimeCompositionRoot& root,
+                                                  RuntimeSinkAttachment& attachment) {
+            if (root.dependency_set == nullptr || root.dependency_set->runtime_event_bus == nullptr) {
+                attachment = RuntimeSinkAttachment{};
+                return;
+            }
+
+            for (const auto& subscription : attachment.subscriptions) {
+                if (subscription.is_valid()) {
+                    static_cast<void>(root.dependency_set->runtime_event_bus->unsubscribe(
+                        subscription.subscription_id));
+                }
+            }
+            attachment = RuntimeSinkAttachment{};
+        }
+
         [[nodiscard]] bool contains_evidence_fragment(const std::vector<std::string>& evidence,
                                                       const std::string& fragment) {
             return std::any_of(evidence.begin(), evidence.end(),
@@ -581,11 +985,13 @@ namespace dasall::runtime {
                 return result;
             }
 
+            const bool runtime_local_stub_path = uses_runtime_local_stub_path(result.diagnostics);
             auto readiness = request.dependency_set->describe_readiness();
+            apply_runtime_sink_policy_readiness(*request.policy_snapshot, *request.dependency_set,
+                                                runtime_local_stub_path, readiness);
             result.missing_required_ports = readiness.missing_required_ports;
             result.missing_optional_ports = readiness.missing_optional_ports;
             result.degraded_reasons = make_init_degraded_reasons(readiness);
-            const bool runtime_local_stub_path = uses_runtime_local_stub_path(result.diagnostics);
             if (runtime_local_stub_path) {
                 readiness.has_required_ports = true;
                 readiness.has_optional_ports = true;
@@ -633,6 +1039,14 @@ namespace dasall::runtime {
             orchestrator->seed_for_test(request.dependency_set->seeded_waiting_session,
                                         request.dependency_set->seeded_checkpoints);
 
+            RuntimeSinkAttachment sink_attachment;
+            if (!install_runtime_sink_subscribers(request, result.resolved_profile_id,
+                                                  runtime_local_stub_path, result,
+                                                  sink_attachment)) {
+                emit_facade_init_log(init_logger, request, result);
+                return result;
+            }
+
             root_ = RuntimeCompositionRoot{
                 .runtime_instance_id = request.runtime_instance_id,
                 .profile_id = result.resolved_profile_id,
@@ -643,6 +1057,7 @@ namespace dasall::runtime {
                 .readiness = readiness,
                 .degraded = readiness.degraded,
             };
+            sink_attachment_ = std::move(sink_attachment);
             initialized_ = true;
 
             result.accepted = true;
@@ -822,6 +1237,7 @@ namespace dasall::runtime {
         bool stop(std::uint32_t timeout_ms) {
             emit_facade_stop_log(logger_from_root(root_), runtime_instance_id_attr(root_),
                                  initialized_, timeout_ms);
+            unsubscribe_runtime_sink_subscribers(root_, sink_attachment_);
             initialized_ = false;
             root_ = RuntimeCompositionRoot{};
             return true;
@@ -843,6 +1259,7 @@ namespace dasall::runtime {
 
         bool initialized_ = false;
         RuntimeCompositionRoot root_;
+        RuntimeSinkAttachment sink_attachment_;
     };
 
     AgentFacade::AgentFacade() : state_(std::make_unique<State>()) {}
